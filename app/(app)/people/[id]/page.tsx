@@ -63,10 +63,10 @@ export default async function PersonDetailPage({
     <div className="px-8 py-10">
       <div className="mx-auto max-w-3xl space-y-10">
         <Link
-          href="/people"
+          href={person.is_self ? "/" : "/people"}
           className="t-label inline-flex items-center hover:text-ink-1"
         >
-          ← Personen
+          ← {person.is_self ? "Zurück" : "Personen"}
         </Link>
 
         <div className="flex items-start justify-between gap-6">
@@ -95,6 +95,17 @@ export default async function PersonDetailPage({
                 </p>
               )}
               <div className="flex flex-wrap items-center gap-1.5">
+                {person.is_self && (
+                  <span
+                    className="tag"
+                    style={{
+                      borderColor: "var(--action)",
+                      color: "var(--action)",
+                    }}
+                  >
+                    Mein Profil
+                  </span>
+                )}
                 <span className="tag">
                   <span className="dot" />
                   {SCOPE_LABEL[person.scope]}

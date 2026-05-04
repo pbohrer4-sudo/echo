@@ -34,6 +34,7 @@ export default async function AppLayout({
             <NavLink href="/debrief">Debrief</NavLink>
             <NavLink href="/people">Personen</NavLink>
             <NavLink href="/inbox">Inbox</NavLink>
+            <NavLink href="/profile">Mein Profil</NavLink>
           </nav>
         </div>
         <div className="space-y-3">
