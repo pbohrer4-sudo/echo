@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getPersonById, listAllTags, listPeople } from "@/lib/people";
+import { listOrganizations } from "@/lib/organizations";
 import { updatePerson } from "../../actions";
 import { PersonForm } from "../../person-form";
 
@@ -13,16 +14,18 @@ export default async function EditPersonPage({
   const { id } = await params;
   const { error } = await searchParams;
 
-  const [person, allPeople, existingTags] = await Promise.all([
+  const [person, allPeople, existingTags, orgs] = await Promise.all([
     getPersonById(id),
     listPeople(),
     listAllTags(),
+    listOrganizations(),
   ]);
   if (!person) notFound();
 
   const peopleOptions = allPeople
     .filter((p) => p.id !== id)
     .map((p) => ({ id: p.id, name: p.name }));
+  const existingOrgs = orgs.map((o) => o.name);
 
   const action = updatePerson.bind(null, id);
 
@@ -41,6 +44,7 @@ export default async function EditPersonPage({
           cancelHref={`/people/${id}`}
           peopleOptions={peopleOptions}
           existingTags={existingTags}
+          existingOrgs={existingOrgs}
           error={error ? decodeURIComponent(error) : undefined}
         />
       </div>

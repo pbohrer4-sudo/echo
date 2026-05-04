@@ -1,4 +1,5 @@
 import { listAllTags, listPeople } from "@/lib/people";
+import { listOrganizations } from "@/lib/organizations";
 import { createPerson } from "../actions";
 import { PersonForm } from "../person-form";
 
@@ -8,11 +9,13 @@ export default async function NewPersonPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
-  const [people, existingTags] = await Promise.all([
+  const [people, existingTags, orgs] = await Promise.all([
     listPeople(),
     listAllTags(),
+    listOrganizations(),
   ]);
   const peopleOptions = people.map((p) => ({ id: p.id, name: p.name }));
+  const existingOrgs = orgs.map((o) => o.name);
 
   return (
     <div className="px-8 py-10">
@@ -31,6 +34,7 @@ export default async function NewPersonPage({
           cancelHref="/people"
           peopleOptions={peopleOptions}
           existingTags={existingTags}
+          existingOrgs={existingOrgs}
           error={error ? decodeURIComponent(error) : undefined}
         />
       </div>

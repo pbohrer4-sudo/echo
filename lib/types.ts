@@ -128,11 +128,30 @@ export interface RelationshipEntry {
   label: RelationshipLabel;
 }
 
+export interface Organization {
+  id: string;
+  user_id: string;
+  name: string;
+  domain: string | null;
+  website: string | null;
+  industry: string | null;
+  size: string | null;
+  hq: string | null;
+  description: string | null;
+  notes: string | null;
+  tags: string[];
+  enriched_at: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 export interface Person {
   id: string;
   user_id: string;
   name: string;
   company: string | null;
+  organization_id: string | null;
   role: string | null;
   scope: Scope;
   tags: string[];

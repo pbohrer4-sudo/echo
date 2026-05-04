@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { resolveOrCreateOrganization } from "@/lib/organizations";
 import type {
   AddressEntry,
   EmailEntry,
@@ -130,9 +131,14 @@ export async function createPerson(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  const organization_id = await resolveOrCreateOrganization(
+    parsed.company,
+    user.id,
+  );
+
   const { data, error } = await supabase
     .from("people")
-    .insert({ ...parsed, user_id: user.id })
+    .insert({ ...parsed, organization_id, user_id: user.id })
     .select("id")
     .single();
 
@@ -153,9 +159,19 @@ export async function updatePerson(id: string, formData: FormData) {
   }
 
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const organization_id = await resolveOrCreateOrganization(
+    parsed.company,
+    user.id,
+  );
+
   const { error } = await supabase
     .from("people")
-    .update(parsed)
+    .update({ ...parsed, organization_id })
     .eq("id", id);
 
   if (error) {

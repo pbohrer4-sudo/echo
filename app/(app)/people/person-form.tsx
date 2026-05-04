@@ -43,6 +43,7 @@ export function PersonForm({
   error,
   peopleOptions,
   existingTags = [],
+  existingOrgs = [],
 }: {
   initial?: Partial<Person>;
   action: Action;
@@ -50,6 +51,7 @@ export function PersonForm({
   error?: string;
   peopleOptions: PersonOption[];
   existingTags?: string[];
+  existingOrgs?: string[];
 }) {
   const [scope, setScope] = useState<Scope>(initial?.scope ?? "both");
   const [phones, setPhones] = useState<PhoneEntry[]>(
@@ -265,13 +267,22 @@ export function PersonForm({
         </Field>
 
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Firma">
+          <Field
+            label="Firma"
+            hint="Wird automatisch zu einer Organisation verknüpft."
+          >
             <input
               name="company"
+              list="echo-org-suggestions"
               value={company}
               onChange={(e) => setCompany(e.target.value)}
               className={inputClass}
             />
+            <datalist id="echo-org-suggestions">
+              {existingOrgs.map((o) => (
+                <option key={o} value={o} />
+              ))}
+            </datalist>
           </Field>
           <Field label="Rolle">
             <input

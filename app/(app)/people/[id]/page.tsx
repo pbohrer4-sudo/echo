@@ -111,7 +111,21 @@ export default async function PersonDetailPage({
               </h1>
               {(person.role || person.company) && (
                 <p className="text-sm text-ink-3">
-                  {[person.role, person.company].filter(Boolean).join(" · ")}
+                  {person.role && <span>{person.role}</span>}
+                  {person.role && person.company && (
+                    <span> · </span>
+                  )}
+                  {person.company &&
+                    (person.organization_id ? (
+                      <Link
+                        href={`/organizations/${person.organization_id}`}
+                        className="transition hover:text-action"
+                      >
+                        {person.company}
+                      </Link>
+                    ) : (
+                      <span>{person.company}</span>
+                    ))}
                 </p>
               )}
               {!person.is_self && (person.strength_score ?? 0) > 0 && (
