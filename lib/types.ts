@@ -101,10 +101,23 @@ export const DATE_LABELS = [
 ] as const;
 export type DateLabel = (typeof DATE_LABELS)[number] | string;
 
+// Lead-time options for date reminders. Stored as days. 0 = day-of,
+// 7 = one week before, 14 = two weeks, 30 = one month. Empty list
+// when remind is false.
+export const REMIND_LEAD_OPTIONS = [
+  { value: 0, label: "Am Tag" },
+  { value: 1, label: "1 Tag vorher" },
+  { value: 3, label: "3 Tage vorher" },
+  { value: 7, label: "1 Woche vorher" },
+  { value: 14, label: "2 Wochen vorher" },
+  { value: 30, label: "1 Monat vorher" },
+] as const;
+
 export interface ImportantDate {
   label: DateLabel;
   date: string; // ISO date (YYYY-MM-DD)
   remind: boolean; // create / keep a yearly reminder?
+  remind_lead_days?: number; // 0 = same day; 7 = one week before; ignored when remind=false
 }
 
 export const RELATIONSHIP_LABELS = [

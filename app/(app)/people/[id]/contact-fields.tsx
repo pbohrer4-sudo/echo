@@ -144,6 +144,15 @@ function fmtDate(iso: string): string {
   );
 }
 
+function leadLabel(days: number): string {
+  if (days <= 0) return "Erinnert · am Tag";
+  if (days === 1) return "Erinnert · 1 Tag vorher";
+  if (days === 7) return "Erinnert · 1 Woche vorher";
+  if (days === 14) return "Erinnert · 2 Wochen vorher";
+  if (days === 30) return "Erinnert · 1 Monat vorher";
+  return `Erinnert · ${days} Tage vorher`;
+}
+
 export function DateList({
   dates,
   personId,
@@ -164,7 +173,9 @@ export function DateList({
             <span className="t-label w-28 shrink-0">{d.label}</span>
             <span className="flex-1 text-ink-1">{fmtDate(d.date)}</span>
             {d.remind && (
-              <span className="t-label text-action">Erinnert</span>
+              <span className="t-label text-action">
+                {leadLabel(d.remind_lead_days ?? 0)}
+              </span>
             )}
           </li>
         ))}

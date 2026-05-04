@@ -126,6 +126,30 @@ export async function updateOrganization(id: string, formData: FormData) {
   redirect(`/organizations/${id}`);
 }
 
+// Inline-edit endpoint: replaces the tag array in one call. Used by
+// the org list's tag chip editor — no need to push the user into
+// the full edit form just to add or remove a single tag.
+export async function updateOrganizationTags(id: string, tags: string[]) {
+  "use server";
+  const cleaned = Array.from(
+    new Set(
+      tags
+        .map((t) => (typeof t === "string" ? t.trim() : ""))
+        .filter((t) => t.length > 0),
+    ),
+  );
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("organizations")
+    .update({ tags: cleaned })
+    .eq("id", id);
+  if (error) throw error;
+
+  revalidatePath("/organizations");
+  revalidatePath(`/organizations/${id}`);
+}
+
 export async function deleteOrganization(id: string) {
   const supabase = await createClient();
   const { error } = await supabase

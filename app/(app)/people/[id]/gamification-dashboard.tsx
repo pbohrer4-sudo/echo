@@ -17,8 +17,8 @@ export async function GamificationDashboard() {
 
   return (
     <div className="space-y-10">
-      <div className="rounded border border-action/30 bg-action-soft p-6">
-        <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
+      <div className="overflow-hidden rounded border border-action/30">
+        <div className="grid grid-cols-2 gap-px bg-action/20 md:grid-cols-4">
           <Stat
             label="Aktueller Streak"
             value={
@@ -30,7 +30,11 @@ export async function GamificationDashboard() {
           />
           <Stat
             label="Bestmarke"
-            value={`${stats.longest_streak} Tage`}
+            value={
+              stats.longest_streak === 1
+                ? "1 Tag"
+                : `${stats.longest_streak} Tage`
+            }
           />
           <Stat
             label="Level"
@@ -43,14 +47,14 @@ export async function GamificationDashboard() {
             subtitle={`${done.length}/${achievements.length} Erfolge`}
           />
         </div>
-        <div className="mt-4">
+        <div className="border-t border-action/20 bg-action-soft px-6 py-4">
           <div className="h-1.5 w-full overflow-hidden rounded bg-paper-3">
             <div
               className="h-full bg-action transition-all"
               style={{ width: `${(level.current / level.next) * 100}%` }}
             />
           </div>
-          <p className="mt-1 t-label">
+          <p className="mt-2 t-label">
             Noch {level.toNext} XP bis Level {level.level + 1}
           </p>
         </div>
@@ -122,7 +126,7 @@ function Stat({
   subtitle?: string;
 }) {
   return (
-    <div>
+    <div className="bg-action-soft px-6 py-5">
       <p className="t-label">{label}</p>
       <p className="mt-1 font-serif text-3xl tracking-tight text-ink-1">
         {value}

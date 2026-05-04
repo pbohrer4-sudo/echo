@@ -342,15 +342,22 @@ function parseDates(raw: FormDataEntryValue | null): ImportantDate[] {
   const data = safeJson(raw);
   if (!Array.isArray(data)) return [];
   return data
-    .map((e: unknown) => {
+    .map((e: unknown): ImportantDate | null => {
       if (typeof e !== "object" || !e) return null;
       const obj = e as Record<string, unknown>;
       const date = asString(obj.date);
       if (!date) return null;
+      const remind = Boolean(obj.remind);
+      const leadRaw = obj.remind_lead_days;
+      let lead = 0;
+      if (typeof leadRaw === "number" && Number.isFinite(leadRaw)) {
+        lead = Math.max(0, Math.min(365, Math.floor(leadRaw)));
+      }
       return {
         label: asString(obj.label) || "andere",
         date,
-        remind: Boolean(obj.remind),
+        remind,
+        remind_lead_days: remind ? lead : 0,
       };
     })
     .filter((e): e is ImportantDate => e !== null);

@@ -18,9 +18,11 @@ import {
   EMAIL_LABELS,
   PHONE_LABELS,
   RELATIONSHIP_LABELS,
+  REMIND_LEAD_OPTIONS,
   SOCIAL_PLATFORMS,
 } from "@/lib/types";
 import { StrengthMeterInput } from "@/components/strength-meter";
+import { AddressAutocomplete } from "@/components/address-autocomplete";
 
 interface PersonOption {
   id: string;
@@ -515,47 +517,13 @@ export function PersonForm({
                   }
                 />
               </div>
-              <input
-                value={a.street ?? ""}
-                onChange={(e) => {
-                  const next = [...addresses];
-                  next[i] = { ...next[i], street: e.target.value };
-                  setAddresses(next);
+              <AddressAutocomplete
+                value={a}
+                onChange={(next) => {
+                  const updated = [...addresses];
+                  updated[i] = next;
+                  setAddresses(updated);
                 }}
-                placeholder="Straße + Hausnummer"
-                className={inputClass}
-              />
-              <div className="grid grid-cols-[120px_1fr] gap-2">
-                <input
-                  value={a.postal_code ?? ""}
-                  onChange={(e) => {
-                    const next = [...addresses];
-                    next[i] = { ...next[i], postal_code: e.target.value };
-                    setAddresses(next);
-                  }}
-                  placeholder="PLZ"
-                  className={inputClass}
-                />
-                <input
-                  value={a.city ?? ""}
-                  onChange={(e) => {
-                    const next = [...addresses];
-                    next[i] = { ...next[i], city: e.target.value };
-                    setAddresses(next);
-                  }}
-                  placeholder="Stadt"
-                  className={inputClass}
-                />
-              </div>
-              <input
-                value={a.country ?? ""}
-                onChange={(e) => {
-                  const next = [...addresses];
-                  next[i] = { ...next[i], country: e.target.value };
-                  setAddresses(next);
-                }}
-                placeholder="Land"
-                className={inputClass}
               />
             </div>
           )}
@@ -617,53 +585,68 @@ export function PersonForm({
               { label: "Geburtstag", date: "", remind: true },
             ])
           }
-          renderItem={(d, i) => (
-            <div className="grid grid-cols-[140px_1fr_auto_auto] items-center gap-2">
-              <select
-                value={d.label}
-                onChange={(e) => {
-                  const next = [...importantDates];
-                  next[i] = { ...next[i], label: e.target.value };
-                  setImportantDates(next);
-                }}
-                className={selectClass}
-              >
-                {DATE_LABELS.map((l) => (
-                  <option key={l} value={l}>
-                    {l}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="date"
-                value={d.date}
-                onChange={(e) => {
-                  const next = [...importantDates];
-                  next[i] = { ...next[i], date: e.target.value };
-                  setImportantDates(next);
-                }}
-                className={inputClass}
-              />
-              <label className="flex items-center gap-1.5 px-2 text-xs text-ink-3">
-                <input
-                  type="checkbox"
-                  checked={d.remind}
+          renderItem={(d, i) => {
+            const leadValue = d.remind ? (d.remind_lead_days ?? 0) : -1;
+            return (
+              <div className="grid grid-cols-[140px_minmax(0,1fr)_minmax(0,160px)_auto] items-center gap-2">
+                <select
+                  value={d.label}
                   onChange={(e) => {
                     const next = [...importantDates];
-                    next[i] = { ...next[i], remind: e.target.checked };
+                    next[i] = { ...next[i], label: e.target.value };
                     setImportantDates(next);
                   }}
-                  className="accent-[oklch(32%_0.04_250)]"
+                  className={selectClass}
+                >
+                  {DATE_LABELS.map((l) => (
+                    <option key={l} value={l}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="date"
+                  value={d.date}
+                  onChange={(e) => {
+                    const next = [...importantDates];
+                    next[i] = { ...next[i], date: e.target.value };
+                    setImportantDates(next);
+                  }}
+                  className={inputClass}
                 />
-                Erinnern
-              </label>
-              <RemoveButton
-                onClick={() =>
-                  setImportantDates(importantDates.filter((_, j) => j !== i))
-                }
-              />
-            </div>
-          )}
+                <select
+                  value={String(leadValue)}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    const next = [...importantDates];
+                    if (v < 0) {
+                      next[i] = { ...next[i], remind: false, remind_lead_days: 0 };
+                    } else {
+                      next[i] = {
+                        ...next[i],
+                        remind: true,
+                        remind_lead_days: v,
+                      };
+                    }
+                    setImportantDates(next);
+                  }}
+                  className={selectClass}
+                >
+                  <option value="-1">Nicht erinnern</option>
+                  {REMIND_LEAD_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <RemoveButton
+                  onClick={() =>
+                    setImportantDates(importantDates.filter((_, j) => j !== i))
+                  }
+                />
+              </div>
+            );
+          }}
         />
       </Section>
 

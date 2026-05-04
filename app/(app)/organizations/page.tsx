@@ -1,4 +1,7 @@
-import { listOrganizations } from "@/lib/organizations";
+import {
+  listAllOrganizationTags,
+  listOrganizations,
+} from "@/lib/organizations";
 import { OrganizationsTable } from "./organizations-table";
 
 export default async function OrganizationsPage({
@@ -7,7 +10,10 @@ export default async function OrganizationsPage({
   searchParams: Promise<{ tag?: string }>;
 }) {
   const { tag } = await searchParams;
-  const all = await listOrganizations();
+  const [all, allTags] = await Promise.all([
+    listOrganizations(),
+    listAllOrganizationTags(),
+  ]);
 
   const activeTag = tag?.trim() || null;
   const filtered = activeTag
@@ -35,6 +41,7 @@ export default async function OrganizationsPage({
           orgs={filtered}
           activeTag={activeTag}
           totalCount={all.length}
+          allTags={allTags}
         />
       </div>
     </div>

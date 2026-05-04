@@ -160,31 +160,30 @@ export default async function OrganizationDetailPage({
           ) : (
             <ul className="overflow-hidden rounded border border-rule bg-paper">
               {people.map((p) => (
-                <li
-                  key={p.id}
-                  className="flex items-center gap-4 border-b border-rule-soft px-4 py-3 last:border-0"
-                >
-                  <span className="avatar" aria-hidden>
-                    {initials(p.name)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <Link
-                      href={`/people/${p.id}`}
-                      className="block truncate text-sm font-medium text-ink-1 transition hover:text-action"
-                    >
-                      {p.name}
-                    </Link>
-                    {p.role && (
-                      <p className="truncate font-mono text-[10px] tracking-wider text-ink-4">
-                        {p.role}
-                      </p>
-                    )}
-                  </div>
-                  {p.last_interaction_at && (
-                    <span className="font-mono text-[11px] text-ink-3">
-                      {fmtDate(p.last_interaction_at)}
+                <li key={p.id}>
+                  <Link
+                    href={`/people/${p.id}`}
+                    className="flex items-center gap-4 border-b border-rule-soft px-4 py-3 last:border-0 transition-colors hover:bg-paper-2"
+                  >
+                    <span className="avatar" aria-hidden>
+                      {initials(p.name)}
                     </span>
-                  )}
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-ink-1">
+                        {p.name}
+                      </span>
+                      {p.role && (
+                        <p className="truncate font-mono text-[10px] tracking-wider text-ink-4">
+                          {p.role}
+                        </p>
+                      )}
+                    </div>
+                    {p.last_interaction_at && (
+                      <span className="font-mono text-[11px] text-ink-3">
+                        {fmtDate(p.last_interaction_at)}
+                      </span>
+                    )}
+                  </Link>
                 </li>
               ))}
             </ul>

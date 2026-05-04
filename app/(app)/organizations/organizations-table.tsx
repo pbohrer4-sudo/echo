@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { OrgWithCount } from "@/lib/organizations";
+import { InlineTagEditor } from "./inline-tag-editor";
 
 type SortKey = "name" | "industry" | "people_count";
 type SortDir = "asc" | "desc";
@@ -27,10 +28,12 @@ export function OrganizationsTable({
   orgs,
   activeTag = null,
   totalCount,
+  allTags = [],
 }: {
   orgs: OrgWithCount[];
   activeTag?: string | null;
   totalCount?: number;
+  allTags?: string[];
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -173,18 +176,12 @@ export function OrganizationsTable({
               <span className="self-center truncate text-sm text-ink-2">
                 {o.hq ?? "—"}
               </span>
-              <span className="flex flex-wrap gap-1 self-center">
-                {(o.tags ?? []).slice(0, 3).map((t) => (
-                  <Link
-                    key={t}
-                    href={`/organizations?tag=${encodeURIComponent(t)}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="tag transition hover:border-action hover:text-action"
-                  >
-                    <span className="dot" />
-                    {t}
-                  </Link>
-                ))}
+              <span className="self-center">
+                <InlineTagEditor
+                  orgId={o.id}
+                  initialTags={o.tags ?? []}
+                  existingTags={allTags}
+                />
               </span>
               <span className="self-center text-right font-mono text-xs tracking-wider text-ink-2">
                 {o.people_count}

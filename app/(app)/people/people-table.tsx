@@ -223,7 +223,21 @@ export function PeopleTable({
                 )}
               </span>
               <span className="self-center truncate text-sm text-ink-2">
-                {p.company ?? "—"}
+                {p.company ? (
+                  p.organization_id ? (
+                    <Link
+                      href={`/organizations/${p.organization_id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="transition hover:text-action"
+                    >
+                      {p.company}
+                    </Link>
+                  ) : (
+                    p.company
+                  )
+                ) : (
+                  "—"
+                )}
               </span>
               <span className="self-center font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3">
                 {SCOPE_LABEL[p.scope]}
