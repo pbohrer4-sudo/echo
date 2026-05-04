@@ -1,8 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPersonById } from "@/lib/people";
+import {
+  listInteractionsForPerson,
+  listNotesForPerson,
+  listRemindersForPerson,
+  listTodosForPerson,
+} from "@/lib/inbox";
 import type { Scope } from "@/lib/types";
 import { DeleteButton } from "./delete-button";
+import { PersonTimeline } from "./timeline";
+import { PersonReminders, PersonTodos } from "./person-tasks";
 
 const SCOPE_LABEL: Record<Scope, string> = {
   work: "Beruflich",
@@ -28,12 +36,22 @@ export default async function PersonDetailPage({
   const person = await getPersonById(id);
   if (!person) notFound();
 
+  const [interactions, notes, reminders, todos] = await Promise.all([
+    listInteractionsForPerson(id),
+    listNotesForPerson(id),
+    listRemindersForPerson(id),
+    listTodosForPerson(id),
+  ]);
+
   const fields: Array<{ label: string; value: string | null }> = [
     { label: "Firma", value: person.company },
     { label: "Rolle", value: person.role },
     { label: "Email", value: person.email },
     { label: "Telefon", value: person.phone },
-    { label: "Geburtstag", value: person.birthday ? fmtDate(person.birthday) : null },
+    {
+      label: "Geburtstag",
+      value: person.birthday ? fmtDate(person.birthday) : null,
+    },
     {
       label: "Cadence",
       value: person.expected_cadence_days
@@ -54,7 +72,7 @@ export default async function PersonDetailPage({
               ← Personen
             </Link>
             <h1 className="font-serif text-4xl tracking-tight">{person.name}</h1>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full border border-neutral-800 px-2 py-0.5 text-xs text-neutral-400">
                 {SCOPE_LABEL[person.scope]}
               </span>
@@ -108,14 +126,27 @@ export default async function PersonDetailPage({
           </section>
         )}
 
+        <div className="grid gap-6 md:grid-cols-2">
+          <section className="rounded-md border border-neutral-900 p-6">
+            <h2 className="mb-4 text-xs uppercase tracking-wider text-neutral-500">
+              Erinnerungen
+            </h2>
+            <PersonReminders reminders={reminders} />
+          </section>
+
+          <section className="rounded-md border border-neutral-900 p-6">
+            <h2 className="mb-4 text-xs uppercase tracking-wider text-neutral-500">
+              Aufgaben
+            </h2>
+            <PersonTodos todos={todos} />
+          </section>
+        </div>
+
         <section className="rounded-md border border-neutral-900 p-6">
-          <h2 className="mb-3 text-xs uppercase tracking-wider text-neutral-500">
+          <h2 className="mb-4 text-xs uppercase tracking-wider text-neutral-500">
             Timeline
           </h2>
-          <p className="text-sm text-neutral-500 italic">
-            Interaktionen und Notizen erscheinen hier, sobald du via Voice-Loop
-            etwas zu {person.name} aufnimmst.
-          </p>
+          <PersonTimeline interactions={interactions} notes={notes} />
         </section>
       </div>
     </div>

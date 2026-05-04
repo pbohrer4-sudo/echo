@@ -28,6 +28,7 @@ export default async function AppLayout({
           <nav className="flex items-center gap-1 text-sm">
             <NavLink href="/">Voice</NavLink>
             <NavLink href="/people">Personen</NavLink>
+            <NavLink href="/inbox">Inbox</NavLink>
           </nav>
         </div>
         <div className="flex items-center gap-3 text-sm text-neutral-400">
