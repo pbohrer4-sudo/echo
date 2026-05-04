@@ -34,7 +34,7 @@ export default async function AppLayout({
 
   return (
     <div className="flex min-h-screen">
-      <aside className="flex w-56 shrink-0 flex-col justify-between border-r border-rule bg-paper px-5 py-6">
+      <aside className="sticky top-0 flex h-screen w-56 shrink-0 flex-col justify-between overflow-y-auto border-r border-rule bg-paper px-5 py-6">
         <div className="space-y-8">
           <Link
             href="/"
