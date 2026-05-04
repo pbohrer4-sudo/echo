@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "./sign-out-button";
 import { NavLink } from "./nav-link";
+import { NotificationManager } from "@/components/notification-manager";
 
 export default async function AppLayout({
   children,
@@ -37,6 +38,7 @@ export default async function AppLayout({
         </div>
       </header>
       <main className="flex-1">{children}</main>
+      <NotificationManager />
     </div>
   );
 }
