@@ -20,6 +20,7 @@ import {
   RELATIONSHIP_LABELS,
   SOCIAL_PLATFORMS,
 } from "@/lib/types";
+import { StrengthMeterInput } from "@/components/strength-meter";
 
 interface PersonOption {
   id: string;
@@ -91,6 +92,9 @@ export function PersonForm({
   const [name, setName] = useState<string>(initial?.name ?? "");
   const [company, setCompany] = useState<string>(initial?.company ?? "");
   const [role, setRole] = useState<string>(initial?.role ?? "");
+  const [strength, setStrength] = useState<number>(
+    initial?.strength_score ?? 0,
+  );
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -209,6 +213,7 @@ export function PersonForm({
       />
       <input type="hidden" name="avatar_url" value={avatarUrl} />
       <input type="hidden" name="notes_field" value={notes} />
+      <input type="hidden" name="strength_score" value={String(strength)} />
 
       <div className="rounded border border-rule bg-paper-2 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -278,24 +283,37 @@ export function PersonForm({
           </Field>
         </div>
 
-        <Field label="Scope">
-          <div className="flex h-9 rounded border border-rule bg-paper p-0.5 text-xs">
-            {(["work", "personal", "both"] as Scope[]).map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setScope(s)}
-                className={`flex-1 rounded transition-colors ${
-                  scope === s
-                    ? "bg-paper-2 text-ink-1"
-                    : "text-ink-3 hover:text-ink-1"
-                }`}
-              >
-                {s === "work" ? "Beruflich" : s === "personal" ? "Privat" : "Beides"}
-              </button>
-            ))}
-          </div>
-        </Field>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Scope">
+            <div className="flex h-9 rounded border border-rule bg-paper p-0.5 text-xs">
+              {(["work", "personal", "both"] as Scope[]).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setScope(s)}
+                  className={`flex-1 rounded transition-colors ${
+                    scope === s
+                      ? "bg-paper-2 text-ink-1"
+                      : "text-ink-3 hover:text-ink-1"
+                  }`}
+                >
+                  {s === "work" ? "Beruflich" : s === "personal" ? "Privat" : "Beides"}
+                </button>
+              ))}
+            </div>
+          </Field>
+          <Field
+            label="Beziehungsstärke"
+            hint="Manuelles Tier 1-5. Hilft beim Priorisieren in Rhythmus + Sonntags-Puls."
+          >
+            <div className="flex h-9 items-center">
+              <StrengthMeterInput
+                value={strength}
+                onChange={setStrength}
+              />
+            </div>
+          </Field>
+        </div>
 
         <Field
           label="Tags"

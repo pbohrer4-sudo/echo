@@ -63,8 +63,17 @@ export async function listCadenceRows(): Promise<CadenceRow[]> {
       };
       const o = order[a.bucket] - order[b.bucket];
       if (o !== 0) return o;
-      // Within same bucket: more days-overdue first (drifting), or
-      // more days-since (on-rhythm, due-soon).
+
+      // Within drifting + due-soon: high-strength relationships
+      // surface first — those are the ones whose drift hurts the
+      // most. Unrated (0) sinks to the bottom of the bucket.
+      if (a.bucket === "drifting" || a.bucket === "due-soon") {
+        const sa = a.person.strength_score ?? 0;
+        const sb = b.person.strength_score ?? 0;
+        if (sa !== sb) return sb - sa;
+      }
+
+      // Tiebreak: more days-since first.
       if (a.daysSince === null && b.daysSince === null) return 0;
       if (a.daysSince === null) return 1;
       if (b.daysSince === null) return -1;

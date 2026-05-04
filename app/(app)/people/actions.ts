@@ -43,6 +43,7 @@ interface PersonInput {
   relationships: RelationshipEntry[];
   avatar_url: string | null;
   notes: string | null;
+  strength_score: number | null;
 }
 
 function parseFormData(formData: FormData): PersonInput | { error: string } {
@@ -70,6 +71,13 @@ function parseFormData(formData: FormData): PersonInput | { error: string } {
     const v = String(formData.get(key) ?? "").trim();
     return v ? v : null;
   };
+
+  const strengthRaw = String(formData.get("strength_score") ?? "");
+  const strengthParsed = strengthRaw ? parseInt(strengthRaw, 10) : 0;
+  const strength_score =
+    Number.isNaN(strengthParsed) || strengthParsed === 0
+      ? null
+      : Math.max(0, Math.min(5, strengthParsed));
 
   const phones = parsePhones(formData.get("phones"));
   const emails = parseEmails(formData.get("emails"));
@@ -106,6 +114,7 @@ function parseFormData(formData: FormData): PersonInput | { error: string } {
     relationships,
     avatar_url: trimOrNull("avatar_url"),
     notes: (formData.get("notes_field") as string)?.trim() || null,
+    strength_score,
   };
 }
 

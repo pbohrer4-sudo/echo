@@ -10,6 +10,8 @@ import {
   getPeopleMap,
 } from "@/lib/inbox";
 import { getProfileDepth } from "@/lib/profile-depth";
+import { StrengthMeter } from "@/components/strength-meter";
+import { GamificationDashboard } from "./gamification-dashboard";
 import type { Scope } from "@/lib/types";
 import { DeleteButton } from "./delete-button";
 import { PersonTimeline } from "./timeline";
@@ -112,6 +114,9 @@ export default async function PersonDetailPage({
                   {[person.role, person.company].filter(Boolean).join(" · ")}
                 </p>
               )}
+              {!person.is_self && (person.strength_score ?? 0) > 0 && (
+                <StrengthMeter value={person.strength_score ?? 0} />
+              )}
               <div className="flex flex-wrap items-center gap-1.5">
                 {person.is_self && (
                   <span
@@ -155,6 +160,16 @@ export default async function PersonDetailPage({
             <ProfileDepthBar person={person} />
           </div>
         </div>
+
+        {person.is_self && (
+          <section>
+            <div className="section-head">
+              <span className="t-label">Streaks · Erfolge · XP</span>
+              <span className="rule" />
+            </div>
+            <GamificationDashboard />
+          </section>
+        )}
 
         <div className="grid gap-10 md:grid-cols-2">
           <section>

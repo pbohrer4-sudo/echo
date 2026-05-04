@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { Person, Scope } from "@/lib/types";
+import { StrengthMeter } from "@/components/strength-meter";
 
 type SortKey = "name" | "company" | "last_interaction_at" | "scope";
 type SortDir = "asc" | "desc";
@@ -156,7 +157,7 @@ export function PeopleTable({
       </div>
 
       <div className="overflow-hidden rounded border border-rule bg-paper">
-        <div className="grid grid-cols-[28px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1.4fr)_120px] gap-4 border-b border-rule bg-paper-2 px-4 py-2.5">
+        <div className="grid grid-cols-[28px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1.4fr)_70px_120px] gap-4 border-b border-rule bg-paper-2 px-4 py-2.5">
           <span className="t-label" />
           <SortHeader
             label="Name"
@@ -177,6 +178,7 @@ export function PeopleTable({
             onClick={() => toggleSort("scope")}
           />
           <span className="t-label">Tags</span>
+          <span className="t-label">Stärke</span>
           <SortHeader
             label="Letzte Interaktion"
             active={sortKey === "last_interaction_at"}
@@ -205,7 +207,7 @@ export function PeopleTable({
                   router.push(`/people/${p.id}`);
                 }
               }}
-              className="grid grid-cols-[28px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1.4fr)_120px] cursor-pointer gap-4 border-b border-rule-soft px-4 py-3 transition-colors hover:bg-paper-2 last:border-b-0 focus:bg-paper-2 focus:outline-none"
+              className="grid grid-cols-[28px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1.4fr)_70px_120px] cursor-pointer gap-4 border-b border-rule-soft px-4 py-3 transition-colors hover:bg-paper-2 last:border-b-0 focus:bg-paper-2 focus:outline-none"
             >
               <span className="avatar self-center" aria-hidden>
                 {initials(p.name)}
@@ -238,6 +240,13 @@ export function PeopleTable({
                     {t}
                   </Link>
                 ))}
+              </span>
+              <span className="self-center">
+                {(p.strength_score ?? 0) > 0 ? (
+                  <StrengthMeter value={p.strength_score ?? 0} showLabel={false} />
+                ) : (
+                  <span className="font-mono text-xs text-ink-4">—</span>
+                )}
               </span>
               <span className="self-center text-right font-mono text-[11px] tracking-wider text-ink-3">
                 {formatDate(p.last_interaction_at)}
