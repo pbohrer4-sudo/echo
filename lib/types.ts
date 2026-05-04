@@ -141,20 +141,22 @@ export interface RelationshipEntry {
   label: RelationshipLabel;
 }
 
-// ===== Connections (external MCP-style integrations) =====
+// ===== Service Connections (external MCP-style integrations) =====
+// Distinct from the `Connection` interface below which models the
+// person-to-person edge graph from the original brief.
 
-export type ConnectionStatus =
+export type ServiceConnectionStatus =
   | "pending"
   | "connected"
   | "error"
   | "expired"
   | "disconnected";
 
-export interface Connection {
+export interface ServiceConnection {
   id: string;
   user_id: string;
   provider: string;
-  status: ConnectionStatus;
+  status: ServiceConnectionStatus;
   account_label: string | null;
   access_token: string | null;
   refresh_token: string | null;

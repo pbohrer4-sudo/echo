@@ -37,7 +37,7 @@ export async function GET(
   const now = new Date().toISOString();
 
   // Upsert by (user_id, provider). RLS scopes everything to ctx.user_id.
-  const { error } = await supabase.from("connections").upsert(
+  const { error } = await supabase.from("service_connections").upsert(
     {
       user_id: ctx.user_id,
       provider,

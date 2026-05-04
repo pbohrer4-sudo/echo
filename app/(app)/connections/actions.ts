@@ -18,7 +18,7 @@ export async function startConnect(provider: string) {
 export async function disconnect(provider: string) {
   const supabase = await createClient();
   const { error } = await supabase
-    .from("connections")
+    .from("service_connections")
     .update({
       deleted_at: new Date().toISOString(),
       status: "disconnected",
