@@ -141,6 +141,34 @@ export interface RelationshipEntry {
   label: RelationshipLabel;
 }
 
+// ===== Connections (external MCP-style integrations) =====
+
+export type ConnectionStatus =
+  | "pending"
+  | "connected"
+  | "error"
+  | "expired"
+  | "disconnected";
+
+export interface Connection {
+  id: string;
+  user_id: string;
+  provider: string;
+  status: ConnectionStatus;
+  account_label: string | null;
+  access_token: string | null;
+  refresh_token: string | null;
+  token_expires_at: string | null;
+  scopes: string[];
+  config: Record<string, unknown>;
+  last_error: string | null;
+  connected_at: string | null;
+  last_used_at: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 // ===== Pipelines =====
 
 export type PipelineEntityType = "person" | "organization" | "both";
