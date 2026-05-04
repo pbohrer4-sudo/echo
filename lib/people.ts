@@ -63,6 +63,58 @@ export async function getOrCreateSelfPerson(): Promise<Person> {
   return inserted.data as Person;
 }
 
+// Returns all unique tags currently in use across the user's people,
+// sorted case-insensitively. Used to populate tag autocomplete in the
+// person form.
+export async function listAllTags(): Promise<string[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("people")
+    .select("tags")
+    .is("deleted_at", null);
+  if (error) throw error;
+  const set = new Set<string>();
+  for (const row of data ?? []) {
+    for (const t of (row.tags ?? []) as string[]) {
+      if (t) set.add(t);
+    }
+  }
+  return Array.from(set).sort((a, b) =>
+    a.toLowerCase().localeCompare(b.toLowerCase()),
+  );
+}
+
+// Find people who share at least one tag with the given person, sorted
+// by overlap count desc. Self-row and the input person are excluded.
+export async function findSimilarPeople(
+  personId: string,
+  tags: string[],
+  limit = 6,
+): Promise<Array<{ person: Person; shared: string[] }>> {
+  if (tags.length === 0) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("people")
+    .select("*")
+    .neq("id", personId)
+    .eq("is_self", false)
+    .is("deleted_at", null)
+    .overlaps("tags", tags);
+  if (error) throw error;
+
+  const lower = new Set(tags.map((t) => t.toLowerCase()));
+  return (data as Person[])
+    .map((person) => {
+      const shared = (person.tags ?? []).filter((t) =>
+        lower.has(t.toLowerCase()),
+      );
+      return { person, shared };
+    })
+    .filter((row) => row.shared.length > 0)
+    .sort((a, b) => b.shared.length - a.shared.length)
+    .slice(0, limit);
+}
+
 // Returns the person, or null if not found / soft-deleted / not owned.
 export async function getPersonById(id: string): Promise<Person | null> {
   const supabase = await createClient();

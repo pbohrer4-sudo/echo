@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import Image from "next/image";
-import { getPersonById } from "@/lib/people";
+import { findSimilarPeople, getPersonById } from "@/lib/people";
 import {
   listInteractionsForPerson,
   listNotesForPerson,
@@ -49,15 +49,15 @@ export default async function PersonDetailPage({
   const relatedIds = (person.relationships ?? []).map(
     (r) => r.related_person_id,
   );
-  const [interactions, notes, reminders, todos, peopleMap] = await Promise.all(
-    [
+  const [interactions, notes, reminders, todos, peopleMap, similar] =
+    await Promise.all([
       listInteractionsForPerson(id),
       listNotesForPerson(id),
       listRemindersForPerson(id),
       listTodosForPerson(id),
       getPeopleMap(relatedIds),
-    ],
-  );
+      findSimilarPeople(id, person.tags ?? []),
+    ]);
 
   return (
     <div className="px-8 py-10">
@@ -254,6 +254,42 @@ export default async function PersonDetailPage({
           </div>
           <PersonTimeline interactions={interactions} notes={notes} />
         </section>
+
+        {similar.length > 0 && (
+          <section>
+            <div className="section-head">
+              <span className="t-label">Ähnliche Personen</span>
+              <span className="rule" />
+            </div>
+            <ul className="space-y-2">
+              {similar.map(({ person: p, shared }) => (
+                <li
+                  key={p.id}
+                  className="flex items-center justify-between gap-4"
+                >
+                  <Link
+                    href={`/people/${p.id}`}
+                    className="text-sm text-ink-1 transition hover:text-action"
+                  >
+                    {p.name}
+                  </Link>
+                  <span className="flex flex-wrap gap-1">
+                    {shared.map((t) => (
+                      <Link
+                        key={t}
+                        href={`/people?tag=${encodeURIComponent(t)}`}
+                        className="tag transition hover:border-action hover:text-action"
+                      >
+                        <span className="dot" />
+                        {t}
+                      </Link>
+                    ))}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </div>
     </div>
   );

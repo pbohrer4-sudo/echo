@@ -6,12 +6,14 @@ export async function synthesizeSpeech({
   text,
   voiceId = DEFAULT_VOICE_ID,
   modelId = DEFAULT_MODEL_ID,
+  apiKey: apiKeyOverride,
 }: {
   text: string;
   voiceId?: string;
   modelId?: string;
+  apiKey?: string | null;
 }): Promise<ArrayBuffer> {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const apiKey = apiKeyOverride ?? process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {
     throw new Error("ELEVENLABS_API_KEY missing");
   }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { synthesizeSpeech } from "@/lib/elevenlabs";
+import { getUserContext } from "@/lib/user-context";
 
 export const runtime = "nodejs";
 
@@ -10,11 +10,8 @@ interface SynthesizeBody {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const ctx = await getUserContext();
+  if (!ctx) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -33,7 +30,8 @@ export async function POST(request: Request) {
   try {
     const audio = await synthesizeSpeech({
       text,
-      voiceId: body.voice_id,
+      voiceId: body.voice_id ?? ctx.voice_id ?? undefined,
+      apiKey: ctx.elevenlabs_key,
     });
     return new Response(audio, {
       status: 200,

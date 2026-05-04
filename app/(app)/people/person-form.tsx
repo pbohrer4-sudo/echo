@@ -28,6 +28,8 @@ interface PersonOption {
 
 type Action = (formData: FormData) => void | Promise<void>;
 
+const TAG_DATALIST_ID = "echo-tag-suggestions";
+
 const inputClass =
   "h-9 w-full rounded border border-rule bg-paper px-3 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20";
 const selectClass =
@@ -39,12 +41,14 @@ export function PersonForm({
   cancelHref,
   error,
   peopleOptions,
+  existingTags = [],
 }: {
   initial?: Partial<Person>;
   action: Action;
   cancelHref: string;
   error?: string;
   peopleOptions: PersonOption[];
+  existingTags?: string[];
 }) {
   const [scope, setScope] = useState<Scope>(initial?.scope ?? "both");
   const [phones, setPhones] = useState<PhoneEntry[]>(
@@ -185,6 +189,7 @@ export function PersonForm({
             ))}
             <input
               type="text"
+              list={TAG_DATALIST_ID}
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
               onKeyDown={(e) => {
@@ -205,6 +210,13 @@ export function PersonForm({
               placeholder={tags.length === 0 ? "Marketing, München…" : ""}
               className="min-w-32 flex-1 bg-transparent text-sm text-ink-1 outline-none placeholder:text-ink-4"
             />
+            <datalist id={TAG_DATALIST_ID}>
+              {existingTags
+                .filter((t) => !tags.includes(t))
+                .map((t) => (
+                  <option key={t} value={t} />
+                ))}
+            </datalist>
           </div>
         </Field>
 

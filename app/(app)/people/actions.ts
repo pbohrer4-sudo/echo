@@ -15,6 +15,16 @@ import type {
 
 const SCOPES: Scope[] = ["work", "personal", "both"];
 
+// Labels where it's safe to auto-mirror the reverse on the other person.
+// For asymmetric kinship (Mutter ↔ Sohn/Tochter) we'd need to know
+// gender, so those stay manual.
+const SYMMETRIC_LABELS = new Set([
+  "Partner:in",
+  "Ehepartner:in",
+  "Freund:in",
+  "Kolleg:in",
+]);
+
 interface PersonInput {
   name: string;
   company: string | null;
@@ -121,6 +131,8 @@ export async function createPerson(formData: FormData) {
     redirect(`/people/new?error=${encodeURIComponent(error.message)}`);
   }
 
+  await syncSymmetricRelationships(data!.id, parsed.relationships);
+
   revalidatePath("/people");
   redirect(`/people/${data!.id}`);
 }
@@ -141,9 +153,64 @@ export async function updatePerson(id: string, formData: FormData) {
     redirect(`/people/${id}/edit?error=${encodeURIComponent(error.message)}`);
   }
 
+  await syncSymmetricRelationships(id, parsed.relationships);
+
   revalidatePath("/people");
   revalidatePath(`/people/${id}`);
   redirect(`/people/${id}`);
+}
+
+// For each symmetric relationship pointing at another person, make
+// sure the other person has the inverse pointing back. Idempotent —
+// no-op when the inverse already exists. Asymmetric labels (Mutter,
+// Sohn, etc.) are left to the user to maintain.
+async function syncSymmetricRelationships(
+  personId: string,
+  relationships: RelationshipEntry[],
+) {
+  const symmetric = relationships.filter((r) =>
+    SYMMETRIC_LABELS.has(r.label),
+  );
+  if (symmetric.length === 0) return;
+
+  const supabase = await createClient();
+  const otherIds = Array.from(
+    new Set(symmetric.map((r) => r.related_person_id)),
+  );
+
+  const { data: others, error } = await supabase
+    .from("people")
+    .select("id, relationships")
+    .in("id", otherIds);
+  if (error || !others) return;
+
+  for (const other of others as Array<{
+    id: string;
+    relationships: RelationshipEntry[] | null;
+  }>) {
+    const existing = other.relationships ?? [];
+    const needed = symmetric.filter(
+      (r) => r.related_person_id === other.id,
+    );
+    let changed = false;
+    const next = [...existing];
+    for (const r of needed) {
+      const alreadyThere = existing.some(
+        (e) => e.related_person_id === personId && e.label === r.label,
+      );
+      if (!alreadyThere) {
+        next.push({ related_person_id: personId, label: r.label });
+        changed = true;
+      }
+    }
+    if (changed) {
+      await supabase
+        .from("people")
+        .update({ relationships: next })
+        .eq("id", other.id);
+      revalidatePath(`/people/${other.id}`);
+    }
+  }
 }
 
 export async function deletePerson(id: string) {

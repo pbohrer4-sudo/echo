@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { chatWithTools, type ChatMessage } from "@/lib/claude";
 import { buildExtractionSystemPrompt } from "@/lib/prompts";
 import { EXTRACTION_TOOLS } from "@/lib/tools";
+import { getUserContext } from "@/lib/user-context";
 
 export const runtime = "nodejs";
 
@@ -12,11 +13,8 @@ interface ExtractRequest {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const ctx = await getUserContext();
+  if (!ctx) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -32,6 +30,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "transcript required" }, { status: 400 });
   }
 
+  const supabase = await createClient();
   const { data: peopleData, error: peopleError } = await supabase
     .from("people")
     .select("id, name, company")
@@ -44,11 +43,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const displayName =
-    user.user_metadata?.display_name ?? user.email?.split("@")[0] ?? "Patrick";
-
   const system = buildExtractionSystemPrompt({
-    displayName,
+    displayName: ctx.display_name,
     people: peopleData ?? [],
     now: new Date(),
   });
@@ -63,11 +59,9 @@ export async function POST(request: Request) {
       messages,
       system,
       tools: EXTRACTION_TOOLS,
+      apiKey: ctx.claude_key,
     });
 
-    // Enrich update_person calls with the resolved person_name so the
-    // confirmation card can render "Update Marvin: …" without an extra
-    // round-trip from the client.
     const peopleMap = new Map<string, string>(
       (peopleData ?? []).map((p) => [p.id as string, p.name as string]),
     );

@@ -9,13 +9,16 @@ export interface ChatMessage {
   content: string;
 }
 
-let client: Anthropic | null = null;
+let sharedClient: Anthropic | null = null;
 
-function getClient(): Anthropic {
-  if (!client) {
-    client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+function getClient(apiKey?: string | null): Anthropic {
+  if (apiKey) {
+    return new Anthropic({ apiKey });
   }
-  return client;
+  if (!sharedClient) {
+    sharedClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+  }
+  return sharedClient;
 }
 
 // Single-shot, non-streaming chat. The system prompt is marked cacheable so
@@ -24,12 +27,14 @@ export async function chat({
   messages,
   system,
   maxTokens = 512,
+  apiKey,
 }: {
   messages: ChatMessage[];
   system: string;
   maxTokens?: number;
+  apiKey?: string | null;
 }): Promise<string> {
-  const response = await getClient().messages.create({
+  const response = await getClient(apiKey).messages.create({
     model: CLAUDE_MODEL,
     max_tokens: maxTokens,
     system: [
@@ -58,13 +63,15 @@ export async function chatWithTools({
   system,
   tools,
   maxTokens = 1024,
+  apiKey,
 }: {
   messages: ChatMessage[];
   system: string;
   tools: Anthropic.Tool[];
   maxTokens?: number;
+  apiKey?: string | null;
 }): Promise<{ text: string; toolCalls: ToolCall[] }> {
-  const response = await getClient().messages.create({
+  const response = await getClient(apiKey).messages.create({
     model: CLAUDE_MODEL,
     max_tokens: maxTokens,
     system: [

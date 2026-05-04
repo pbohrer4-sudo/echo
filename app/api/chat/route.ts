@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { chat, type ChatMessage } from "@/lib/claude";
 import { buildVoiceSystemPrompt } from "@/lib/prompts";
+import { getUserContext } from "@/lib/user-context";
 
 export const runtime = "nodejs";
 
@@ -10,11 +10,8 @@ interface ChatRequestBody {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const ctx = await getUserContext();
+  if (!ctx) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -29,13 +26,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "messages required" }, { status: 400 });
   }
 
-  const displayName =
-    user.user_metadata?.display_name ?? user.email?.split("@")[0] ?? "Patrick";
-
   try {
     const text = await chat({
       messages: body.messages,
-      system: buildVoiceSystemPrompt(displayName),
+      system: buildVoiceSystemPrompt(ctx.display_name),
+      apiKey: ctx.claude_key,
     });
     return NextResponse.json({ text });
   } catch (err) {

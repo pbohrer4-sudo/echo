@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
-import { getPersonById } from "@/lib/people";
-import { listPeople } from "@/lib/people";
+import { getPersonById, listAllTags, listPeople } from "@/lib/people";
 import { updatePerson } from "../../actions";
 import { PersonForm } from "../../person-form";
 
@@ -14,9 +13,10 @@ export default async function EditPersonPage({
   const { id } = await params;
   const { error } = await searchParams;
 
-  const [person, allPeople] = await Promise.all([
+  const [person, allPeople, existingTags] = await Promise.all([
     getPersonById(id),
     listPeople(),
+    listAllTags(),
   ]);
   if (!person) notFound();
 
@@ -40,6 +40,7 @@ export default async function EditPersonPage({
           action={action}
           cancelHref={`/people/${id}`}
           peopleOptions={peopleOptions}
+          existingTags={existingTags}
           error={error ? decodeURIComponent(error) : undefined}
         />
       </div>
