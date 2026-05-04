@@ -81,6 +81,17 @@ export function PersonForm({
     initial?.avatar_url ?? "",
   );
   const [notes, setNotes] = useState<string>(initial?.notes ?? "");
+  const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
+  const [tagInput, setTagInput] = useState("");
+
+  function commitTagInput() {
+    const value = tagInput.trim();
+    if (!value) return;
+    if (!tags.includes(value)) {
+      setTags([...tags, value]);
+    }
+    setTagInput("");
+  }
 
   return (
     <form action={action} className="space-y-10">
@@ -154,13 +165,47 @@ export function PersonForm({
 
         <Field
           label="Tags"
-          hint="Komma-getrennt, z.B. Marketing, München, Vorstand"
+          hint="Schreib einen Tag, dann Enter. Klick × zum Entfernen."
         >
-          <input
-            name="tags"
-            defaultValue={(initial?.tags ?? []).join(", ")}
-            className={inputClass}
-          />
+          <input type="hidden" name="tags" value={tags.join(", ")} />
+          <div className="flex min-h-9 flex-wrap items-center gap-1.5 rounded border border-rule bg-paper px-2 py-1.5 focus-within:border-action focus-within:ring-2 focus-within:ring-action/20">
+            {tags.map((t) => (
+              <span key={t} className="tag">
+                <span className="dot" />
+                {t}
+                <button
+                  type="button"
+                  onClick={() => setTags(tags.filter((x) => x !== t))}
+                  aria-label={`Tag ${t} entfernen`}
+                  className="-mr-0.5 ml-0.5 text-ink-4 transition hover:text-bad"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <input
+              type="text"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === ",") {
+                  e.preventDefault();
+                  commitTagInput();
+                  return;
+                }
+                if (
+                  e.key === "Backspace" &&
+                  tagInput === "" &&
+                  tags.length > 0
+                ) {
+                  setTags(tags.slice(0, -1));
+                }
+              }}
+              onBlur={commitTagInput}
+              placeholder={tags.length === 0 ? "Marketing, München…" : ""}
+              className="min-w-32 flex-1 bg-transparent text-sm text-ink-1 outline-none placeholder:text-ink-4"
+            />
+          </div>
         </Field>
 
         <Field label="Profilbild URL" hint="Optional, später Upload möglich">
