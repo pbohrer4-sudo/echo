@@ -141,6 +141,47 @@ export interface RelationshipEntry {
   label: RelationshipLabel;
 }
 
+export type WorkflowStatus = "draft" | "enabled" | "disabled";
+
+export type WorkflowNodeKind = "trigger" | "filter" | "transform" | "action";
+
+export interface WorkflowNode {
+  id: string;
+  type: string; // matches react-flow node renderer key
+  position: { x: number; y: number };
+  data: {
+    kind: WorkflowNodeKind;
+    subtype: string; // e.g. "person.created", "filter.scope", "action.create_reminder"
+    label: string;
+    description?: string;
+    config: Record<string, unknown>;
+  };
+}
+
+export interface WorkflowEdge {
+  id: string;
+  source: string;
+  target: string;
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
+  data?: {
+    mappings?: { from: string; to: string }[];
+  };
+}
+
+export interface Workflow {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  status: WorkflowStatus;
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 export interface Organization {
   id: string;
   user_id: string;
