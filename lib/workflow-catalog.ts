@@ -11,6 +11,11 @@ export interface NodeTemplate {
   outputFields: string[];
   // Inputs the node expects in its config.
   configFields: ConfigField[];
+  // True when the node only depends on ECHO-native data + logic and
+  // will work as soon as the V2 runtime lands. False when it needs an
+  // external service (Vercel cron, webhook receiver, mail provider,
+  // OAuth-token vault, etc.) before it can execute.
+  live: boolean;
 }
 
 export interface ConfigField {
@@ -37,6 +42,7 @@ export const NODE_CATALOG: NodeTemplate[] = [
       "tool_calls",
     ],
     configFields: [],
+    live: true,
   },
   {
     subtype: "trigger.person_created",
@@ -45,6 +51,7 @@ export const NODE_CATALOG: NodeTemplate[] = [
     description: "Bei jeder neu angelegten Person.",
     outputFields: ["person.id", "person.name", "person.company", "person.scope"],
     configFields: [],
+    live: true,
   },
   {
     subtype: "trigger.person_updated",
@@ -60,6 +67,7 @@ export const NODE_CATALOG: NodeTemplate[] = [
         placeholder: "company, role, tags",
       },
     ],
+    live: true,
   },
   {
     subtype: "trigger.interaction_logged",
@@ -74,6 +82,7 @@ export const NODE_CATALOG: NodeTemplate[] = [
       "person_ids",
     ],
     configFields: [],
+    live: true,
   },
   {
     subtype: "trigger.reminder_due",
@@ -82,6 +91,7 @@ export const NODE_CATALOG: NodeTemplate[] = [
     description: "Wenn ein Reminder seinen remind_at erreicht.",
     outputFields: ["reminder.id", "reminder.text", "person.id"],
     configFields: [],
+    live: true,
   },
   {
     subtype: "trigger.cron",
@@ -98,6 +108,7 @@ export const NODE_CATALOG: NodeTemplate[] = [
         required: true,
       },
     ],
+    live: false,
   },
   {
     subtype: "trigger.webhook",
@@ -113,6 +124,7 @@ export const NODE_CATALOG: NodeTemplate[] = [
         placeholder: "optional",
       },
     ],
+    live: false,
   },
 
   // ======== FILTERS ========
@@ -131,6 +143,7 @@ export const NODE_CATALOG: NodeTemplate[] = [
         required: true,
       },
     ],
+    live: true,
   },
   {
     subtype: "filter.has_tag",
@@ -147,6 +160,7 @@ export const NODE_CATALOG: NodeTemplate[] = [
         required: true,
       },
     ],
+    live: true,
   },
   {
     subtype: "filter.strength_min",
@@ -163,6 +177,7 @@ export const NODE_CATALOG: NodeTemplate[] = [
         required: true,
       },
     ],
+    live: true,
   },
   {
     subtype: "filter.sentiment",
@@ -179,6 +194,7 @@ export const NODE_CATALOG: NodeTemplate[] = [
         required: true,
       },
     ],
+    live: true,
   },
 
   // ======== TRANSFORMS ========
@@ -203,6 +219,7 @@ export const NODE_CATALOG: NodeTemplate[] = [
         options: ["lang", "kurz", "mono"],
       },
     ],
+    live: true,
   },
   {
     subtype: "transform.template",
@@ -219,6 +236,7 @@ export const NODE_CATALOG: NodeTemplate[] = [
         required: true,
       },
     ],
+    live: true,
   },
   {
     subtype: "transform.lookup_person",
@@ -235,6 +253,24 @@ export const NODE_CATALOG: NodeTemplate[] = [
         required: true,
       },
     ],
+    live: true,
+  },
+  {
+    subtype: "transform.lookup_organization",
+    kind: "transform",
+    label: "Org-Lookup",
+    description: "Holt Organisation per ID oder Name aus dem CRM.",
+    outputFields: ["organization"],
+    configFields: [
+      {
+        key: "ref_field",
+        label: "Referenz-Feld",
+        type: "text",
+        placeholder: "person.organization_id oder person.company",
+        required: true,
+      },
+    ],
+    live: true,
   },
 
   // ======== ACTIONS ========
@@ -265,6 +301,7 @@ export const NODE_CATALOG: NodeTemplate[] = [
         placeholder: "7",
       },
     ],
+    live: true,
   },
   {
     subtype: "action.add_tag",
@@ -280,6 +317,47 @@ export const NODE_CATALOG: NodeTemplate[] = [
         required: true,
       },
     ],
+    live: true,
+  },
+  {
+    subtype: "action.update_person",
+    kind: "action",
+    label: "Person aktualisieren",
+    description: "Skalare Felder ersetzen (company, role, scope, notes).",
+    outputFields: [],
+    configFields: [
+      {
+        key: "person_id_field",
+        label: "Person-ID-Feld",
+        type: "text",
+        placeholder: "person.id",
+        required: true,
+      },
+      {
+        key: "field",
+        label: "Feld",
+        type: "select",
+        options: ["company", "role", "scope", "notes"],
+        required: true,
+      },
+      {
+        key: "value",
+        label: "Neuer Wert",
+        type: "text",
+      },
+    ],
+    live: true,
+  },
+  {
+    subtype: "action.notify",
+    kind: "action",
+    label: "Notification",
+    description: "Browser-Notification (sobald V2-Runtime läuft).",
+    outputFields: [],
+    configFields: [
+      { key: "text", label: "Text", type: "text", required: true },
+    ],
+    live: true,
   },
   {
     subtype: "action.send_webhook",
@@ -301,6 +379,7 @@ export const NODE_CATALOG: NodeTemplate[] = [
         type: "text",
       },
     ],
+    live: false,
   },
   {
     subtype: "action.send_email",
@@ -313,6 +392,7 @@ export const NODE_CATALOG: NodeTemplate[] = [
       { key: "subject", label: "Betreff", type: "text", required: true },
       { key: "body", label: "Body (Markdown)", type: "textarea", required: true },
     ],
+    live: false,
   },
   {
     subtype: "action.push_hubspot",
@@ -327,16 +407,41 @@ export const NODE_CATALOG: NodeTemplate[] = [
         type: "text",
       },
     ],
+    live: false,
   },
   {
-    subtype: "action.notify",
+    subtype: "action.lookup_hubspot",
     kind: "action",
-    label: "Notification",
-    description: "Browser-Notification + ECHO-Inbox-Pin.",
-    outputFields: [],
+    label: "HubSpot Lookup",
+    description: "Sucht ob Person in HubSpot existiert; gibt Match zurück.",
+    outputFields: ["hubspot.contact_id", "hubspot.found"],
     configFields: [
-      { key: "text", label: "Text", type: "text", required: true },
+      {
+        key: "match_field",
+        label: "Match auf",
+        type: "select",
+        options: ["email", "phone", "name"],
+        required: true,
+      },
     ],
+    live: false,
+  },
+  {
+    subtype: "action.linkedin_enrich",
+    kind: "action",
+    label: "LinkedIn anreichern",
+    description: "Public Profile suchen + Felder ergänzen (V2, ToS-abhängig).",
+    outputFields: ["linkedin_url", "title", "company"],
+    configFields: [
+      {
+        key: "name_field",
+        label: "Name-Feld",
+        type: "text",
+        placeholder: "person.name",
+        required: true,
+      },
+    ],
+    live: false,
   },
 ];
 

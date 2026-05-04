@@ -68,37 +68,79 @@ interface NodeData extends Record<string, unknown> {
 type FlowNode = Node<NodeData>;
 type FlowEdge = Edge;
 
+const SIDES: Array<{ side: "top" | "right" | "bottom" | "left"; pos: Position }> = [
+  { side: "top", pos: Position.Top },
+  { side: "right", pos: Position.Right },
+  { side: "bottom", pos: Position.Bottom },
+  { side: "left", pos: Position.Left },
+];
+
+const HANDLE_STYLE: React.CSSProperties = {
+  background: "var(--ink-3)",
+  width: 8,
+  height: 8,
+  border: "1px solid var(--paper)",
+};
+
 function CustomNode({ data, selected }: NodeProps<FlowNode>) {
   const tpl = findTemplate(data.subtype);
+  const live = tpl?.live ?? false;
+  const stripeColor = live ? "var(--good)" : "var(--bad)";
+
   return (
     <div
-      className={`min-w-44 rounded border-2 ${KIND_TONE[data.kind]} ${
+      className={`relative min-w-44 overflow-hidden rounded border-2 ${KIND_TONE[data.kind]} ${
         selected ? "ring-2 ring-action ring-offset-2 ring-offset-paper" : ""
-      } px-3 py-2`}
+      }`}
     >
-      {data.kind !== "trigger" && (
-        <Handle
-          type="target"
-          position={Position.Top}
-          style={{ background: "var(--ink-3)", width: 8, height: 8 }}
-        />
-      )}
-      <p className="font-mono text-[9px] uppercase tracking-wider text-ink-3">
-        {KIND_LABEL[data.kind]}
-      </p>
-      <p className="mt-0.5 text-sm font-medium text-ink-1">{data.label}</p>
-      {tpl?.description && (
-        <p className="mt-1 text-[10px] leading-snug text-ink-4">
-          {tpl.description}
-        </p>
-      )}
-      {data.kind !== "action" && (
-        <Handle
-          type="source"
-          position={Position.Bottom}
-          style={{ background: "var(--ink-3)", width: 8, height: 8 }}
-        />
-      )}
+      <span
+        aria-hidden
+        className="absolute inset-y-0 left-0 w-1"
+        style={{ background: stripeColor }}
+      />
+
+      {/* Source + target handle on every side, both with the same
+          position. react-flow disambiguates source vs. target by what
+          the user is doing (initiating vs. completing a connection).
+          IDs are unique-per-side-per-type. */}
+      {SIDES.map(({ side, pos }) => (
+        <span key={side}>
+          <Handle
+            id={`${side}-target`}
+            type="target"
+            position={pos}
+            style={HANDLE_STYLE}
+            isConnectable
+          />
+          <Handle
+            id={`${side}-source`}
+            type="source"
+            position={pos}
+            style={HANDLE_STYLE}
+            isConnectable
+          />
+        </span>
+      ))}
+
+      <div className="pl-3 pr-3 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="font-mono text-[9px] uppercase tracking-wider text-ink-3">
+            {KIND_LABEL[data.kind]}
+          </p>
+          <span
+            className="font-mono text-[9px] uppercase tracking-wider"
+            style={{ color: stripeColor }}
+          >
+            {live ? "Live" : "V2"}
+          </span>
+        </div>
+        <p className="mt-0.5 text-sm font-medium text-ink-1">{data.label}</p>
+        {tpl?.description && (
+          <p className="mt-1 text-[10px] leading-snug text-ink-4">
+            {tpl.description}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -279,7 +321,70 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mock, setMock] = useState<MockResult[] | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [vibePrompt, setVibePrompt] = useState("");
+  const [vibing, setVibing] = useState(false);
+  const [vibeError, setVibeError] = useState<string | null>(null);
+  const [vibeSummary, setVibeSummary] = useState<string | null>(null);
   const dropRef = useRef<HTMLDivElement | null>(null);
+
+  async function runVibe() {
+    if (!vibePrompt.trim()) return;
+    if (
+      nodes.length > 0 &&
+      !confirm(
+        "Vibe-Generate ersetzt den aktuellen Canvas. Speichere vorher wenn du willst. Fortfahren?",
+      )
+    ) {
+      return;
+    }
+    setVibing(true);
+    setVibeError(null);
+    setVibeSummary(null);
+    try {
+      const res = await fetch("/api/workflows/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: vibePrompt }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `Generate ${res.status}`);
+      }
+      const data = (await res.json()) as {
+        summary: string;
+        nodes: WorkflowNode[];
+        edges: WorkflowEdge[];
+        warnings: string[];
+      };
+      const flowNodes: FlowNode[] = data.nodes.map((n) => ({
+        id: n.id,
+        type: "custom",
+        position: n.position,
+        data: n.data,
+      }));
+      const flowEdges: FlowEdge[] = data.edges.map((e) => ({
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        sourceHandle: e.sourceHandle ?? null,
+        targetHandle: e.targetHandle ?? null,
+        markerEnd: { type: MarkerType.ArrowClosed },
+      }));
+      setNodes(flowNodes);
+      setEdges(flowEdges);
+      setSelectedId(null);
+      setMock(null);
+      setVibeSummary(
+        data.warnings.length > 0
+          ? `${data.summary} · Hinweise: ${data.warnings.join(" / ")}`
+          : data.summary,
+      );
+    } catch (err) {
+      setVibeError(err instanceof Error ? err.message : "Generate fehlgeschlagen");
+    } finally {
+      setVibing(false);
+    }
+  }
 
   const selected = nodes.find((n) => n.id === selectedId) ?? null;
 
@@ -421,6 +526,46 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
         >
           Löschen
         </button>
+      </div>
+
+      {/* Vibe-Integrate bar */}
+      <div className="border-b border-rule bg-action-soft px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <span className="t-label" style={{ color: "var(--action)" }}>
+            Vibe
+          </span>
+          <input
+            type="text"
+            value={vibePrompt}
+            onChange={(e) => setVibePrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !vibing) {
+                e.preventDefault();
+                runVibe();
+              }
+            }}
+            placeholder="Beschreib was passieren soll: „Wenn ich Kontakt erstelle, in HubSpot prüfen — wenn nicht da, dort anlegen."
+            className="h-8 flex-1 rounded border border-action/30 bg-paper px-3 text-sm text-ink-1 outline-none placeholder:text-ink-4 focus:border-action focus:ring-2 focus:ring-action/20"
+          />
+          <button
+            type="button"
+            onClick={runVibe}
+            disabled={vibing || !vibePrompt.trim()}
+            className="rounded border border-action bg-action px-3 py-1.5 text-xs font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)] disabled:opacity-50"
+          >
+            {vibing ? "Komponiere…" : "Generate"}
+          </button>
+        </div>
+        {(vibeSummary || vibeError) && (
+          <p
+            className="mt-1.5 text-[11px]"
+            style={{
+              color: vibeError ? "var(--bad)" : "var(--ink-2)",
+            }}
+          >
+            {vibeError ?? vibeSummary}
+          </p>
+        )}
       </div>
 
       <div className="grid flex-1 grid-cols-[220px_1fr_300px] overflow-hidden">
