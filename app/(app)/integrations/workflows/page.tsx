@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { listWorkflows } from "@/lib/workflows";
-import { createWorkflow } from "./actions";
+import { createDemoWorkflow, createWorkflow } from "./actions";
 
 const STATUS_TONE: Record<string, string> = {
   draft: "border-rule bg-paper-2 text-ink-3",
@@ -40,15 +40,25 @@ export default async function WorkflowsListPage() {
               Ausführungs-Engine kommt mit V2.
             </p>
           </div>
-          <form action={createWorkflow}>
-            <input type="hidden" name="name" value="Neuer Workflow" />
-            <button
-              type="submit"
-              className="rounded border border-action bg-action px-4 py-2 text-sm font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)]"
-            >
-              + Workflow
-            </button>
-          </form>
+          <div className="flex items-center gap-2">
+            <form action={createDemoWorkflow}>
+              <button
+                type="submit"
+                className="rounded border border-rule px-3 py-2 text-sm text-ink-2 transition hover:border-action hover:text-action"
+              >
+                + Demo
+              </button>
+            </form>
+            <form action={createWorkflow}>
+              <input type="hidden" name="name" value="Neuer Workflow" />
+              <button
+                type="submit"
+                className="rounded border border-action bg-action px-4 py-2 text-sm font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)]"
+              >
+                + Workflow
+              </button>
+            </form>
+          </div>
         </header>
 
         {workflows.length === 0 ? (

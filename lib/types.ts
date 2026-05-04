@@ -141,6 +141,73 @@ export interface RelationshipEntry {
   label: RelationshipLabel;
 }
 
+// ===== Pipelines =====
+
+export type PipelineEntityType = "person" | "organization" | "both";
+
+export interface PipelineStage {
+  id: string;
+  name: string;
+  color?: string;
+  order: number;
+  probability?: number; // 0-100
+  outcome?: "won" | "lost";
+}
+
+export type PipelineFieldType =
+  | "text"
+  | "number"
+  | "date"
+  | "currency"
+  | "select"
+  | "textarea"
+  | "url";
+
+export interface PipelineFieldDef {
+  key: string;
+  label: string;
+  type: PipelineFieldType;
+  options?: string[];
+  required?: boolean;
+}
+
+export interface Pipeline {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  entity_type: PipelineEntityType;
+  stages: PipelineStage[];
+  field_definitions: PipelineFieldDef[];
+  default_currency: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export type DealStatus = "open" | "won" | "lost";
+
+export interface Deal {
+  id: string;
+  user_id: string;
+  pipeline_id: string;
+  stage_id: string;
+  title: string;
+  person_id: string | null;
+  organization_id: string | null;
+  value: number | null;
+  currency: string | null;
+  expected_close_date: string | null;
+  probability: number | null;
+  status: DealStatus;
+  field_values: Record<string, unknown>;
+  notes: string | null;
+  position: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
 export type WorkflowStatus = "draft" | "enabled" | "disabled";
 
 export type WorkflowNodeKind = "trigger" | "filter" | "transform" | "action";
