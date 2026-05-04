@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { Person, Scope } from "@/lib/types";
 
@@ -47,7 +48,16 @@ function compareNullable(
   return dir === "asc" ? cmp : -cmp;
 }
 
-export function PeopleTable({ people }: { people: Person[] }) {
+export function PeopleTable({
+  people,
+  activeTag = null,
+  totalCount,
+}: {
+  people: Person[];
+  activeTag?: string | null;
+  totalCount?: number;
+}) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("name");
@@ -87,6 +97,27 @@ export function PeopleTable({ people }: { people: Person[] }) {
 
   return (
     <div className="space-y-4">
+      {activeTag && (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="t-label">Tag-Filter</span>
+          <span
+            className="tag"
+            style={{
+              borderColor: "var(--action)",
+              color: "var(--action)",
+            }}
+          >
+            <span className="dot" style={{ background: "var(--action)" }} />
+            {activeTag}
+          </span>
+          <Link
+            href="/people"
+            className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3 transition hover:text-ink-1"
+          >
+            × Filter entfernen
+          </Link>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex h-9 min-w-72 flex-1 items-center gap-2 rounded border border-rule bg-paper px-3">
           <span className="t-label" aria-hidden>
@@ -163,10 +194,18 @@ export function PeopleTable({ people }: { people: Person[] }) {
           </div>
         ) : (
           sorted.map((p) => (
-            <Link
+            <div
               key={p.id}
-              href={`/people/${p.id}`}
-              className="grid grid-cols-[28px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1.4fr)_120px] gap-4 border-b border-rule-soft px-4 py-3 transition-colors hover:bg-paper-2 last:border-b-0"
+              role="link"
+              tabIndex={0}
+              onClick={() => router.push(`/people/${p.id}`)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  router.push(`/people/${p.id}`);
+                }
+              }}
+              className="grid grid-cols-[28px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1.4fr)_120px] cursor-pointer gap-4 border-b border-rule-soft px-4 py-3 transition-colors hover:bg-paper-2 last:border-b-0 focus:bg-paper-2 focus:outline-none"
             >
               <span className="avatar self-center" aria-hidden>
                 {initials(p.name)}
@@ -189,22 +228,28 @@ export function PeopleTable({ people }: { people: Person[] }) {
               </span>
               <span className="flex flex-wrap gap-1 self-center">
                 {(p.tags ?? []).slice(0, 3).map((t) => (
-                  <span key={t} className="tag">
+                  <Link
+                    key={t}
+                    href={`/people?tag=${encodeURIComponent(t)}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="tag transition hover:border-action hover:text-action"
+                  >
                     <span className="dot" />
                     {t}
-                  </span>
+                  </Link>
                 ))}
               </span>
               <span className="self-center text-right font-mono text-[11px] tracking-wider text-ink-3">
                 {formatDate(p.last_interaction_at)}
               </span>
-            </Link>
+            </div>
           ))
         )}
       </div>
 
       <p className="t-label">
-        {sorted.length} von {people.length}
+        {sorted.length} von {totalCount ?? people.length}
+        {activeTag && ` · gefiltert nach „${activeTag}"`}
       </p>
     </div>
   );

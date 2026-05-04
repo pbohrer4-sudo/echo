@@ -111,10 +111,14 @@ export default async function PersonDetailPage({
                   {SCOPE_LABEL[person.scope]}
                 </span>
                 {(person.tags ?? []).map((t) => (
-                  <span key={t} className="tag">
+                  <Link
+                    key={t}
+                    href={`/people?tag=${encodeURIComponent(t)}`}
+                    className="tag transition hover:border-action hover:text-action"
+                  >
                     <span className="dot" />
                     {t}
-                  </span>
+                  </Link>
                 ))}
               </div>
             </div>

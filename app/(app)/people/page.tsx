@@ -1,8 +1,22 @@
 import { listPeople } from "@/lib/people";
 import { PeopleTable } from "./people-table";
 
-export default async function PeoplePage() {
-  const people = await listPeople();
+export default async function PeoplePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tag?: string }>;
+}) {
+  const { tag } = await searchParams;
+  const all = await listPeople();
+
+  const activeTag = tag?.trim() || null;
+  const filtered = activeTag
+    ? all.filter((p) =>
+        (p.tags ?? []).some(
+          (t) => t.toLowerCase() === activeTag.toLowerCase(),
+        ),
+      )
+    : all;
 
   return (
     <div className="px-8 py-10">
@@ -16,7 +30,11 @@ export default async function PeoplePage() {
             Beruflich und privat. Sortier-, filter- und durchsuchbar.
           </p>
         </header>
-        <PeopleTable people={people} />
+        <PeopleTable
+          people={filtered}
+          activeTag={activeTag}
+          totalCount={all.length}
+        />
       </div>
     </div>
   );
