@@ -9,6 +9,7 @@ import {
   listTodosForPerson,
   getPeopleMap,
 } from "@/lib/inbox";
+import { getProfileDepth } from "@/lib/profile-depth";
 import type { Scope } from "@/lib/types";
 import { DeleteButton } from "./delete-button";
 import { PersonTimeline } from "./timeline";
@@ -27,6 +28,23 @@ const SCOPE_LABEL: Record<Scope, string> = {
   personal: "Privat",
   both: "Beides",
 };
+
+function ProfileDepthBar({ person }: { person: import("@/lib/types").Person }) {
+  const depth = getProfileDepth(person);
+  return (
+    <div className="flex w-40 flex-col items-end gap-1">
+      <span className="t-label">
+        Profil {depth.filled}/{depth.total}
+      </span>
+      <div className="h-1.5 w-full rounded bg-paper-3">
+        <div
+          className="h-full rounded bg-action transition-all"
+          style={{ width: `${depth.percent}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
 function initials(name: string): string {
   return name
@@ -124,14 +142,17 @@ export default async function PersonDetailPage({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/people/${person.id}/edit`}
-              className="rounded border border-rule px-3 py-1.5 text-xs text-ink-2 transition hover:border-ink-3 hover:text-ink-1"
-            >
-              Bearbeiten
-            </Link>
-            <DeleteButton id={person.id} name={person.name} />
+          <div className="flex flex-col items-end gap-3">
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/people/${person.id}/edit`}
+                className="rounded border border-rule px-3 py-1.5 text-xs text-ink-2 transition hover:border-ink-3 hover:text-ink-1"
+              >
+                Bearbeiten
+              </Link>
+              <DeleteButton id={person.id} name={person.name} />
+            </div>
+            <ProfileDepthBar person={person} />
           </div>
         </div>
 
