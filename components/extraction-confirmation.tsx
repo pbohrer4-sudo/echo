@@ -15,16 +15,26 @@ function fmtDateTime(iso: string | undefined): string {
 }
 
 function summarize(call: ToolCall): { icon: string; label: string; detail: string } {
-  const input = call.input as Record<string, string | string[] | undefined>;
+  const input = call.input as Record<string, unknown>;
   switch (call.name) {
-    case "create_person":
+    case "create_person": {
+      const parts: string[] = [];
+      if (typeof input.name === "string") parts.push(input.name);
+      if (typeof input.company === "string") parts.push(input.company);
+      const extras = describePersonFields(input);
+      const detail =
+        [parts.join(" · "), extras].filter(Boolean).join(" — ") || "";
+      return { icon: "person", label: "Neue Person", detail };
+    }
+    case "update_person": {
+      const name = (input._person_name as string | undefined) ?? "Person";
+      const extras = describeUpdateFields(input);
       return {
-        icon: "person",
-        label: "Neue Person",
-        detail: [input.name, input.company]
-          .filter(Boolean)
-          .join(" · ") as string,
+        icon: "update",
+        label: `Update ${name}`,
+        detail: extras || "(keine Änderung)",
       };
+    }
     case "log_interaction": {
       const type = (input.type as string) ?? "interaction";
       const typeLabel: Record<string, string> = {
@@ -63,6 +73,49 @@ function summarize(call: ToolCall): { icon: string; label: string; detail: strin
       // switch is exhaustive over ToolName.
       return { icon: "reply", label: "Vorschläge", detail: "" };
   }
+}
+
+function describePersonFields(input: Record<string, unknown>): string {
+  const parts: string[] = [];
+  if (typeof input.role === "string") parts.push(`Rolle: ${input.role}`);
+  if (Array.isArray(input.tags) && input.tags.length)
+    parts.push(`Tags: ${input.tags.join(", ")}`);
+  if (Array.isArray(input.phones) && input.phones.length)
+    parts.push(`${input.phones.length} Telefon`);
+  if (Array.isArray(input.emails) && input.emails.length)
+    parts.push(`${input.emails.length} Email`);
+  if (Array.isArray(input.addresses) && input.addresses.length)
+    parts.push(`${input.addresses.length} Adresse`);
+  if (Array.isArray(input.socials) && input.socials.length)
+    parts.push(`${input.socials.length} Social`);
+  if (Array.isArray(input.important_dates) && input.important_dates.length)
+    parts.push(`${input.important_dates.length} Datum`);
+  if (typeof input.notes === "string" && input.notes) parts.push("Notiz");
+  return parts.join(" · ");
+}
+
+function describeUpdateFields(input: Record<string, unknown>): string {
+  const parts: string[] = [];
+  if (typeof input.company === "string") parts.push(`Firma: ${input.company}`);
+  if (typeof input.role === "string") parts.push(`Rolle: ${input.role}`);
+  if (typeof input.scope === "string") parts.push(`Scope: ${input.scope}`);
+  if (typeof input.notes === "string") parts.push("Notiz aktualisiert");
+  if (Array.isArray(input.add_tags) && input.add_tags.length)
+    parts.push(`+Tags: ${input.add_tags.join(", ")}`);
+  if (Array.isArray(input.add_phones) && input.add_phones.length)
+    parts.push(`+${input.add_phones.length} Telefon`);
+  if (Array.isArray(input.add_emails) && input.add_emails.length)
+    parts.push(`+${input.add_emails.length} Email`);
+  if (Array.isArray(input.add_addresses) && input.add_addresses.length)
+    parts.push(`+${input.add_addresses.length} Adresse`);
+  if (Array.isArray(input.add_socials) && input.add_socials.length)
+    parts.push(`+${input.add_socials.length} Social`);
+  if (
+    Array.isArray(input.add_important_dates) &&
+    input.add_important_dates.length
+  )
+    parts.push(`+${input.add_important_dates.length} Datum`);
+  return parts.join(" · ");
 }
 
 export function ExtractionConfirmation({

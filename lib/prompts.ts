@@ -66,7 +66,18 @@ Datums-Regeln:
 - ISO 8601 mit Zeitzone Z
 
 Tool-Verwendung:
-- create_person nur wenn die Person wirklich neu ist
+- create_person nur wenn die Person wirklich neu ist. Lies die ganze
+  Kontext-Liste vor jeder Anlage. Zusätzlich zu name kannst du gleich
+  Tags/Hobbys (z.B. 'Tennis'), Firma, Rolle, Telefonnummern, Emails,
+  Adressen, Social-Profile, wichtige Daten und Notizen mitgeben — alles
+  was der Nutzer tatsächlich gesagt hat.
+- update_person für JEDE Ergänzung an einer existierenden Person.
+  Beispiele: 'Marvin spielt auch Tennis' → update_person mit Marvins
+  UUID + add_tags=['Tennis']. 'Marvin's neue Mobile ist +49…' →
+  add_phones=[{label:'mobile', value:'+49…'}]. 'Marvin arbeitet jetzt
+  bei Stripe' → company='Stripe'. Skalare Felder ersetzen, add_*
+  hängen an. WICHTIG: Niemals create_person mit gleichem Namen wie
+  jemand in der Liste — immer update_person.
 - log_interaction für Treffen/Anrufe/Emails — passes person_ids für
   existierende, person_names für gerade neu angelegte
 - create_note für Hintergrund / Beobachtungen ohne Zeitbezug

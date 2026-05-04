@@ -61,6 +61,16 @@ export async function POST(request: Request) {
         role: stringOrNull(input.role),
         scope: scopeOr(input.scope, "both"),
         tags: stringArray(input.tags),
+        notes: stringOrNull(input.notes),
+        phones: parsePhones(input.phones),
+        emails: parseEmails(input.emails),
+        addresses: parseAddresses(input.addresses),
+        socials: parseSocials(input.socials),
+        important_dates: parseImportantDates(input.important_dates),
+        // Mirror primary phone/email so legacy code paths still work.
+        phone: parsePhones(input.phones)[0]?.value ?? null,
+        email: parseEmails(input.emails)[0]?.value ?? null,
+        birthday: findBirthday(input.important_dates),
       })
       .select("id, name")
       .single();
@@ -72,6 +82,95 @@ export async function POST(request: Request) {
       );
     }
     newByName.set(name.toLowerCase(), data.id);
+    commits.people += 1;
+  }
+
+  // Pass 1.5: update_person — needs to read the existing row so we
+  // can append to array fields rather than replace.
+  for (const call of calls) {
+    if (call.name !== "update_person") continue;
+    const input = call.input as Record<string, unknown>;
+    const id = stringOrNull(input.id);
+    if (!id) continue;
+
+    const existingRes = await supabase
+      .from("people")
+      .select(
+        "tags, phones, emails, addresses, socials, important_dates",
+      )
+      .eq("id", id)
+      .maybeSingle();
+
+    if (existingRes.error || !existingRes.data) continue;
+    const existing = existingRes.data as {
+      tags: string[] | null;
+      phones: unknown;
+      emails: unknown;
+      addresses: unknown;
+      socials: unknown;
+      important_dates: unknown;
+    };
+
+    const update: Record<string, unknown> = {};
+    if (typeof input.company === "string")
+      update.company = stringOrNull(input.company);
+    if (typeof input.role === "string")
+      update.role = stringOrNull(input.role);
+    if (typeof input.scope === "string")
+      update.scope = scopeOr(input.scope, "both");
+    if (typeof input.notes === "string")
+      update.notes = stringOrNull(input.notes);
+
+    const addTags = stringArray(input.add_tags);
+    if (addTags.length) {
+      const merged = [...(existing.tags ?? []), ...addTags];
+      update.tags = Array.from(new Set(merged));
+    }
+
+    const addPhones = parsePhones(input.add_phones);
+    if (addPhones.length) {
+      update.phones = [...parsePhones(existing.phones), ...addPhones];
+    }
+
+    const addEmails = parseEmails(input.add_emails);
+    if (addEmails.length) {
+      update.emails = [...parseEmails(existing.emails), ...addEmails];
+    }
+
+    const addAddresses = parseAddresses(input.add_addresses);
+    if (addAddresses.length) {
+      update.addresses = [
+        ...parseAddresses(existing.addresses),
+        ...addAddresses,
+      ];
+    }
+
+    const addSocials = parseSocials(input.add_socials);
+    if (addSocials.length) {
+      update.socials = [...parseSocials(existing.socials), ...addSocials];
+    }
+
+    const addDates = parseImportantDates(input.add_important_dates);
+    if (addDates.length) {
+      update.important_dates = [
+        ...parseImportantDates(existing.important_dates),
+        ...addDates,
+      ];
+    }
+
+    if (Object.keys(update).length === 0) continue;
+
+    const { error } = await supabase
+      .from("people")
+      .update(update)
+      .eq("id", id);
+
+    if (error) {
+      return NextResponse.json(
+        { error: `update_person: ${error.message}`, commits },
+        { status: 500 },
+      );
+    }
     commits.people += 1;
   }
 
@@ -249,4 +348,113 @@ function reminderTypeOr(
 
 function priorityOr(v: unknown, fallback: "low" | "medium" | "high") {
   return v === "low" || v === "medium" || v === "high" ? v : fallback;
+}
+
+interface PhoneEntry {
+  label: string;
+  value: string;
+}
+function parsePhones(v: unknown): PhoneEntry[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((e: unknown) => {
+      if (!e || typeof e !== "object") return null;
+      const obj = e as Record<string, unknown>;
+      const value = stringOrNull(obj.value);
+      if (!value) return null;
+      return { label: stringOr(obj.label, "mobile"), value };
+    })
+    .filter((e): e is PhoneEntry => e !== null);
+}
+
+interface EmailEntry {
+  label: string;
+  value: string;
+}
+function parseEmails(v: unknown): EmailEntry[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((e: unknown) => {
+      if (!e || typeof e !== "object") return null;
+      const obj = e as Record<string, unknown>;
+      const value = stringOrNull(obj.value);
+      if (!value) return null;
+      return { label: stringOr(obj.label, "persönlich"), value };
+    })
+    .filter((e): e is EmailEntry => e !== null);
+}
+
+interface AddressEntry {
+  label: string;
+  street: string | null;
+  city: string | null;
+  postal_code: string | null;
+  country: string | null;
+}
+function parseAddresses(v: unknown): AddressEntry[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((e: unknown) => {
+      if (!e || typeof e !== "object") return null;
+      const obj = e as Record<string, unknown>;
+      const street = stringOrNull(obj.street);
+      const city = stringOrNull(obj.city);
+      if (!street && !city) return null;
+      return {
+        label: stringOr(obj.label, "zuhause"),
+        street,
+        city,
+        postal_code: stringOrNull(obj.postal_code),
+        country: stringOrNull(obj.country),
+      };
+    })
+    .filter((e): e is AddressEntry => e !== null);
+}
+
+interface SocialEntry {
+  platform: string;
+  handle_or_url: string;
+}
+function parseSocials(v: unknown): SocialEntry[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((e: unknown) => {
+      if (!e || typeof e !== "object") return null;
+      const obj = e as Record<string, unknown>;
+      const handle = stringOrNull(obj.handle_or_url);
+      if (!handle) return null;
+      return {
+        platform: stringOr(obj.platform, "andere"),
+        handle_or_url: handle,
+      };
+    })
+    .filter((e): e is SocialEntry => e !== null);
+}
+
+interface ImportantDate {
+  label: string;
+  date: string;
+  remind: boolean;
+}
+function parseImportantDates(v: unknown): ImportantDate[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((e: unknown) => {
+      if (!e || typeof e !== "object") return null;
+      const obj = e as Record<string, unknown>;
+      const date = stringOrNull(obj.date);
+      if (!date) return null;
+      return {
+        label: stringOr(obj.label, "andere"),
+        date,
+        remind: Boolean(obj.remind),
+      };
+    })
+    .filter((e): e is ImportantDate => e !== null);
+}
+
+function findBirthday(v: unknown): string | null {
+  const dates = parseImportantDates(v);
+  const bday = dates.find((d) => d.label.toLowerCase() === "geburtstag");
+  return bday?.date ?? null;
 }

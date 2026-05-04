@@ -64,7 +64,26 @@ export async function POST(request: Request) {
       system,
       tools: EXTRACTION_TOOLS,
     });
-    return NextResponse.json({ text, toolCalls });
+
+    // Enrich update_person calls with the resolved person_name so the
+    // confirmation card can render "Update Marvin: …" without an extra
+    // round-trip from the client.
+    const peopleMap = new Map<string, string>(
+      (peopleData ?? []).map((p) => [p.id as string, p.name as string]),
+    );
+    const enrichedCalls = toolCalls.map((c) => {
+      if (c.name !== "update_person") return c;
+      const id = (c.input as { id?: unknown }).id;
+      if (typeof id !== "string") return c;
+      const name = peopleMap.get(id);
+      if (!name) return c;
+      return {
+        ...c,
+        input: { ...c.input, _person_name: name },
+      };
+    });
+
+    return NextResponse.json({ text, toolCalls: enrichedCalls });
   } catch (err) {
     const message = err instanceof Error ? err.message : "extract failed";
     return NextResponse.json({ error: message }, { status: 500 });

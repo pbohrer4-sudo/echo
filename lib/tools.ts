@@ -4,6 +4,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 // commit endpoint, so don't rename them lightly.
 export const TOOL_NAMES = [
   "create_person",
+  "update_person",
   "log_interaction",
   "create_note",
   "create_reminder",
@@ -17,26 +18,205 @@ export const EXTRACTION_TOOLS: Anthropic.Tool[] = [
   {
     name: "create_person",
     description:
-      "Lege eine neue Person an, wenn der Nutzer jemanden erwähnt, der noch nicht in seinem CRM ist. Prüfe vorher die Liste existierender Personen — bei einem Match nutze deren UUID statt eine neue Person anzulegen.",
+      "Lege eine neue Person an, wenn der Nutzer jemanden erwähnt, der noch nicht in seinem CRM ist. Prüfe vorher die Liste existierender Personen — bei einem Match nutze update_person mit deren UUID statt eine neue Person anzulegen. Alle Felder außer name sind optional; nur ausfüllen, was der Nutzer wirklich gesagt hat.",
     input_schema: {
       type: "object",
       properties: {
         name: { type: "string", description: "Vollständiger Name wie genannt." },
-        company: { type: "string", description: "Firma, falls erwähnt." },
-        role: { type: "string", description: "Rolle/Position, falls erwähnt." },
+        company: { type: "string" },
+        role: { type: "string" },
         scope: {
           type: "string",
           enum: ["work", "personal", "both"],
           description:
-            "'work' bei beruflichem Kontext (Kollege, Kunde), 'personal' bei privatem (Familie, Freund), 'both' falls unklar.",
+            "'work' bei beruflichem Kontext, 'personal' bei privatem, 'both' falls unklar.",
         },
         tags: {
           type: "array",
           items: { type: "string" },
-          description: "Tags wie 'Kunde', 'Marketing', 'Schule'.",
+          description:
+            "Hobbys, Vorlieben, Gemeinsamkeiten, Themen — alles womit der Nutzer Personen später wiederfinden will. Beispiele: 'Tennis', 'Vegetarier', 'Kunde', 'München'.",
+        },
+        notes: {
+          type: "string",
+          description:
+            "Freier Text, falls der Nutzer Hintergrund-Infos gibt, die zu keinem strukturierten Feld passen.",
+        },
+        phones: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              label: {
+                type: "string",
+                description:
+                  "z.B. mobile, iPhone, privat, arbeit, haupt, fax, andere",
+              },
+              value: { type: "string" },
+            },
+            required: ["value"],
+          },
+        },
+        emails: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              label: {
+                type: "string",
+                description: "z.B. persönlich, arbeit, schule, andere",
+              },
+              value: { type: "string" },
+            },
+            required: ["value"],
+          },
+        },
+        addresses: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              label: {
+                type: "string",
+                description: "z.B. zuhause, arbeit, andere",
+              },
+              street: { type: "string" },
+              city: { type: "string" },
+              postal_code: { type: "string" },
+              country: { type: "string" },
+            },
+          },
+        },
+        socials: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              platform: {
+                type: "string",
+                description:
+                  "LinkedIn, Instagram, Twitter, GitHub, Mastodon, Bluesky, Threads, TikTok, Website, andere",
+              },
+              handle_or_url: {
+                type: "string",
+                description: "@handle oder volle URL.",
+              },
+            },
+            required: ["platform", "handle_or_url"],
+          },
+        },
+        important_dates: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              label: {
+                type: "string",
+                description: "Geburtstag, Hochzeitstag, Jahrestag, andere",
+              },
+              date: {
+                type: "string",
+                description: "ISO Datum YYYY-MM-DD.",
+              },
+              remind: {
+                type: "boolean",
+                description: "true wenn der Nutzer jährlich erinnert werden will.",
+              },
+            },
+            required: ["label", "date"],
+          },
         },
       },
       required: ["name"],
+    },
+  },
+  {
+    name: "update_person",
+    description:
+      "Ergänze oder aktualisiere eine EXISTIERENDE Person. Nutze das, wenn der Nutzer neue Infos zu jemandem im CRM hinzufügt — z.B. neue Telefonnummer, Tag/Hobby, Firma. Skalare Felder (company, role, scope, notes) werden ersetzt; Array-Felder (add_tags, add_phones, …) werden ANGEHÄNGT statt ersetzt — der Nutzer verliert nie etwas durch Update. Setze nur die Felder, die der Nutzer tatsächlich erwähnt.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description: "UUID der Person aus der Context-Liste.",
+        },
+        company: { type: "string" },
+        role: { type: "string" },
+        scope: {
+          type: "string",
+          enum: ["work", "personal", "both"],
+        },
+        notes: {
+          type: "string",
+          description: "Ersetzt das gesamte Notizen-Feld.",
+        },
+        add_tags: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Wird zu existierenden Tags hinzugefügt. Duplikate werden gefiltert.",
+        },
+        add_phones: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string" },
+              value: { type: "string" },
+            },
+            required: ["value"],
+          },
+        },
+        add_emails: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string" },
+              value: { type: "string" },
+            },
+            required: ["value"],
+          },
+        },
+        add_addresses: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string" },
+              street: { type: "string" },
+              city: { type: "string" },
+              postal_code: { type: "string" },
+              country: { type: "string" },
+            },
+          },
+        },
+        add_socials: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              platform: { type: "string" },
+              handle_or_url: { type: "string" },
+            },
+            required: ["platform", "handle_or_url"],
+          },
+        },
+        add_important_dates: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              label: { type: "string" },
+              date: { type: "string" },
+              remind: { type: "boolean" },
+            },
+            required: ["label", "date"],
+          },
+        },
+      },
+      required: ["id"],
     },
   },
   {
