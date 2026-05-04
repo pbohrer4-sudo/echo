@@ -149,13 +149,23 @@ export default async function PersonDetailPage({
 
           <div className="flex flex-col items-end gap-3">
             <div className="flex items-center gap-2">
+              {person.is_self && (
+                <Link
+                  href="/settings"
+                  className="rounded border border-rule px-3 py-1.5 text-xs text-ink-2 transition hover:border-ink-3 hover:text-ink-1"
+                >
+                  Settings
+                </Link>
+              )}
               <Link
                 href={`/people/${person.id}/edit`}
                 className="rounded border border-rule px-3 py-1.5 text-xs text-ink-2 transition hover:border-ink-3 hover:text-ink-1"
               >
                 Bearbeiten
               </Link>
-              <DeleteButton id={person.id} name={person.name} />
+              {!person.is_self && (
+                <DeleteButton id={person.id} name={person.name} />
+              )}
             </div>
             <ProfileDepthBar person={person} />
           </div>

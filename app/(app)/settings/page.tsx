@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { updateSettings } from "./actions";
 
@@ -47,6 +48,12 @@ export default async function SettingsPage({
   return (
     <div className="px-8 py-10">
       <div className="mx-auto max-w-2xl space-y-10">
+        <Link
+          href="/profile"
+          className="t-label inline-flex items-center hover:text-ink-1"
+        >
+          ← Mein Profil
+        </Link>
         <header className="space-y-2">
           <p className="t-label">Konfiguration</p>
           <h1 className="text-3xl font-semibold tracking-tight text-ink-1">
