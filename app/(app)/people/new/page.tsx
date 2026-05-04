@@ -9,12 +9,15 @@ export default async function NewPersonPage({
   const { error } = await searchParams;
 
   return (
-    <div className="px-6 py-10">
-      <div className="mx-auto max-w-2xl space-y-6">
-        <header className="space-y-1">
-          <h1 className="font-serif text-3xl tracking-tight">Person anlegen</h1>
-          <p className="text-sm text-neutral-500">
-            Füll aus was du weißt — Rest sammelt ECHO über die Zeit.
+    <div className="px-8 py-10">
+      <div className="mx-auto max-w-2xl space-y-8">
+        <header className="space-y-2">
+          <p className="t-label">Neue Person</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-ink-1">
+            Person anlegen
+          </h1>
+          <p className="text-sm text-ink-3">
+            Füll aus was du weißt — den Rest sammelt ECHO über die Zeit.
           </p>
         </header>
         <PersonForm

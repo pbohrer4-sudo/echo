@@ -21,9 +21,12 @@ export default async function AppLayout({
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between gap-6 border-b border-neutral-900 px-6 py-4">
-        <div className="flex items-center gap-6">
-          <Link href="/" className="font-serif text-xl tracking-tight">
+      <header className="flex items-center justify-between gap-6 border-b border-rule bg-paper px-8 py-4">
+        <div className="flex items-center gap-8">
+          <Link
+            href="/"
+            className="text-lg font-semibold tracking-tight text-ink-1"
+          >
             ECHO
           </Link>
           <nav className="flex items-center gap-1 text-sm">
@@ -32,8 +35,10 @@ export default async function AppLayout({
             <NavLink href="/inbox">Inbox</NavLink>
           </nav>
         </div>
-        <div className="flex items-center gap-3 text-sm text-neutral-400">
-          <span className="font-mono text-xs">{user.email}</span>
+        <div className="flex items-center gap-4">
+          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-3">
+            {user.email}
+          </span>
           <SignOutButton />
         </div>
       </header>

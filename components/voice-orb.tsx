@@ -61,12 +61,12 @@ const STATE_LABEL: Record<OrbState, string> = {
 };
 
 const STATE_RING: Record<OrbState, string> = {
-  idle: "ring-1 ring-neutral-800 bg-neutral-900",
-  listening: "ring-2 ring-[#c8ff3e] bg-[#c8ff3e]/15 animate-pulse",
-  thinking: "ring-1 ring-neutral-700 bg-neutral-900",
-  speaking: "ring-2 ring-[#c8ff3e] bg-[#c8ff3e]/30 animate-pulse",
-  confirming: "ring-2 ring-[#c8ff3e]/60 bg-neutral-900",
-  error: "ring-2 ring-red-600 bg-red-900/20",
+  idle: "ring-1 ring-rule bg-paper-2",
+  listening: "ring-2 ring-action bg-action/10 animate-pulse",
+  thinking: "ring-1 ring-rule bg-paper-2",
+  speaking: "ring-2 ring-signal bg-signal-soft animate-pulse",
+  confirming: "ring-2 ring-action/60 bg-paper-2",
+  error: "ring-2 ring-bad bg-paper-2",
 };
 
 export function VoiceOrb() {
@@ -305,23 +305,21 @@ export function VoiceOrb() {
         <span className="sr-only">{STATE_LABEL[orbState]}</span>
       </button>
 
-      <p className="font-mono text-xs uppercase tracking-widest text-neutral-500">
-        {STATE_LABEL[orbState]}
-      </p>
+      <p className="t-label">{STATE_LABEL[orbState]}</p>
 
       <div className="w-full max-w-xl space-y-4 text-sm">
         {orbState === "listening" && interim && (
-          <p className="italic text-neutral-400">„{interim}…"</p>
+          <p className="italic text-ink-3">„{interim}…"</p>
         )}
         {lastUser && (
-          <p className="text-neutral-300">
-            <span className="text-neutral-500">Du: </span>
+          <p className="text-ink-2">
+            <span className="t-label mr-2 inline">Du</span>
             {lastUser.content}
           </p>
         )}
         {lastAssistant && (
-          <p className="text-[#c8ff3e]">
-            <span className="text-neutral-500">ECHO: </span>
+          <p className="text-ink-1">
+            <span className="t-label mr-2 inline">ECHO</span>
             {lastAssistant.content}
           </p>
         )}
@@ -335,7 +333,7 @@ export function VoiceOrb() {
           />
         )}
 
-        {error && <p className="text-red-400">{error}</p>}
+        {error && <p className="text-bad">{error}</p>}
       </div>
     </div>
   );

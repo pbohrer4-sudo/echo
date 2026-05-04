@@ -27,6 +27,15 @@ function fmtDate(iso: string | null): string {
   });
 }
 
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((s) => s[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
 export default async function PersonDetailPage({
   params,
 }: {
@@ -43,54 +52,44 @@ export default async function PersonDetailPage({
     listTodosForPerson(id),
   ]);
 
-  const fields: Array<{ label: string; value: string | null }> = [
-    { label: "Firma", value: person.company },
-    { label: "Rolle", value: person.role },
-    { label: "Email", value: person.email },
-    { label: "Telefon", value: person.phone },
-    {
-      label: "Geburtstag",
-      value: person.birthday ? fmtDate(person.birthday) : null,
-    },
-    {
-      label: "Cadence",
-      value: person.expected_cadence_days
-        ? `alle ${person.expected_cadence_days} Tage`
-        : null,
-    },
-  ];
-
   return (
-    <div className="px-6 py-10">
-      <div className="mx-auto max-w-3xl space-y-8">
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-2">
-            <Link
-              href="/people"
-              className="text-xs uppercase tracking-widest text-neutral-500 hover:text-neutral-300"
-            >
-              ← Personen
-            </Link>
-            <h1 className="font-serif text-4xl tracking-tight">{person.name}</h1>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-neutral-800 px-2 py-0.5 text-xs text-neutral-400">
-                {SCOPE_LABEL[person.scope]}
-              </span>
-              {(person.tags ?? []).map((t) => (
-                <span
-                  key={t}
-                  className="rounded-full border border-neutral-800 px-2 py-0.5 text-xs text-neutral-400"
-                >
-                  {t}
+    <div className="px-8 py-10">
+      <div className="mx-auto max-w-3xl space-y-10">
+        <Link
+          href="/people"
+          className="t-label inline-flex items-center hover:text-ink-1"
+        >
+          ← Personen
+        </Link>
+
+        <div className="flex items-start justify-between gap-6">
+          <div className="flex items-start gap-5">
+            <span className="avatar lg" aria-hidden>
+              {initials(person.name)}
+            </span>
+            <div className="space-y-2">
+              <h1 className="text-3xl font-semibold tracking-tight text-ink-1">
+                {person.name}
+              </h1>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="tag">
+                  <span className="dot" />
+                  {SCOPE_LABEL[person.scope]}
                 </span>
-              ))}
+                {(person.tags ?? []).map((t) => (
+                  <span key={t} className="tag">
+                    <span className="dot" />
+                    {t}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <Link
               href={`/people/${person.id}/edit`}
-              className="rounded-md border border-neutral-800 px-3 py-1.5 text-xs text-neutral-300 hover:border-neutral-600 hover:text-neutral-100"
+              className="rounded border border-rule px-3 py-1.5 text-xs text-ink-2 transition hover:border-ink-3 hover:text-ink-1"
             >
               Bearbeiten
             </Link>
@@ -98,54 +97,68 @@ export default async function PersonDetailPage({
           </div>
         </div>
 
-        <dl className="grid grid-cols-2 gap-x-8 gap-y-4 rounded-md border border-neutral-900 p-6">
-          {fields.map(({ label, value }) => (
-            <div key={label} className="space-y-1">
-              <dt className="text-xs uppercase tracking-wider text-neutral-500">
-                {label}
-              </dt>
-              <dd className="text-sm text-neutral-200">{value ?? "—"}</dd>
-            </div>
-          ))}
-          <div className="space-y-1">
-            <dt className="text-xs uppercase tracking-wider text-neutral-500">
-              Letzte Interaktion
-            </dt>
-            <dd className="font-mono text-sm text-neutral-200">
-              {fmtDate(person.last_interaction_at)}
-            </dd>
+        <section>
+          <div className="section-head">
+            <span className="t-label">Stammdaten</span>
+            <span className="rule" />
           </div>
-        </dl>
+          <dl className="kv">
+            <dt>Firma</dt>
+            <dd>{person.company ?? "—"}</dd>
+            <dt>Rolle</dt>
+            <dd>{person.role ?? "—"}</dd>
+            <dt>Email</dt>
+            <dd className="mono">{person.email ?? "—"}</dd>
+            <dt>Telefon</dt>
+            <dd className="mono">{person.phone ?? "—"}</dd>
+            <dt>Geburtstag</dt>
+            <dd>{person.birthday ? fmtDate(person.birthday) : "—"}</dd>
+            <dt>Cadence</dt>
+            <dd>
+              {person.expected_cadence_days
+                ? `alle ${person.expected_cadence_days} Tage`
+                : "—"}
+            </dd>
+            <dt>Letzte Interaktion</dt>
+            <dd className="mono">{fmtDate(person.last_interaction_at)}</dd>
+          </dl>
+        </section>
 
         {person.notes_summary && (
-          <section className="rounded-md border border-neutral-900 p-6">
-            <h2 className="mb-3 text-xs uppercase tracking-wider text-neutral-500">
-              Zusammenfassung
-            </h2>
-            <p className="text-sm text-neutral-300">{person.notes_summary}</p>
+          <section>
+            <div className="section-head">
+              <span className="t-label">Zusammenfassung</span>
+              <span className="rule" />
+            </div>
+            <p className="text-sm leading-relaxed text-ink-2">
+              {person.notes_summary}
+            </p>
           </section>
         )}
 
-        <div className="grid gap-6 md:grid-cols-2">
-          <section className="rounded-md border border-neutral-900 p-6">
-            <h2 className="mb-4 text-xs uppercase tracking-wider text-neutral-500">
-              Erinnerungen
-            </h2>
+        <div className="grid gap-10 md:grid-cols-2">
+          <section>
+            <div className="section-head">
+              <span className="t-label">Erinnerungen</span>
+              <span className="rule" />
+            </div>
             <PersonReminders reminders={reminders} />
           </section>
 
-          <section className="rounded-md border border-neutral-900 p-6">
-            <h2 className="mb-4 text-xs uppercase tracking-wider text-neutral-500">
-              Aufgaben
-            </h2>
+          <section>
+            <div className="section-head">
+              <span className="t-label">Aufgaben</span>
+              <span className="rule" />
+            </div>
             <PersonTodos todos={todos} />
           </section>
         </div>
 
-        <section className="rounded-md border border-neutral-900 p-6">
-          <h2 className="mb-4 text-xs uppercase tracking-wider text-neutral-500">
-            Timeline
-          </h2>
+        <section>
+          <div className="section-head">
+            <span className="t-label">Timeline</span>
+            <span className="rule" />
+          </div>
           <PersonTimeline interactions={interactions} notes={notes} />
         </section>
       </div>

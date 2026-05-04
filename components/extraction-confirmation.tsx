@@ -73,19 +73,17 @@ export function ExtractionConfirmation({
   pending: boolean;
 }) {
   return (
-    <div className="w-full max-w-xl space-y-4 rounded-md border border-[#c8ff3e]/30 bg-[#c8ff3e]/5 p-5">
-      <h3 className="text-xs uppercase tracking-widest text-[#c8ff3e]">
+    <div className="w-full max-w-xl space-y-4 rounded border border-action/30 bg-action-soft p-5">
+      <h3 className="t-label" style={{ color: "var(--action)" }}>
         ECHO will folgendes speichern
       </h3>
       <ul className="space-y-2 text-sm">
         {toolCalls.map((c, i) => {
           const s = summarize(c);
           return (
-            <li key={i} className="flex gap-3">
-              <span className="font-mono text-xs text-neutral-500">
-                {s.label}
-              </span>
-              <span className="text-neutral-200">{s.detail}</span>
+            <li key={i} className="flex gap-4">
+              <span className="t-label shrink-0 w-24">{s.label}</span>
+              <span className="text-ink-1">{s.detail}</span>
             </li>
           );
         })}
@@ -95,7 +93,7 @@ export function ExtractionConfirmation({
           type="button"
           onClick={onCancel}
           disabled={pending}
-          className="rounded-md border border-neutral-800 px-3 py-1.5 text-xs text-neutral-300 hover:border-neutral-600 hover:text-neutral-100 disabled:opacity-50"
+          className="rounded border border-rule px-3 py-1.5 text-xs text-ink-2 transition hover:border-ink-3 hover:text-ink-1 disabled:opacity-50"
         >
           Verwerfen
         </button>
@@ -103,7 +101,7 @@ export function ExtractionConfirmation({
           type="button"
           onClick={onConfirm}
           disabled={pending}
-          className="rounded-md bg-[#c8ff3e] px-3 py-1.5 text-xs font-medium text-neutral-950 hover:bg-[#b6eb2c] disabled:opacity-50"
+          className="rounded border border-action bg-action px-3 py-1.5 text-xs font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)] disabled:opacity-50"
         >
           {pending ? "Speichere…" : "Bestätigen"}
         </button>

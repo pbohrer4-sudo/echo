@@ -14,11 +14,20 @@ const SCOPE_LABEL: Record<Scope, string> = {
   both: "Beides",
 };
 
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((s) => s[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("de-DE", {
     day: "2-digit",
-    month: "2-digit",
+    month: "short",
     year: "2-digit",
   });
 }
@@ -31,7 +40,10 @@ function compareNullable(
   if (a === null && b === null) return 0;
   if (a === null) return 1;
   if (b === null) return -1;
-  const cmp = typeof a === "number" ? a - (b as number) : a.localeCompare(b as string);
+  const cmp =
+    typeof a === "number"
+      ? a - (b as number)
+      : a.localeCompare(b as string);
   return dir === "asc" ? cmp : -cmp;
 }
 
@@ -76,23 +88,28 @@ export function PeopleTable({ people }: { people: Person[] }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Suche Name, Firma, Rolle, Tags…"
-          className="min-w-64 flex-1 rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-[#c8ff3e]"
-        />
-        <div className="flex rounded-md border border-neutral-800 bg-neutral-950 p-0.5 text-xs">
+        <div className="flex h-9 min-w-72 flex-1 items-center gap-2 rounded border border-rule bg-paper px-3">
+          <span className="t-label" aria-hidden>
+            Suche
+          </span>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Name, Firma, Rolle, Tags…"
+            className="flex-1 bg-transparent text-sm text-ink-1 outline-none placeholder:text-ink-4"
+          />
+        </div>
+        <div className="flex h-9 rounded border border-rule bg-paper p-0.5 text-xs">
           {(["all", "work", "personal", "both"] as ScopeFilter[]).map((s) => (
             <button
               key={s}
               type="button"
               onClick={() => setScopeFilter(s)}
-              className={`rounded px-3 py-1 transition-colors ${
+              className={`rounded px-3 transition-colors ${
                 scopeFilter === s
-                  ? "bg-neutral-800 text-neutral-100"
-                  : "text-neutral-400 hover:text-neutral-200"
+                  ? "bg-paper-2 text-ink-1"
+                  : "text-ink-3 hover:text-ink-1"
               }`}
             >
               {s === "all" ? "Alle" : SCOPE_LABEL[s as Scope]}
@@ -101,101 +118,92 @@ export function PeopleTable({ people }: { people: Person[] }) {
         </div>
         <Link
           href="/people/new"
-          className="rounded-md bg-[#c8ff3e] px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-[#b6eb2c]"
+          className="inline-flex h-9 items-center rounded border border-action bg-action px-4 text-sm font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)]"
         >
           + Person
         </Link>
       </div>
 
-      <div className="rounded-md border border-neutral-900">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-neutral-900 text-left text-xs uppercase tracking-wider text-neutral-500">
-              <SortHeader
-                label="Name"
-                active={sortKey === "name"}
-                dir={sortDir}
-                onClick={() => toggleSort("name")}
-              />
-              <SortHeader
-                label="Firma"
-                active={sortKey === "company"}
-                dir={sortDir}
-                onClick={() => toggleSort("company")}
-              />
-              <SortHeader
-                label="Scope"
-                active={sortKey === "scope"}
-                dir={sortDir}
-                onClick={() => toggleSort("scope")}
-              />
-              <th className="px-4 py-3 font-normal">Tags</th>
-              <SortHeader
-                label="Letzte Interaktion"
-                active={sortKey === "last_interaction_at"}
-                dir={sortDir}
-                onClick={() => toggleSort("last_interaction_at")}
-              />
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={5}
-                  className="px-4 py-12 text-center text-sm text-neutral-500"
-                >
-                  {people.length === 0
-                    ? "Noch keine Personen — leg die erste an."
-                    : "Keine Treffer für diesen Filter."}
-                </td>
-              </tr>
-            ) : (
-              sorted.map((p) => (
-                <tr
-                  key={p.id}
-                  className="border-b border-neutral-900 last:border-0 hover:bg-neutral-900/40"
-                >
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/people/${p.id}`}
-                      className="font-medium text-neutral-100 hover:text-[#c8ff3e]"
-                    >
-                      {p.name}
-                    </Link>
-                    {p.role && (
-                      <p className="text-xs text-neutral-500">{p.role}</p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-neutral-300">
-                    {p.company ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-neutral-400">
-                    {SCOPE_LABEL[p.scope]}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {(p.tags ?? []).map((t) => (
-                        <span
-                          key={t}
-                          className="rounded-full border border-neutral-800 px-2 py-0.5 text-xs text-neutral-400"
-                        >
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-neutral-400">
-                    {formatDate(p.last_interaction_at)}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      <div className="overflow-hidden rounded border border-rule bg-paper">
+        <div className="grid grid-cols-[28px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1.4fr)_120px] gap-4 border-b border-rule bg-paper-2 px-4 py-2.5">
+          <span className="t-label" />
+          <SortHeader
+            label="Name"
+            active={sortKey === "name"}
+            dir={sortDir}
+            onClick={() => toggleSort("name")}
+          />
+          <SortHeader
+            label="Firma"
+            active={sortKey === "company"}
+            dir={sortDir}
+            onClick={() => toggleSort("company")}
+          />
+          <SortHeader
+            label="Scope"
+            active={sortKey === "scope"}
+            dir={sortDir}
+            onClick={() => toggleSort("scope")}
+          />
+          <span className="t-label">Tags</span>
+          <SortHeader
+            label="Letzte Interaktion"
+            active={sortKey === "last_interaction_at"}
+            dir={sortDir}
+            onClick={() => toggleSort("last_interaction_at")}
+            align="right"
+          />
+        </div>
+
+        {sorted.length === 0 ? (
+          <div className="px-4 py-16 text-center text-sm text-ink-3">
+            {people.length === 0
+              ? "Noch keine Personen — leg die erste an."
+              : "Keine Treffer für diesen Filter."}
+          </div>
+        ) : (
+          sorted.map((p) => (
+            <Link
+              key={p.id}
+              href={`/people/${p.id}`}
+              className="grid grid-cols-[28px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1.4fr)_120px] gap-4 border-b border-rule-soft px-4 py-3 transition-colors hover:bg-paper-2 last:border-b-0"
+            >
+              <span className="avatar self-center" aria-hidden>
+                {initials(p.name)}
+              </span>
+              <span className="min-w-0 self-center">
+                <span className="block truncate font-medium text-ink-1">
+                  {p.name}
+                </span>
+                {p.role && (
+                  <span className="block truncate font-mono text-[10px] tracking-wider text-ink-4">
+                    {p.role}
+                  </span>
+                )}
+              </span>
+              <span className="self-center truncate text-sm text-ink-2">
+                {p.company ?? "—"}
+              </span>
+              <span className="self-center font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3">
+                {SCOPE_LABEL[p.scope]}
+              </span>
+              <span className="flex flex-wrap gap-1 self-center">
+                {(p.tags ?? []).slice(0, 3).map((t) => (
+                  <span key={t} className="tag">
+                    <span className="dot" />
+                    {t}
+                  </span>
+                ))}
+              </span>
+              <span className="self-center text-right font-mono text-[11px] tracking-wider text-ink-3">
+                {formatDate(p.last_interaction_at)}
+              </span>
+            </Link>
+          ))
+        )}
       </div>
 
-      <p className="text-xs text-neutral-500">
+      <p className="t-label">
         {sorted.length} von {people.length}
       </p>
     </div>
@@ -207,24 +215,24 @@ function SortHeader({
   active,
   dir,
   onClick,
+  align,
 }: {
   label: string;
   active: boolean;
   dir: SortDir;
   onClick: () => void;
+  align?: "right";
 }) {
   return (
-    <th className="px-4 py-3 font-normal">
-      <button
-        type="button"
-        onClick={onClick}
-        className={`inline-flex items-center gap-1 hover:text-neutral-200 ${
-          active ? "text-neutral-200" : ""
-        }`}
-      >
-        {label}
-        {active && <span aria-hidden>{dir === "asc" ? "↑" : "↓"}</span>}
-      </button>
-    </th>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`t-label inline-flex items-center gap-1 hover:text-ink-1 ${
+        active ? "text-ink-1" : ""
+      } ${align === "right" ? "justify-end" : ""}`}
+    >
+      {label}
+      {active && <span aria-hidden>{dir === "asc" ? "↑" : "↓"}</span>}
+    </button>
   );
 }

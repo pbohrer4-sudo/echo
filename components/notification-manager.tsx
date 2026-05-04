@@ -93,22 +93,22 @@ export function NotificationManager() {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 max-w-xs rounded-md border border-neutral-800 bg-neutral-950 p-4 shadow-lg">
-      <p className="mb-3 text-sm text-neutral-200">
+    <div className="fixed bottom-4 right-4 z-50 max-w-xs rounded border border-rule bg-paper p-4 shadow-[0_4px_14px_rgba(20,17,13,0.06)]">
+      <p className="mb-3 text-sm text-ink-1">
         Soll ECHO dich bei fälligen Erinnerungen pingen?
       </p>
       <div className="flex justify-end gap-2">
         <button
           type="button"
           onClick={handleDismiss}
-          className="rounded-md border border-neutral-800 px-3 py-1.5 text-xs text-neutral-300 hover:border-neutral-600 hover:text-neutral-100"
+          className="rounded border border-rule px-3 py-1.5 text-xs text-ink-3 transition hover:border-ink-3 hover:text-ink-1"
         >
           Später
         </button>
         <button
           type="button"
           onClick={handleAsk}
-          className="rounded-md bg-[#c8ff3e] px-3 py-1.5 text-xs font-medium text-neutral-950 hover:bg-[#b6eb2c]"
+          className="rounded border border-action bg-action px-3 py-1.5 text-xs font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)]"
         >
           Erlauben
         </button>

@@ -19,11 +19,13 @@ export default async function EditPersonPage({
   const action = updatePerson.bind(null, id);
 
   return (
-    <div className="px-6 py-10">
-      <div className="mx-auto max-w-2xl space-y-6">
-        <header className="space-y-1">
-          <h1 className="font-serif text-3xl tracking-tight">{person.name}</h1>
-          <p className="text-sm text-neutral-500">Bearbeiten</p>
+    <div className="px-8 py-10">
+      <div className="mx-auto max-w-2xl space-y-8">
+        <header className="space-y-2">
+          <p className="t-label">Bearbeiten</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-ink-1">
+            {person.name}
+          </h1>
         </header>
         <PersonForm
           initial={person}

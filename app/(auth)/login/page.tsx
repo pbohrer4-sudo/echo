@@ -10,53 +10,48 @@ export default async function LoginPage({
   const { error } = await searchParams;
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#0a0d10] px-6 text-neutral-100">
-      <div className="w-full max-w-sm space-y-8">
-        <header className="space-y-2">
-          <h1 className="font-serif text-3xl tracking-tight">ECHO</h1>
-          <p className="text-sm text-neutral-400">
+    <main className="flex min-h-screen items-center justify-center bg-paper px-6 text-ink-1">
+      <div className="w-full max-w-sm space-y-10">
+        <header className="space-y-3">
+          <p className="t-label">Personal CRM</p>
+          <h1 className="text-3xl font-semibold tracking-tight">ECHO</h1>
+          <p className="text-sm text-ink-3">
             Beziehungs-Intelligenz für deinen Tag.
           </p>
         </header>
 
-        <form action={signIn} className="space-y-4">
+        <form action={signIn} className="space-y-5">
           <label className="block space-y-2">
-            <span className="text-xs uppercase tracking-wider text-neutral-500">
-              Email
-            </span>
+            <span className="t-label">Email</span>
             <input
               type="email"
               name="email"
               required
               autoFocus
               autoComplete="email"
-              className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-[#c8ff3e]"
+              className="h-9 w-full rounded border border-rule bg-paper px-3 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20"
             />
           </label>
           <label className="block space-y-2">
-            <span className="text-xs uppercase tracking-wider text-neutral-500">
-              Passwort
-            </span>
+            <span className="t-label">Passwort</span>
             <input
               type="password"
               name="password"
               required
               autoComplete="current-password"
-              className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-[#c8ff3e]"
+              className="h-9 w-full rounded border border-rule bg-paper px-3 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20"
             />
           </label>
           <button
             type="submit"
-            className="w-full rounded-md bg-[#c8ff3e] px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-[#b6eb2c]"
+            className="h-9 w-full rounded border border-action bg-action px-4 text-sm font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)]"
           >
             Einloggen
           </button>
         </form>
 
         {error ? (
-          <p className="text-sm text-red-400">
-            Fehler: {decodeURIComponent(error)}
-          </p>
+          <p className="text-sm text-bad">Fehler: {decodeURIComponent(error)}</p>
         ) : null}
       </div>
     </main>
