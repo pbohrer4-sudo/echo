@@ -1,13 +1,13 @@
 import { signIn } from "./actions";
 
-type Search = { sent?: string; error?: string };
+type Search = { error?: string };
 
 export default async function LoginPage({
   searchParams,
 }: {
   searchParams: Promise<Search>;
 }) {
-  const { sent, error } = await searchParams;
+  const { error } = await searchParams;
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#0a0d10] px-6 text-neutral-100">
@@ -33,21 +33,30 @@ export default async function LoginPage({
               className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-[#c8ff3e]"
             />
           </label>
+          <label className="block space-y-2">
+            <span className="text-xs uppercase tracking-wider text-neutral-500">
+              Passwort
+            </span>
+            <input
+              type="password"
+              name="password"
+              required
+              autoComplete="current-password"
+              className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm outline-none focus:border-[#c8ff3e]"
+            />
+          </label>
           <button
             type="submit"
             className="w-full rounded-md bg-[#c8ff3e] px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-[#b6eb2c]"
           >
-            Magic Link senden
+            Einloggen
           </button>
         </form>
 
-        {sent ? (
-          <p className="text-sm text-[#c8ff3e]">
-            Check deine Inbox — der Link landet in wenigen Sekunden.
-          </p>
-        ) : null}
         {error ? (
-          <p className="text-sm text-red-400">Fehler: {decodeURIComponent(error)}</p>
+          <p className="text-sm text-red-400">
+            Fehler: {decodeURIComponent(error)}
+          </p>
         ) : null}
       </div>
     </main>
