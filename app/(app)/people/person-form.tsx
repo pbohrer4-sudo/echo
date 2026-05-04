@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type {
   AddressEntry,
   EmailEntry,
@@ -88,6 +88,95 @@ export function PersonForm({
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
   const [tagInput, setTagInput] = useState("");
 
+  const [name, setName] = useState<string>(initial?.name ?? "");
+  const [company, setCompany] = useState<string>(initial?.company ?? "");
+  const [role, setRole] = useState<string>(initial?.role ?? "");
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanSummary, setScanSummary] = useState<string | null>(null);
+
+  async function handleScanFile(file: File) {
+    setScanning(true);
+    setScanError(null);
+    setScanSummary(null);
+    try {
+      const fd = new FormData();
+      fd.append("image", file);
+      const res = await fetch("/api/scan-business-card", {
+        method: "POST",
+        body: fd,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `Scan ${res.status}`);
+      }
+      const { data } = (await res.json()) as {
+        data: {
+          name: string | null;
+          company: string | null;
+          role: string | null;
+          phones: { label: string; value: string }[];
+          emails: { label: string; value: string }[];
+          addresses: AddressEntry[];
+          socials: SocialEntry[];
+        };
+      };
+
+      const summary: string[] = [];
+      if (data.name) {
+        setName(data.name);
+        summary.push("Name");
+      }
+      if (data.company) {
+        setCompany(data.company);
+        summary.push("Firma");
+      }
+      if (data.role) {
+        setRole(data.role);
+        summary.push("Rolle");
+      }
+      if (data.phones.length) {
+        setPhones((prev) => mergeUnique(prev, data.phones, (a, b) => a.value === b.value));
+        summary.push(`${data.phones.length} Telefon`);
+      }
+      if (data.emails.length) {
+        setEmails((prev) => mergeUnique(prev, data.emails, (a, b) => a.value === b.value));
+        summary.push(`${data.emails.length} Email`);
+      }
+      if (data.addresses.length) {
+        setAddresses((prev) => [...prev, ...data.addresses]);
+        summary.push(`${data.addresses.length} Adresse`);
+      }
+      if (data.socials.length) {
+        setSocials((prev) => [
+          ...prev,
+          ...data.socials.filter(
+            (s) =>
+              !prev.some(
+                (p) => p.handle_or_url === s.handle_or_url,
+              ),
+          ),
+        ]);
+        summary.push(`${data.socials.length} Social`);
+      }
+
+      if (summary.length === 0) {
+        setScanError(
+          "Konnte keine Daten erkennen. Versuch ein klareres Foto.",
+        );
+      } else {
+        setScanSummary(`Übernommen: ${summary.join(", ")}`);
+      }
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : "Scan fehlgeschlagen");
+    } finally {
+      setScanning(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   function commitTagInput() {
     const value = tagInput.trim();
     if (!value) return;
@@ -121,12 +210,51 @@ export function PersonForm({
       <input type="hidden" name="avatar_url" value={avatarUrl} />
       <input type="hidden" name="notes_field" value={notes} />
 
+      <div className="rounded border border-rule bg-paper-2 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="t-label">Visitenkarte scannen</p>
+            <p className="text-xs text-ink-3">
+              Foto aufnehmen oder hochladen — Felder werden vorausgefüllt.
+            </p>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleScanFile(file);
+            }}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={scanning}
+            className="rounded border border-action bg-action px-3 py-1.5 text-xs font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)] disabled:opacity-50"
+          >
+            {scanning ? "Erkenne…" : "Foto wählen"}
+          </button>
+        </div>
+        {scanSummary && (
+          <p className="mt-2 text-xs text-ink-2" style={{ color: "var(--action)" }}>
+            {scanSummary}
+          </p>
+        )}
+        {scanError && (
+          <p className="mt-2 text-xs text-bad">{scanError}</p>
+        )}
+      </div>
+
       <Section label="Identität">
         <Field label="Name" required>
           <input
             name="name"
             required
-            defaultValue={initial?.name ?? ""}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             className={inputClass}
           />
         </Field>
@@ -135,14 +263,16 @@ export function PersonForm({
           <Field label="Firma">
             <input
               name="company"
-              defaultValue={initial?.company ?? ""}
+              value={company}
+              onChange={(e) => setCompany(e.target.value)}
               className={inputClass}
             />
           </Field>
           <Field label="Rolle">
             <input
               name="role"
-              defaultValue={initial?.role ?? ""}
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
               className={inputClass}
             />
           </Field>
@@ -707,4 +837,16 @@ function RemoveButton({ onClick }: { onClick: () => void }) {
       ×
     </button>
   );
+}
+
+function mergeUnique<T>(
+  existing: T[],
+  incoming: T[],
+  same: (a: T, b: T) => boolean,
+): T[] {
+  const merged = [...existing];
+  for (const item of incoming) {
+    if (!merged.some((m) => same(m, item))) merged.push(item);
+  }
+  return merged;
 }
