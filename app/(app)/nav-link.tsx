@@ -17,10 +17,10 @@ export function NavLink({
   return (
     <Link
       href={href}
-      className={`rounded px-3 py-1.5 text-sm transition-colors ${
+      className={`block rounded px-3 py-2 text-sm transition-colors ${
         active
           ? "bg-paper-2 text-ink-1"
-          : "text-ink-3 hover:text-ink-1"
+          : "text-ink-3 hover:bg-paper-2 hover:text-ink-1"
       }`}
     >
       {children}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ToolCall } from "@/lib/tools";
+import { stripMarkdown } from "@/lib/text";
 import { ExtractionConfirmation } from "./extraction-confirmation";
 
 type OrbState =
@@ -75,21 +76,33 @@ export function VoiceOrb() {
   const [interim, setInterim] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pendingToolCalls, setPendingToolCalls] = useState<ToolCall[]>([]);
+  const [suggestedReplies, setSuggestedReplies] = useState<string[]>([]);
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const recognitionRef = useRef<RecognitionInstance | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const finalRef = useRef("");
+  const silenceTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     return () => {
       try {
         recognitionRef.current?.abort();
       } catch {}
+      if (silenceTimerRef.current) window.clearTimeout(silenceTimerRef.current);
       audioRef.current?.pause();
     };
   }, []);
+
+  function resetSilenceTimer() {
+    if (silenceTimerRef.current) window.clearTimeout(silenceTimerRef.current);
+    silenceTimerRef.current = window.setTimeout(() => {
+      try {
+        recognitionRef.current?.stop();
+      } catch {}
+    }, 2000);
+  }
 
   const playSpeech = useCallback(
     async (text: string, onEnded: () => void) => {
@@ -124,62 +137,86 @@ export function VoiceOrb() {
     [],
   );
 
+  const submitText = useCallback(
+    async (text: string) => {
+      if (!text) {
+        setOrbState("idle");
+        return;
+      }
+
+      setSuggestedReplies([]);
+
+      const userMessage: ChatMessage = { role: "user", content: text };
+      const next: ChatMessage[] = [...messages, userMessage].slice(
+        -MAX_HISTORY,
+      );
+      setMessages(next);
+      setOrbState("thinking");
+
+      try {
+        const extractRes = await fetch("/api/extract", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transcript: text, history: messages }),
+        });
+        if (!extractRes.ok) {
+          const data = await extractRes.json().catch(() => ({}));
+          throw new Error(data.error ?? `Extract ${extractRes.status}`);
+        }
+        const { text: rawAssistantText, toolCalls } =
+          (await extractRes.json()) as {
+            text: string;
+            toolCalls: ToolCall[];
+          };
+        const assistantText = stripMarkdown(rawAssistantText ?? "");
+
+        if (assistantText) {
+          const assistantMessage: ChatMessage = {
+            role: "assistant",
+            content: assistantText,
+          };
+          setMessages((prev) =>
+            [...prev, assistantMessage].slice(-MAX_HISTORY),
+          );
+        }
+
+        const writeCalls = (toolCalls ?? []).filter(
+          (c) => c.name !== "suggest_replies",
+        );
+        const hasExtractions = writeCalls.length > 0;
+        if (hasExtractions) setPendingToolCalls(writeCalls);
+
+        const replyChips = (toolCalls ?? []).find(
+          (c) => c.name === "suggest_replies",
+        );
+        if (replyChips && !hasExtractions) {
+          const opts = (replyChips.input as { replies?: string[] }).replies;
+          setSuggestedReplies(Array.isArray(opts) ? opts.slice(0, 5) : []);
+        }
+
+        if (assistantText) {
+          await playSpeech(assistantText, () => {
+            setOrbState(hasExtractions ? "confirming" : "idle");
+          });
+        } else {
+          setOrbState(hasExtractions ? "confirming" : "idle");
+        }
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Unbekannter Fehler";
+        setError(message);
+        setOrbState("error");
+      }
+    },
+    [messages, playSpeech],
+  );
+
   const processFinal = useCallback(async () => {
     const text = finalRef.current.trim();
     finalRef.current = "";
     setInterim("");
-
-    if (!text) {
-      setOrbState("idle");
-      return;
-    }
-
-    const userMessage: ChatMessage = { role: "user", content: text };
-    const next: ChatMessage[] = [...messages, userMessage].slice(-MAX_HISTORY);
-    setMessages(next);
-    setOrbState("thinking");
-
-    try {
-      const extractRes = await fetch("/api/extract", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript: text, history: messages }),
-      });
-      if (!extractRes.ok) {
-        const data = await extractRes.json().catch(() => ({}));
-        throw new Error(data.error ?? `Extract ${extractRes.status}`);
-      }
-      const { text: assistantText, toolCalls } = (await extractRes.json()) as {
-        text: string;
-        toolCalls: ToolCall[];
-      };
-
-      if (assistantText) {
-        const assistantMessage: ChatMessage = {
-          role: "assistant",
-          content: assistantText,
-        };
-        setMessages((prev) =>
-          [...prev, assistantMessage].slice(-MAX_HISTORY),
-        );
-      }
-
-      const hasExtractions = toolCalls && toolCalls.length > 0;
-      if (hasExtractions) setPendingToolCalls(toolCalls);
-
-      if (assistantText) {
-        await playSpeech(assistantText, () => {
-          setOrbState(hasExtractions ? "confirming" : "idle");
-        });
-      } else {
-        setOrbState(hasExtractions ? "confirming" : "idle");
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unbekannter Fehler";
-      setError(message);
-      setOrbState("error");
-    }
-  }, [messages, playSpeech]);
+    await submitText(text);
+  }, [submitText]);
 
   const startListening = useCallback(() => {
     setError(null);
@@ -210,6 +247,7 @@ export function VoiceOrb() {
         }
         if (finalText) finalRef.current += finalText;
         setInterim(interimText);
+        resetSilenceTimer();
       };
       recognition.onerror = (event) => {
         if (event.error === "no-speech" || event.error === "aborted") return;
@@ -225,12 +263,17 @@ export function VoiceOrb() {
 
     recognition.onend = () => {
       recognition.onend = null;
+      if (silenceTimerRef.current) {
+        window.clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
       processFinal();
     };
 
     try {
       recognition.start();
       setOrbState("listening");
+      resetSilenceTimer();
     } catch (err) {
       console.error(err);
       setError("Mikrofon nicht verfügbar — Berechtigung erteilt?");
@@ -323,6 +366,28 @@ export function VoiceOrb() {
             {lastAssistant.content}
           </p>
         )}
+
+        {suggestedReplies.length > 0 &&
+          orbState !== "confirming" &&
+          orbState !== "thinking" && (
+            <div className="flex flex-wrap gap-2">
+              {suggestedReplies.map((reply) => (
+                <button
+                  key={reply}
+                  type="button"
+                  onClick={() => {
+                    try {
+                      recognitionRef.current?.stop();
+                    } catch {}
+                    void submitText(reply);
+                  }}
+                  className="rounded border border-rule bg-paper px-3 py-1.5 text-sm text-ink-1 transition hover:border-action hover:bg-action-soft"
+                >
+                  {reply}
+                </button>
+              ))}
+            </div>
+          )}
 
         {orbState === "confirming" && pendingToolCalls.length > 0 && (
           <ExtractionConfirmation

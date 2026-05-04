@@ -20,29 +20,30 @@ export default async function AppLayout({
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between gap-6 border-b border-rule bg-paper px-8 py-4">
-        <div className="flex items-center gap-8">
+    <div className="flex min-h-screen">
+      <aside className="flex w-56 shrink-0 flex-col justify-between border-r border-rule bg-paper px-5 py-6">
+        <div className="space-y-8">
           <Link
             href="/"
-            className="text-lg font-semibold tracking-tight text-ink-1"
+            className="block text-lg font-semibold tracking-tight text-ink-1"
           >
             ECHO
           </Link>
-          <nav className="flex items-center gap-1 text-sm">
+          <nav className="flex flex-col gap-1 text-sm">
             <NavLink href="/">Voice</NavLink>
+            <NavLink href="/debrief">Debrief</NavLink>
             <NavLink href="/people">Personen</NavLink>
             <NavLink href="/inbox">Inbox</NavLink>
           </nav>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-3">
+        <div className="space-y-3">
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-3 break-all">
             {user.email}
-          </span>
+          </p>
           <SignOutButton />
         </div>
-      </header>
-      <main className="flex-1">{children}</main>
+      </aside>
+      <main className="flex-1 overflow-x-hidden">{children}</main>
       <NotificationManager />
     </div>
   );

@@ -8,6 +8,7 @@ export const TOOL_NAMES = [
   "create_note",
   "create_reminder",
   "create_todo",
+  "suggest_replies",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -137,6 +138,23 @@ export const EXTRACTION_TOOLS: Anthropic.Tool[] = [
         },
       },
       required: ["text"],
+    },
+  },
+  {
+    name: "suggest_replies",
+    description:
+      "Schlage 2-5 kurze Antwort-Chips vor, die der Nutzer antippen kann statt zu sprechen. Nutze das, wenn du eine geschlossene Frage stellst (z.B. beruflich/privat/beides, ja/nein, oder eine Liste von Prioritäten). Pro Chip max. 3 Wörter, in der Sprache des Nutzers, ohne Punkt am Ende.",
+    input_schema: {
+      type: "object",
+      properties: {
+        replies: {
+          type: "array",
+          items: { type: "string" },
+          minItems: 2,
+          maxItems: 5,
+        },
+      },
+      required: ["replies"],
     },
   },
 ];

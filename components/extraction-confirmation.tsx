@@ -58,6 +58,10 @@ function summarize(call: ToolCall): { icon: string; label: string; detail: strin
         label: "Aufgabe",
         detail: (input.text as string) ?? "",
       };
+    case "suggest_replies":
+      // Filtered out before reaching this card; included here so the
+      // switch is exhaustive over ToolName.
+      return { icon: "reply", label: "Vorschläge", detail: "" };
   }
 }
 
