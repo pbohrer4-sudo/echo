@@ -1,8 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import type { ToolCall } from "@/lib/tools";
+import { ExtractionConfirmation } from "./extraction-confirmation";
 
-type OrbState = "idle" | "listening" | "thinking" | "speaking" | "error";
+type OrbState =
+  | "idle"
+  | "listening"
+  | "thinking"
+  | "speaking"
+  | "confirming"
+  | "error";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -47,6 +56,7 @@ const STATE_LABEL: Record<OrbState, string> = {
   listening: "Höre zu — nochmal tippen zum Beenden",
   thinking: "ECHO denkt nach…",
   speaking: "ECHO spricht — tippen zum Stoppen",
+  confirming: "Bestätigen oder verwerfen",
   error: "Fehler — tippen für Neustart",
 };
 
@@ -55,13 +65,17 @@ const STATE_RING: Record<OrbState, string> = {
   listening: "ring-2 ring-[#c8ff3e] bg-[#c8ff3e]/15 animate-pulse",
   thinking: "ring-1 ring-neutral-700 bg-neutral-900",
   speaking: "ring-2 ring-[#c8ff3e] bg-[#c8ff3e]/30 animate-pulse",
+  confirming: "ring-2 ring-[#c8ff3e]/60 bg-neutral-900",
   error: "ring-2 ring-red-600 bg-red-900/20",
 };
 
 export function VoiceOrb() {
+  const router = useRouter();
   const [orbState, setOrbState] = useState<OrbState>("idle");
   const [interim, setInterim] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [pendingToolCalls, setPendingToolCalls] = useState<ToolCall[]>([]);
+  const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const recognitionRef = useRef<RecognitionInstance | null>(null);
@@ -76,6 +90,39 @@ export function VoiceOrb() {
       audioRef.current?.pause();
     };
   }, []);
+
+  const playSpeech = useCallback(
+    async (text: string, onEnded: () => void) => {
+      const ttsRes = await fetch("/api/voice/synthesize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!ttsRes.ok) {
+        const data = await ttsRes.json().catch(() => ({}));
+        throw new Error(data.error ?? `TTS ${ttsRes.status}`);
+      }
+      const blob = await ttsRes.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      setOrbState("speaking");
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        if (audioRef.current === audio) {
+          audioRef.current = null;
+          onEnded();
+        }
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        setError("Audio-Wiedergabe fehlgeschlagen");
+        setOrbState("error");
+      };
+      await audio.play();
+    },
+    [],
+  );
 
   const processFinal = useCallback(async () => {
     const text = finalRef.current.trim();
@@ -93,71 +140,58 @@ export function VoiceOrb() {
     setOrbState("thinking");
 
     try {
-      const chatRes = await fetch("/api/chat", {
+      const extractRes = await fetch("/api/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next }),
+        body: JSON.stringify({ transcript: text, history: messages }),
       });
-      if (!chatRes.ok) {
-        const data = await chatRes.json().catch(() => ({}));
-        throw new Error(data.error ?? `Chat ${chatRes.status}`);
+      if (!extractRes.ok) {
+        const data = await extractRes.json().catch(() => ({}));
+        throw new Error(data.error ?? `Extract ${extractRes.status}`);
       }
-      const { text: assistantText } = (await chatRes.json()) as {
+      const { text: assistantText, toolCalls } = (await extractRes.json()) as {
         text: string;
+        toolCalls: ToolCall[];
       };
 
-      const assistantMessage: ChatMessage = {
-        role: "assistant",
-        content: assistantText,
-      };
-      const updated: ChatMessage[] = [...next, assistantMessage].slice(
-        -MAX_HISTORY,
-      );
-      setMessages(updated);
-
-      const ttsRes = await fetch("/api/voice/synthesize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: assistantText }),
-      });
-      if (!ttsRes.ok) {
-        const data = await ttsRes.json().catch(() => ({}));
-        throw new Error(data.error ?? `TTS ${ttsRes.status}`);
+      if (assistantText) {
+        const assistantMessage: ChatMessage = {
+          role: "assistant",
+          content: assistantText,
+        };
+        setMessages((prev) =>
+          [...prev, assistantMessage].slice(-MAX_HISTORY),
+        );
       }
-      const blob = await ttsRes.blob();
-      const url = URL.createObjectURL(blob);
 
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      setOrbState("speaking");
-      audio.onended = () => {
-        URL.revokeObjectURL(url);
-        if (audioRef.current === audio) {
-          audioRef.current = null;
-          setOrbState("idle");
-        }
-      };
-      audio.onerror = () => {
-        URL.revokeObjectURL(url);
-        setError("Audio-Wiedergabe fehlgeschlagen");
-        setOrbState("error");
-      };
-      await audio.play();
+      const hasExtractions = toolCalls && toolCalls.length > 0;
+      if (hasExtractions) setPendingToolCalls(toolCalls);
+
+      if (assistantText) {
+        await playSpeech(assistantText, () => {
+          setOrbState(hasExtractions ? "confirming" : "idle");
+        });
+      } else {
+        setOrbState(hasExtractions ? "confirming" : "idle");
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unbekannter Fehler";
       setError(message);
       setOrbState("error");
     }
-  }, [messages]);
+  }, [messages, playSpeech]);
 
   const startListening = useCallback(() => {
     setError(null);
+    setPendingToolCalls([]);
 
     if (!recognitionRef.current) {
       const Ctor =
         window.SpeechRecognition ?? window.webkitSpeechRecognition;
       if (!Ctor) {
-        setError("Dein Browser unterstützt keine Spracherkennung. Nimm Chrome oder Edge.");
+        setError(
+          "Dein Browser unterstützt keine Spracherkennung. Nimm Chrome oder Edge.",
+        );
         setOrbState("error");
         return;
       }
@@ -204,6 +238,36 @@ export function VoiceOrb() {
     }
   }, [processFinal]);
 
+  async function handleConfirm() {
+    if (!pendingToolCalls.length) return;
+    setCommitting(true);
+    try {
+      const res = await fetch("/api/extract/commit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ toolCalls: pendingToolCalls }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `Commit ${res.status}`);
+      }
+      setPendingToolCalls([]);
+      setOrbState("idle");
+      router.refresh();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Speichern fehlgeschlagen";
+      setError(message);
+      setOrbState("error");
+    } finally {
+      setCommitting(false);
+    }
+  }
+
+  function handleCancel() {
+    setPendingToolCalls([]);
+    setOrbState("idle");
+  }
+
   function handleClick() {
     if (orbState === "idle" || orbState === "error") {
       startListening();
@@ -219,7 +283,7 @@ export function VoiceOrb() {
     if (orbState === "speaking") {
       audioRef.current?.pause();
       audioRef.current = null;
-      setOrbState("idle");
+      setOrbState(pendingToolCalls.length ? "confirming" : "idle");
       return;
     }
   }
@@ -234,7 +298,7 @@ export function VoiceOrb() {
       <button
         type="button"
         onClick={handleClick}
-        disabled={orbState === "thinking"}
+        disabled={orbState === "thinking" || orbState === "confirming"}
         className={`h-48 w-48 rounded-full transition-all duration-300 disabled:cursor-not-allowed ${STATE_RING[orbState]}`}
         aria-label={STATE_LABEL[orbState]}
       >
@@ -245,9 +309,9 @@ export function VoiceOrb() {
         {STATE_LABEL[orbState]}
       </p>
 
-      <div className="min-h-24 w-full max-w-xl space-y-3 text-sm">
+      <div className="w-full max-w-xl space-y-4 text-sm">
         {orbState === "listening" && interim && (
-          <p className="text-neutral-400 italic">„{interim}…"</p>
+          <p className="italic text-neutral-400">„{interim}…"</p>
         )}
         {lastUser && (
           <p className="text-neutral-300">
@@ -261,6 +325,16 @@ export function VoiceOrb() {
             {lastAssistant.content}
           </p>
         )}
+
+        {orbState === "confirming" && pendingToolCalls.length > 0 && (
+          <ExtractionConfirmation
+            toolCalls={pendingToolCalls}
+            onConfirm={handleConfirm}
+            onCancel={handleCancel}
+            pending={committing}
+          />
+        )}
+
         {error && <p className="text-red-400">{error}</p>}
       </div>
     </div>
