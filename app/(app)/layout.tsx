@@ -51,6 +51,7 @@ export default async function AppLayout({
             <NavLink href="/rhythmus">Rhythmus</NavLink>
             <NavLink href="/pulse">Sonntags-Puls</NavLink>
             <NavLink href="/recap">Rückblick</NavLink>
+            <NavLink href="/integrations">Integrationen</NavLink>
           </nav>
         </div>
 
