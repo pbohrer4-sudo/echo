@@ -3,7 +3,15 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import type { Scope } from "@/lib/types";
+import type {
+  AddressEntry,
+  EmailEntry,
+  ImportantDate,
+  PhoneEntry,
+  RelationshipEntry,
+  Scope,
+  SocialEntry,
+} from "@/lib/types";
 
 const SCOPES: Scope[] = ["work", "personal", "both"];
 
@@ -17,6 +25,14 @@ interface PersonInput {
   birthday: string | null;
   phone: string | null;
   email: string | null;
+  phones: PhoneEntry[];
+  emails: EmailEntry[];
+  addresses: AddressEntry[];
+  socials: SocialEntry[];
+  important_dates: ImportantDate[];
+  relationships: RelationshipEntry[];
+  avatar_url: string | null;
+  notes: string | null;
 }
 
 function parseFormData(formData: FormData): PersonInput | { error: string } {
@@ -45,6 +61,23 @@ function parseFormData(formData: FormData): PersonInput | { error: string } {
     return v ? v : null;
   };
 
+  const phones = parsePhones(formData.get("phones"));
+  const emails = parseEmails(formData.get("emails"));
+  const addresses = parseAddresses(formData.get("addresses"));
+  const socials = parseSocials(formData.get("socials"));
+  const important_dates = parseDates(formData.get("important_dates"));
+  const relationships = parseRelationships(formData.get("relationships"));
+
+  // Mirror the primary phone / email / first birthday into the legacy
+  // single columns so voice-extraction code paths and Sunday-Pulse
+  // queries keep working.
+  const primaryPhone = phones[0]?.value ?? null;
+  const primaryEmail = emails[0]?.value ?? null;
+  const birthdayEntry = important_dates.find(
+    (d) => d.label.toLowerCase() === "geburtstag",
+  );
+  const birthday = birthdayEntry?.date ?? null;
+
   return {
     name,
     company: trimOrNull("company"),
@@ -52,9 +85,17 @@ function parseFormData(formData: FormData): PersonInput | { error: string } {
     scope,
     tags,
     expected_cadence_days,
-    birthday: trimOrNull("birthday"),
-    phone: trimOrNull("phone"),
-    email: trimOrNull("email"),
+    birthday,
+    phone: primaryPhone,
+    email: primaryEmail,
+    phones,
+    emails,
+    addresses,
+    socials,
+    important_dates,
+    relationships,
+    avatar_url: trimOrNull("avatar_url"),
+    notes: (formData.get("notes_field") as string)?.trim() || null,
   };
 }
 
@@ -118,4 +159,126 @@ export async function deletePerson(id: string) {
 
   revalidatePath("/people");
   redirect("/people");
+}
+
+// ---------- JSON parsing helpers ----------
+// Each helper takes the raw FormData value (string | File | null), parses
+// it as JSON, then validates each entry's shape. Anything that doesn't
+// match is silently dropped; we never throw, so a malformed array
+// won't 500 the form submit.
+
+function safeJson(raw: FormDataEntryValue | null): unknown {
+  if (typeof raw !== "string" || !raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function asString(v: unknown): string {
+  return typeof v === "string" ? v.trim() : "";
+}
+
+function parsePhones(raw: FormDataEntryValue | null): PhoneEntry[] {
+  const data = safeJson(raw);
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((e: unknown) => {
+      if (typeof e !== "object" || !e) return null;
+      const obj = e as Record<string, unknown>;
+      const value = asString(obj.value);
+      if (!value) return null;
+      return { label: asString(obj.label) || "mobile", value };
+    })
+    .filter((e): e is PhoneEntry => e !== null);
+}
+
+function parseEmails(raw: FormDataEntryValue | null): EmailEntry[] {
+  const data = safeJson(raw);
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((e: unknown) => {
+      if (typeof e !== "object" || !e) return null;
+      const obj = e as Record<string, unknown>;
+      const value = asString(obj.value);
+      if (!value) return null;
+      return { label: asString(obj.label) || "persönlich", value };
+    })
+    .filter((e): e is EmailEntry => e !== null);
+}
+
+function parseAddresses(raw: FormDataEntryValue | null): AddressEntry[] {
+  const data = safeJson(raw);
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((e: unknown) => {
+      if (typeof e !== "object" || !e) return null;
+      const obj = e as Record<string, unknown>;
+      const street = asString(obj.street);
+      const city = asString(obj.city);
+      if (!street && !city) return null;
+      return {
+        label: asString(obj.label) || "zuhause",
+        street: street || null,
+        city: city || null,
+        postal_code: asString(obj.postal_code) || null,
+        country: asString(obj.country) || null,
+      };
+    })
+    .filter((e): e is AddressEntry => e !== null);
+}
+
+function parseSocials(raw: FormDataEntryValue | null): SocialEntry[] {
+  const data = safeJson(raw);
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((e: unknown) => {
+      if (typeof e !== "object" || !e) return null;
+      const obj = e as Record<string, unknown>;
+      const handle = asString(obj.handle_or_url);
+      if (!handle) return null;
+      return {
+        platform: asString(obj.platform) || "andere",
+        handle_or_url: handle,
+      };
+    })
+    .filter((e): e is SocialEntry => e !== null);
+}
+
+function parseDates(raw: FormDataEntryValue | null): ImportantDate[] {
+  const data = safeJson(raw);
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((e: unknown) => {
+      if (typeof e !== "object" || !e) return null;
+      const obj = e as Record<string, unknown>;
+      const date = asString(obj.date);
+      if (!date) return null;
+      return {
+        label: asString(obj.label) || "andere",
+        date,
+        remind: Boolean(obj.remind),
+      };
+    })
+    .filter((e): e is ImportantDate => e !== null);
+}
+
+function parseRelationships(
+  raw: FormDataEntryValue | null,
+): RelationshipEntry[] {
+  const data = safeJson(raw);
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((e: unknown) => {
+      if (typeof e !== "object" || !e) return null;
+      const obj = e as Record<string, unknown>;
+      const id = asString(obj.related_person_id);
+      if (!id) return null;
+      return {
+        related_person_id: id,
+        label: asString(obj.label) || "andere",
+      };
+    })
+    .filter((e): e is RelationshipEntry => e !== null);
 }

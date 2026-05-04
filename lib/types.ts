@@ -30,6 +30,104 @@ export interface Profile {
   updated_at: string;
 }
 
+export const PHONE_LABELS = [
+  "mobile",
+  "iPhone",
+  "privat",
+  "arbeit",
+  "haupt",
+  "fax",
+  "andere",
+] as const;
+export type PhoneLabel = (typeof PHONE_LABELS)[number] | string;
+
+export interface PhoneEntry {
+  label: PhoneLabel;
+  value: string;
+}
+
+export const EMAIL_LABELS = [
+  "persönlich",
+  "arbeit",
+  "schule",
+  "andere",
+] as const;
+export type EmailLabel = (typeof EMAIL_LABELS)[number] | string;
+
+export interface EmailEntry {
+  label: EmailLabel;
+  value: string;
+}
+
+export const ADDRESS_LABELS = [
+  "zuhause",
+  "arbeit",
+  "andere",
+] as const;
+export type AddressLabel = (typeof ADDRESS_LABELS)[number] | string;
+
+export interface AddressEntry {
+  label: AddressLabel;
+  street: string | null;
+  city: string | null;
+  postal_code: string | null;
+  country: string | null;
+}
+
+export const SOCIAL_PLATFORMS = [
+  "LinkedIn",
+  "Instagram",
+  "Twitter",
+  "GitHub",
+  "Mastodon",
+  "Bluesky",
+  "Threads",
+  "TikTok",
+  "Website",
+  "andere",
+] as const;
+export type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number] | string;
+
+export interface SocialEntry {
+  platform: SocialPlatform;
+  handle_or_url: string;
+}
+
+export const DATE_LABELS = [
+  "Geburtstag",
+  "Hochzeitstag",
+  "Jahrestag",
+  "andere",
+] as const;
+export type DateLabel = (typeof DATE_LABELS)[number] | string;
+
+export interface ImportantDate {
+  label: DateLabel;
+  date: string; // ISO date (YYYY-MM-DD)
+  remind: boolean; // create / keep a yearly reminder?
+}
+
+export const RELATIONSHIP_LABELS = [
+  "Partner:in",
+  "Ehepartner:in",
+  "Mutter",
+  "Vater",
+  "Sohn",
+  "Tochter",
+  "Bruder",
+  "Schwester",
+  "Freund:in",
+  "Kolleg:in",
+  "Mentor:in",
+  "andere",
+] as const;
+export type RelationshipLabel = (typeof RELATIONSHIP_LABELS)[number] | string;
+
+export interface RelationshipEntry {
+  related_person_id: string;
+  label: RelationshipLabel;
+}
+
 export interface Person {
   id: string;
   user_id: string;
@@ -46,6 +144,15 @@ export interface Person {
   phone: string | null;
   email: string | null;
   notes_summary: string | null;
+  // iPhone-Contacts-style fields (week 4+)
+  phones: PhoneEntry[];
+  emails: EmailEntry[];
+  addresses: AddressEntry[];
+  socials: SocialEntry[];
+  important_dates: ImportantDate[];
+  relationships: RelationshipEntry[];
+  avatar_url: string | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

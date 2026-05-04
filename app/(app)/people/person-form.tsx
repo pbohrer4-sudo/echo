@@ -2,113 +2,531 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import type { Person, Scope } from "@/lib/types";
+import type {
+  AddressEntry,
+  EmailEntry,
+  ImportantDate,
+  Person,
+  PhoneEntry,
+  RelationshipEntry,
+  Scope,
+  SocialEntry,
+} from "@/lib/types";
+import {
+  ADDRESS_LABELS,
+  DATE_LABELS,
+  EMAIL_LABELS,
+  PHONE_LABELS,
+  RELATIONSHIP_LABELS,
+  SOCIAL_PLATFORMS,
+} from "@/lib/types";
+
+interface PersonOption {
+  id: string;
+  name: string;
+}
 
 type Action = (formData: FormData) => void | Promise<void>;
 
 const inputClass =
   "h-9 w-full rounded border border-rule bg-paper px-3 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20";
+const selectClass =
+  "h-9 rounded border border-rule bg-paper px-3 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20";
 
 export function PersonForm({
   initial,
   action,
   cancelHref,
   error,
+  peopleOptions,
 }: {
   initial?: Partial<Person>;
   action: Action;
   cancelHref: string;
   error?: string;
+  peopleOptions: PersonOption[];
 }) {
   const [scope, setScope] = useState<Scope>(initial?.scope ?? "both");
+  const [phones, setPhones] = useState<PhoneEntry[]>(
+    initial?.phones?.length
+      ? initial.phones
+      : initial?.phone
+        ? [{ label: "mobile", value: initial.phone }]
+        : [],
+  );
+  const [emails, setEmails] = useState<EmailEntry[]>(
+    initial?.emails?.length
+      ? initial.emails
+      : initial?.email
+        ? [{ label: "persönlich", value: initial.email }]
+        : [],
+  );
+  const [addresses, setAddresses] = useState<AddressEntry[]>(
+    initial?.addresses ?? [],
+  );
+  const [socials, setSocials] = useState<SocialEntry[]>(
+    initial?.socials ?? [],
+  );
+  const [importantDates, setImportantDates] = useState<ImportantDate[]>(
+    initial?.important_dates?.length
+      ? initial.important_dates
+      : initial?.birthday
+        ? [{ label: "Geburtstag", date: initial.birthday, remind: true }]
+        : [],
+  );
+  const [relationships, setRelationships] = useState<RelationshipEntry[]>(
+    initial?.relationships ?? [],
+  );
+  const [avatarUrl, setAvatarUrl] = useState<string>(
+    initial?.avatar_url ?? "",
+  );
+  const [notes, setNotes] = useState<string>(initial?.notes ?? "");
 
   return (
-    <form action={action} className="space-y-6">
-      <Field label="Name" required>
-        <input
-          name="name"
-          required
-          defaultValue={initial?.name ?? ""}
-          className={inputClass}
-        />
-      </Field>
+    <form action={action} className="space-y-10">
+      <input type="hidden" name="scope" value={scope} />
+      <input type="hidden" name="phones" value={JSON.stringify(phones)} />
+      <input type="hidden" name="emails" value={JSON.stringify(emails)} />
+      <input
+        type="hidden"
+        name="addresses"
+        value={JSON.stringify(addresses)}
+      />
+      <input type="hidden" name="socials" value={JSON.stringify(socials)} />
+      <input
+        type="hidden"
+        name="important_dates"
+        value={JSON.stringify(importantDates)}
+      />
+      <input
+        type="hidden"
+        name="relationships"
+        value={JSON.stringify(relationships)}
+      />
+      <input type="hidden" name="avatar_url" value={avatarUrl} />
+      <input type="hidden" name="notes_field" value={notes} />
 
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Firma">
+      <Section label="Identität">
+        <Field label="Name" required>
           <input
-            name="company"
-            defaultValue={initial?.company ?? ""}
+            name="name"
+            required
+            defaultValue={initial?.name ?? ""}
             className={inputClass}
           />
         </Field>
-        <Field label="Rolle">
-          <input
-            name="role"
-            defaultValue={initial?.role ?? ""}
-            className={inputClass}
-          />
-        </Field>
-      </div>
 
-      <Field label="Scope">
-        <input type="hidden" name="scope" value={scope} />
-        <div className="flex h-9 rounded border border-rule bg-paper p-0.5 text-xs">
-          {(["work", "personal", "both"] as Scope[]).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setScope(s)}
-              className={`flex-1 rounded transition-colors ${
-                scope === s
-                  ? "bg-paper-2 text-ink-1"
-                  : "text-ink-3 hover:text-ink-1"
-              }`}
-            >
-              {s === "work" ? "Beruflich" : s === "personal" ? "Privat" : "Beides"}
-            </button>
-          ))}
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Firma">
+            <input
+              name="company"
+              defaultValue={initial?.company ?? ""}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Rolle">
+            <input
+              name="role"
+              defaultValue={initial?.role ?? ""}
+              className={inputClass}
+            />
+          </Field>
         </div>
-      </Field>
 
-      <Field
-        label="Tags"
-        hint="Komma-getrennt, z.B. Marketing, München, Vorstand"
-      >
-        <input
-          name="tags"
-          defaultValue={(initial?.tags ?? []).join(", ")}
-          className={inputClass}
+        <Field label="Scope">
+          <div className="flex h-9 rounded border border-rule bg-paper p-0.5 text-xs">
+            {(["work", "personal", "both"] as Scope[]).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setScope(s)}
+                className={`flex-1 rounded transition-colors ${
+                  scope === s
+                    ? "bg-paper-2 text-ink-1"
+                    : "text-ink-3 hover:text-ink-1"
+                }`}
+              >
+                {s === "work" ? "Beruflich" : s === "personal" ? "Privat" : "Beides"}
+              </button>
+            ))}
+          </div>
+        </Field>
+
+        <Field
+          label="Tags"
+          hint="Komma-getrennt, z.B. Marketing, München, Vorstand"
+        >
+          <input
+            name="tags"
+            defaultValue={(initial?.tags ?? []).join(", ")}
+            className={inputClass}
+          />
+        </Field>
+
+        <Field label="Profilbild URL" hint="Optional, später Upload möglich">
+          <input
+            type="url"
+            value={avatarUrl}
+            onChange={(e) => setAvatarUrl(e.target.value)}
+            placeholder="https://…"
+            className={inputClass}
+          />
+        </Field>
+      </Section>
+
+      <Section label="Telefon">
+        <RepeatableList
+          items={phones}
+          empty="Noch keine Telefonnummer."
+          onAdd={() => setPhones([...phones, { label: "mobile", value: "" }])}
+          renderItem={(p, i) => (
+            <div className="grid grid-cols-[140px_1fr_auto] gap-2">
+              <select
+                value={p.label}
+                onChange={(e) => {
+                  const next = [...phones];
+                  next[i] = { ...next[i], label: e.target.value };
+                  setPhones(next);
+                }}
+                className={selectClass}
+              >
+                {PHONE_LABELS.map((l) => (
+                  <option key={l} value={l}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="tel"
+                value={p.value}
+                onChange={(e) => {
+                  const next = [...phones];
+                  next[i] = { ...next[i], value: e.target.value };
+                  setPhones(next);
+                }}
+                placeholder="+49…"
+                className={inputClass}
+              />
+              <RemoveButton
+                onClick={() => setPhones(phones.filter((_, j) => j !== i))}
+              />
+            </div>
+          )}
         />
-      </Field>
+      </Section>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Email">
-          <input
-            type="email"
-            name="email"
-            defaultValue={initial?.email ?? ""}
-            className={inputClass}
-          />
-        </Field>
-        <Field label="Telefon">
-          <input
-            type="tel"
-            name="phone"
-            defaultValue={initial?.phone ?? ""}
-            className={inputClass}
-          />
-        </Field>
-      </div>
+      <Section label="Email">
+        <RepeatableList
+          items={emails}
+          empty="Noch keine Email-Adresse."
+          onAdd={() =>
+            setEmails([...emails, { label: "persönlich", value: "" }])
+          }
+          renderItem={(em, i) => (
+            <div className="grid grid-cols-[140px_1fr_auto] gap-2">
+              <select
+                value={em.label}
+                onChange={(e) => {
+                  const next = [...emails];
+                  next[i] = { ...next[i], label: e.target.value };
+                  setEmails(next);
+                }}
+                className={selectClass}
+              >
+                {EMAIL_LABELS.map((l) => (
+                  <option key={l} value={l}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="email"
+                value={em.value}
+                onChange={(e) => {
+                  const next = [...emails];
+                  next[i] = { ...next[i], value: e.target.value };
+                  setEmails(next);
+                }}
+                placeholder="name@example.com"
+                className={inputClass}
+              />
+              <RemoveButton
+                onClick={() => setEmails(emails.filter((_, j) => j !== i))}
+              />
+            </div>
+          )}
+        />
+      </Section>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Geburtstag">
-          <input
-            type="date"
-            name="birthday"
-            defaultValue={initial?.birthday ?? ""}
-            className={inputClass}
-          />
-        </Field>
+      <Section label="Adresse">
+        <RepeatableList
+          items={addresses}
+          empty="Noch keine Adresse."
+          onAdd={() =>
+            setAddresses([
+              ...addresses,
+              {
+                label: "zuhause",
+                street: "",
+                city: "",
+                postal_code: "",
+                country: "",
+              },
+            ])
+          }
+          renderItem={(a, i) => (
+            <div className="space-y-2 rounded border border-rule-soft bg-paper-2 p-3">
+              <div className="grid grid-cols-[140px_1fr_auto] gap-2">
+                <select
+                  value={a.label}
+                  onChange={(e) => {
+                    const next = [...addresses];
+                    next[i] = { ...next[i], label: e.target.value };
+                    setAddresses(next);
+                  }}
+                  className={selectClass}
+                >
+                  {ADDRESS_LABELS.map((l) => (
+                    <option key={l} value={l}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+                <span />
+                <RemoveButton
+                  onClick={() =>
+                    setAddresses(addresses.filter((_, j) => j !== i))
+                  }
+                />
+              </div>
+              <input
+                value={a.street ?? ""}
+                onChange={(e) => {
+                  const next = [...addresses];
+                  next[i] = { ...next[i], street: e.target.value };
+                  setAddresses(next);
+                }}
+                placeholder="Straße + Hausnummer"
+                className={inputClass}
+              />
+              <div className="grid grid-cols-[120px_1fr] gap-2">
+                <input
+                  value={a.postal_code ?? ""}
+                  onChange={(e) => {
+                    const next = [...addresses];
+                    next[i] = { ...next[i], postal_code: e.target.value };
+                    setAddresses(next);
+                  }}
+                  placeholder="PLZ"
+                  className={inputClass}
+                />
+                <input
+                  value={a.city ?? ""}
+                  onChange={(e) => {
+                    const next = [...addresses];
+                    next[i] = { ...next[i], city: e.target.value };
+                    setAddresses(next);
+                  }}
+                  placeholder="Stadt"
+                  className={inputClass}
+                />
+              </div>
+              <input
+                value={a.country ?? ""}
+                onChange={(e) => {
+                  const next = [...addresses];
+                  next[i] = { ...next[i], country: e.target.value };
+                  setAddresses(next);
+                }}
+                placeholder="Land"
+                className={inputClass}
+              />
+            </div>
+          )}
+        />
+      </Section>
+
+      <Section label="Social">
+        <RepeatableList
+          items={socials}
+          empty="Noch keine Social Profiles."
+          onAdd={() =>
+            setSocials([
+              ...socials,
+              { platform: "LinkedIn", handle_or_url: "" },
+            ])
+          }
+          renderItem={(s, i) => (
+            <div className="grid grid-cols-[140px_1fr_auto] gap-2">
+              <select
+                value={s.platform}
+                onChange={(e) => {
+                  const next = [...socials];
+                  next[i] = { ...next[i], platform: e.target.value };
+                  setSocials(next);
+                }}
+                className={selectClass}
+              >
+                {SOCIAL_PLATFORMS.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={s.handle_or_url}
+                onChange={(e) => {
+                  const next = [...socials];
+                  next[i] = { ...next[i], handle_or_url: e.target.value };
+                  setSocials(next);
+                }}
+                placeholder="@handle oder https://…"
+                className={inputClass}
+              />
+              <RemoveButton
+                onClick={() => setSocials(socials.filter((_, j) => j !== i))}
+              />
+            </div>
+          )}
+        />
+      </Section>
+
+      <Section label="Wichtige Daten" hint="Geburtstag etc. — als ICS exportierbar, optional als jährliche Erinnerung">
+        <RepeatableList
+          items={importantDates}
+          empty="Noch keine Daten hinterlegt."
+          onAdd={() =>
+            setImportantDates([
+              ...importantDates,
+              { label: "Geburtstag", date: "", remind: true },
+            ])
+          }
+          renderItem={(d, i) => (
+            <div className="grid grid-cols-[140px_1fr_auto_auto] items-center gap-2">
+              <select
+                value={d.label}
+                onChange={(e) => {
+                  const next = [...importantDates];
+                  next[i] = { ...next[i], label: e.target.value };
+                  setImportantDates(next);
+                }}
+                className={selectClass}
+              >
+                {DATE_LABELS.map((l) => (
+                  <option key={l} value={l}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="date"
+                value={d.date}
+                onChange={(e) => {
+                  const next = [...importantDates];
+                  next[i] = { ...next[i], date: e.target.value };
+                  setImportantDates(next);
+                }}
+                className={inputClass}
+              />
+              <label className="flex items-center gap-1.5 px-2 text-xs text-ink-3">
+                <input
+                  type="checkbox"
+                  checked={d.remind}
+                  onChange={(e) => {
+                    const next = [...importantDates];
+                    next[i] = { ...next[i], remind: e.target.checked };
+                    setImportantDates(next);
+                  }}
+                  className="accent-[oklch(32%_0.04_250)]"
+                />
+                Erinnern
+              </label>
+              <RemoveButton
+                onClick={() =>
+                  setImportantDates(importantDates.filter((_, j) => j !== i))
+                }
+              />
+            </div>
+          )}
+        />
+      </Section>
+
+      <Section
+        label="Beziehungen"
+        hint="Verknüpfung zu anderen Personen im CRM"
+      >
+        <RepeatableList
+          items={relationships}
+          empty={
+            peopleOptions.length === 0
+              ? "Lege zuerst andere Personen an."
+              : "Noch keine Beziehungen."
+          }
+          onAdd={() =>
+            setRelationships([
+              ...relationships,
+              {
+                related_person_id: peopleOptions[0]?.id ?? "",
+                label: "Partner:in",
+              },
+            ])
+          }
+          addDisabled={peopleOptions.length === 0}
+          renderItem={(r, i) => (
+            <div className="grid grid-cols-[160px_1fr_auto] gap-2">
+              <select
+                value={r.label}
+                onChange={(e) => {
+                  const next = [...relationships];
+                  next[i] = { ...next[i], label: e.target.value };
+                  setRelationships(next);
+                }}
+                className={selectClass}
+              >
+                {RELATIONSHIP_LABELS.map((l) => (
+                  <option key={l} value={l}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={r.related_person_id}
+                onChange={(e) => {
+                  const next = [...relationships];
+                  next[i] = { ...next[i], related_person_id: e.target.value };
+                  setRelationships(next);
+                }}
+                className={selectClass}
+              >
+                {peopleOptions
+                  .filter((p) => p.id !== initial?.id)
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+              </select>
+              <RemoveButton
+                onClick={() =>
+                  setRelationships(relationships.filter((_, j) => j !== i))
+                }
+              />
+            </div>
+          )}
+        />
+      </Section>
+
+      <Section label="Notizen">
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          rows={5}
+          placeholder="Freier Text — Hintergrund, Erinnerungswertes, was dir einfällt"
+          className="w-full rounded border border-rule bg-paper px-3 py-2 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20"
+        />
+      </Section>
+
+      <Section label="Rhythmus">
         <Field
           label="Erwartete Cadence"
           hint="Tage zwischen üblichen Kontakten"
@@ -121,7 +539,7 @@ export function PersonForm({
             className={inputClass}
           />
         </Field>
-      </div>
+      </Section>
 
       {error && <p className="text-sm text-bad">Fehler: {error}</p>}
 
@@ -140,6 +558,27 @@ export function PersonForm({
         </button>
       </div>
     </form>
+  );
+}
+
+function Section({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-4">
+      <div className="section-head">
+        <span className="t-label">{label}</span>
+        <span className="rule" />
+      </div>
+      {hint && <p className="text-xs text-ink-4">{hint}</p>}
+      <div className="space-y-3">{children}</div>
+    </section>
   );
 }
 
@@ -163,5 +602,52 @@ function Field({
       {children}
       {hint && <span className="block text-xs text-ink-4">{hint}</span>}
     </label>
+  );
+}
+
+function RepeatableList<T>({
+  items,
+  empty,
+  renderItem,
+  onAdd,
+  addDisabled,
+}: {
+  items: T[];
+  empty: string;
+  renderItem: (item: T, index: number) => React.ReactNode;
+  onAdd: () => void;
+  addDisabled?: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      {items.length === 0 ? (
+        <p className="text-xs italic text-ink-4">{empty}</p>
+      ) : (
+        items.map((item, i) => (
+          <div key={i}>{renderItem(item, i)}</div>
+        ))
+      )}
+      <button
+        type="button"
+        onClick={onAdd}
+        disabled={addDisabled}
+        className="rounded border border-rule px-3 py-1.5 text-xs text-ink-2 transition hover:border-action hover:text-action disabled:opacity-50"
+      >
+        + Hinzufügen
+      </button>
+    </div>
+  );
+}
+
+function RemoveButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Entfernen"
+      className="self-center text-base text-ink-4 transition hover:text-bad"
+    >
+      ×
+    </button>
   );
 }

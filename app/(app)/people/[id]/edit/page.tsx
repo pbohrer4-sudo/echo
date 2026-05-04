@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getPersonById } from "@/lib/people";
+import { listPeople } from "@/lib/people";
 import { updatePerson } from "../../actions";
 import { PersonForm } from "../../person-form";
 
@@ -13,8 +14,15 @@ export default async function EditPersonPage({
   const { id } = await params;
   const { error } = await searchParams;
 
-  const person = await getPersonById(id);
+  const [person, allPeople] = await Promise.all([
+    getPersonById(id),
+    listPeople(),
+  ]);
   if (!person) notFound();
+
+  const peopleOptions = allPeople
+    .filter((p) => p.id !== id)
+    .map((p) => ({ id: p.id, name: p.name }));
 
   const action = updatePerson.bind(null, id);
 
@@ -31,6 +39,7 @@ export default async function EditPersonPage({
           initial={person}
           action={action}
           cancelHref={`/people/${id}`}
+          peopleOptions={peopleOptions}
           error={error ? decodeURIComponent(error) : undefined}
         />
       </div>

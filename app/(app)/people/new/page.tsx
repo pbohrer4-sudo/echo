@@ -1,3 +1,4 @@
+import { listPeople } from "@/lib/people";
 import { createPerson } from "../actions";
 import { PersonForm } from "../person-form";
 
@@ -7,6 +8,8 @@ export default async function NewPersonPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
+  const people = await listPeople();
+  const peopleOptions = people.map((p) => ({ id: p.id, name: p.name }));
 
   return (
     <div className="px-8 py-10">
@@ -23,6 +26,7 @@ export default async function NewPersonPage({
         <PersonForm
           action={createPerson}
           cancelHref="/people"
+          peopleOptions={peopleOptions}
           error={error ? decodeURIComponent(error) : undefined}
         />
       </div>
