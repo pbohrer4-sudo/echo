@@ -7,11 +7,20 @@ import { resolveOrCreateOrganization } from "@/lib/organizations";
 import type {
   AddressEntry,
   EmailEntry,
+  GeographyEntry,
   ImportantDate,
   PhoneEntry,
+  PriorityBucket,
+  PriorityLetter,
+  RelationshipDepth,
   RelationshipEntry,
   Scope,
   SocialEntry,
+} from "@/lib/types";
+import {
+  PRIORITY_BUCKETS,
+  PRIORITY_LETTERS,
+  RELATIONSHIP_DEPTHS,
 } from "@/lib/types";
 
 const SCOPES: Scope[] = ["work", "personal", "both"];
@@ -45,6 +54,18 @@ interface PersonInput {
   avatar_url: string | null;
   notes: string | null;
   strength_score: number | null;
+  // Stakeholder model
+  stakeholder_types: string[];
+  stakeholder_sub_types: Record<string, string[]>;
+  geographies: GeographyEntry[];
+  industry: string | null;
+  job_function: string | null;
+  cta: string | null;
+  cta_expires_at: string | null;
+  priority: PriorityLetter | null;
+  priority_bucket: PriorityBucket | null;
+  interests: string[];
+  depth_override: RelationshipDepth | null;
 }
 
 function parseFormData(formData: FormData): PersonInput | { error: string } {
@@ -87,6 +108,37 @@ function parseFormData(formData: FormData): PersonInput | { error: string } {
   const important_dates = parseDates(formData.get("important_dates"));
   const relationships = parseRelationships(formData.get("relationships"));
 
+  const stakeholder_types = parseStringArray(formData.get("stakeholder_types"));
+  const stakeholder_sub_types = parseSubTypes(
+    formData.get("stakeholder_sub_types"),
+  );
+  const geographies = parseGeographies(formData.get("geographies"));
+  const interests = parseStringArray(formData.get("interests"));
+
+  const priorityRaw = String(formData.get("priority") ?? "");
+  const priority = (PRIORITY_LETTERS as readonly string[]).includes(priorityRaw)
+    ? (priorityRaw as PriorityLetter)
+    : null;
+
+  const bucketRaw = String(formData.get("priority_bucket") ?? "");
+  const priority_bucket = (PRIORITY_BUCKETS as readonly string[]).includes(
+    bucketRaw,
+  )
+    ? (bucketRaw as PriorityBucket)
+    : null;
+
+  const depthRaw = String(formData.get("depth_override") ?? "");
+  const depth_override = (RELATIONSHIP_DEPTHS as readonly string[]).includes(
+    depthRaw,
+  )
+    ? (depthRaw as RelationshipDepth)
+    : null;
+
+  const ctaExpiresRaw = String(formData.get("cta_expires_at") ?? "").trim();
+  const cta_expires_at = ctaExpiresRaw
+    ? new Date(ctaExpiresRaw).toISOString()
+    : null;
+
   // Mirror the primary phone / email / first birthday into the legacy
   // single columns so voice-extraction code paths and Sunday-Pulse
   // queries keep working.
@@ -116,7 +168,81 @@ function parseFormData(formData: FormData): PersonInput | { error: string } {
     avatar_url: trimOrNull("avatar_url"),
     notes: (formData.get("notes_field") as string)?.trim() || null,
     strength_score,
+    stakeholder_types,
+    stakeholder_sub_types,
+    geographies,
+    industry: trimOrNull("industry"),
+    job_function: trimOrNull("job_function"),
+    cta: trimOrNull("cta"),
+    cta_expires_at,
+    priority,
+    priority_bucket,
+    interests,
+    depth_override,
   };
+}
+
+// Append-mode helper for parsing JSON-encoded arrays in hidden form
+// fields. Defensive against malformed input — returns [] on any
+// parse error.
+function safeParseArray(raw: FormDataEntryValue | null): unknown[] {
+  if (typeof raw !== "string" || !raw) return [];
+  try {
+    const data = JSON.parse(raw);
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseStringArray(raw: FormDataEntryValue | null): string[] {
+  return safeParseArray(raw)
+    .filter((v): v is string => typeof v === "string")
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0);
+}
+
+function parseSubTypes(
+  raw: FormDataEntryValue | null,
+): Record<string, string[]> {
+  if (typeof raw !== "string" || !raw) return {};
+  try {
+    const data = JSON.parse(raw);
+    if (typeof data !== "object" || data === null) return {};
+    const result: Record<string, string[]> = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (Array.isArray(value)) {
+        result[key] = value
+          .filter((v): v is string => typeof v === "string")
+          .map((v) => v.trim())
+          .filter((v) => v.length > 0);
+      }
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+function parseGeographies(raw: FormDataEntryValue | null): GeographyEntry[] {
+  const rows = safeParseArray(raw);
+  const result: GeographyEntry[] = [];
+  for (const e of rows) {
+    if (!e || typeof e !== "object") continue;
+    const obj = e as Record<string, unknown>;
+    const place = typeof obj.place === "string" ? obj.place.trim() : "";
+    if (!place) continue;
+    result.push({
+      kind:
+        typeof obj.kind === "string" && obj.kind.trim()
+          ? obj.kind.trim()
+          : "Wohnort",
+      place,
+      since: typeof obj.since === "string" && obj.since ? obj.since : null,
+      until: typeof obj.until === "string" && obj.until ? obj.until : null,
+    });
+  }
+  return result;
 }
 
 export async function createPerson(formData: FormData) {
@@ -136,9 +262,20 @@ export async function createPerson(formData: FormData) {
     user.id,
   );
 
+  // priority_set_at gets stamped only when the bucket is set on
+  // creation — it anchors the decay clock.
+  const priority_set_at = parsed.priority_bucket
+    ? new Date().toISOString()
+    : null;
+
   const { data, error } = await supabase
     .from("people")
-    .insert({ ...parsed, organization_id, user_id: user.id })
+    .insert({
+      ...parsed,
+      organization_id,
+      user_id: user.id,
+      priority_set_at,
+    })
     .select("id")
     .single();
 
@@ -169,9 +306,26 @@ export async function updatePerson(id: string, formData: FormData) {
     user.id,
   );
 
+  // Re-stamp priority_set_at only when the bucket actually changed.
+  // Reading the existing row is one extra query but keeps the decay
+  // clock honest — without this, every save would reset the bucket
+  // to "this-week".
+  const { data: existing } = await supabase
+    .from("people")
+    .select("priority_bucket, priority_set_at")
+    .eq("id", id)
+    .maybeSingle();
+
+  let priority_set_at = existing?.priority_set_at ?? null;
+  if (parsed.priority_bucket !== existing?.priority_bucket) {
+    priority_set_at = parsed.priority_bucket
+      ? new Date().toISOString()
+      : null;
+  }
+
   const { error } = await supabase
     .from("people")
-    .update({ ...parsed, organization_id })
+    .update({ ...parsed, organization_id, priority_set_at })
     .eq("id", id);
 
   if (error) {

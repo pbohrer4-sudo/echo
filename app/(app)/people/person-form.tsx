@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import type {
   AddressEntry,
   EmailEntry,
+  GeographyEntry,
   ImportantDate,
   Person,
   PhoneEntry,
@@ -14,13 +15,22 @@ import type {
 } from "@/lib/types";
 import {
   ADDRESS_LABELS,
+  CTA_OPTIONS,
   DATE_LABELS,
   EMAIL_LABELS,
+  GEO_KINDS,
   PHONE_LABELS,
+  PRIORITY_BUCKETS,
+  PRIORITY_LETTERS,
+  RELATIONSHIP_DEPTHS,
   RELATIONSHIP_LABELS,
   REMIND_LEAD_OPTIONS,
   SOCIAL_PLATFORMS,
 } from "@/lib/types";
+import {
+  STAKEHOLDER_TYPES_E1,
+  STAKEHOLDER_SUB_TYPES_E2,
+} from "@/lib/stakeholder-taxonomy";
 import { StrengthMeterInput } from "@/components/strength-meter";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 
@@ -99,6 +109,65 @@ export function PersonForm({
   const [strength, setStrength] = useState<number>(
     initial?.strength_score ?? 0,
   );
+
+  // Phase 1+2 stakeholder model state
+  const [stakeholderTypes, setStakeholderTypes] = useState<string[]>(
+    initial?.stakeholder_types ?? [],
+  );
+  const [stakeholderSubTypes, setStakeholderSubTypes] = useState<
+    Record<string, string[]>
+  >(initial?.stakeholder_sub_types ?? {});
+  const [geographies, setGeographies] = useState<GeographyEntry[]>(
+    initial?.geographies ?? [],
+  );
+  const [industry, setIndustry] = useState<string>(initial?.industry ?? "");
+  const [jobFunction, setJobFunction] = useState<string>(
+    initial?.job_function ?? "",
+  );
+  const [cta, setCta] = useState<string>(initial?.cta ?? "");
+  const [ctaExpiresAt, setCtaExpiresAt] = useState<string>(
+    initial?.cta_expires_at
+      ? initial.cta_expires_at.slice(0, 10)
+      : "",
+  );
+  const [priority, setPriority] = useState<string>(initial?.priority ?? "");
+  const [priorityBucket, setPriorityBucket] = useState<string>(
+    initial?.priority_bucket ?? "",
+  );
+  const [interests, setInterests] = useState<string[]>(
+    initial?.interests ?? [],
+  );
+  const [interestInput, setInterestInput] = useState("");
+  const [depthOverride, setDepthOverride] = useState<string>(
+    initial?.depth_override ?? "",
+  );
+
+  function commitInterest() {
+    const v = interestInput.trim();
+    if (!v) return;
+    if (!interests.includes(v)) setInterests([...interests, v]);
+    setInterestInput("");
+  }
+
+  function toggleStakeholderType(t: string) {
+    if (stakeholderTypes.includes(t)) {
+      setStakeholderTypes(stakeholderTypes.filter((x) => x !== t));
+      // Drop sub-types for the removed E1
+      const { [t]: _omit, ...rest } = stakeholderSubTypes;
+      void _omit;
+      setStakeholderSubTypes(rest);
+    } else {
+      setStakeholderTypes([...stakeholderTypes, t]);
+    }
+  }
+
+  function toggleSubType(e1: string, sub: string) {
+    const current = stakeholderSubTypes[e1] ?? [];
+    const next = current.includes(sub)
+      ? current.filter((x) => x !== sub)
+      : [...current, sub];
+    setStakeholderSubTypes({ ...stakeholderSubTypes, [e1]: next });
+  }
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -218,6 +287,33 @@ export function PersonForm({
       <input type="hidden" name="avatar_url" value={avatarUrl} />
       <input type="hidden" name="notes_field" value={notes} />
       <input type="hidden" name="strength_score" value={String(strength)} />
+      <input
+        type="hidden"
+        name="stakeholder_types"
+        value={JSON.stringify(stakeholderTypes)}
+      />
+      <input
+        type="hidden"
+        name="stakeholder_sub_types"
+        value={JSON.stringify(stakeholderSubTypes)}
+      />
+      <input
+        type="hidden"
+        name="geographies"
+        value={JSON.stringify(geographies)}
+      />
+      <input type="hidden" name="industry" value={industry} />
+      <input type="hidden" name="job_function" value={jobFunction} />
+      <input type="hidden" name="cta" value={cta} />
+      <input type="hidden" name="cta_expires_at" value={ctaExpiresAt} />
+      <input type="hidden" name="priority" value={priority} />
+      <input type="hidden" name="priority_bucket" value={priorityBucket} />
+      <input
+        type="hidden"
+        name="interests"
+        value={JSON.stringify(interests)}
+      />
+      <input type="hidden" name="depth_override" value={depthOverride} />
 
       <div className="rounded border border-rule bg-paper-2 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -713,6 +809,394 @@ export function PersonForm({
             </div>
           )}
         />
+      </Section>
+
+      <Section
+        label="Stakeholder"
+        hint="Mehrfach möglich. Sub-Typen werden nur für ausgewählte Ebene-1-Typen angezeigt."
+      >
+        <div className="flex flex-wrap gap-1.5">
+          {STAKEHOLDER_TYPES_E1.map((t) => {
+            const active = stakeholderTypes.includes(t);
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => toggleStakeholderType(t)}
+                className={`tag transition ${
+                  active
+                    ? "border-action text-action"
+                    : "hover:border-ink-3"
+                }`}
+              >
+                <span
+                  className="dot"
+                  style={{ background: active ? "var(--action)" : undefined }}
+                />
+                {t}
+              </button>
+            );
+          })}
+          {/* Custom E1 entries the user added previously */}
+          {stakeholderTypes
+            .filter(
+              (t) => !(STAKEHOLDER_TYPES_E1 as readonly string[]).includes(t),
+            )
+            .map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => toggleStakeholderType(t)}
+                className="tag border-action text-action"
+              >
+                <span className="dot" style={{ background: "var(--action)" }} />
+                {t} ×
+              </button>
+            ))}
+        </div>
+
+        {stakeholderTypes.length > 0 && (
+          <div className="mt-3 space-y-3 rounded border border-rule-soft bg-paper-2 p-3">
+            {stakeholderTypes.map((e1) => {
+              const defaults =
+                STAKEHOLDER_SUB_TYPES_E2[e1] ??
+                ([] as readonly string[]);
+              const active = stakeholderSubTypes[e1] ?? [];
+              const customs = active.filter(
+                (s) => !defaults.includes(s),
+              );
+              return (
+                <div key={e1} className="space-y-1.5">
+                  <p className="t-label">{e1}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {defaults.map((sub) => {
+                      const on = active.includes(sub);
+                      return (
+                        <button
+                          key={sub}
+                          type="button"
+                          onClick={() => toggleSubType(e1, sub)}
+                          className={`tag transition ${
+                            on
+                              ? "border-action text-action"
+                              : "hover:border-ink-3"
+                          }`}
+                        >
+                          <span
+                            className="dot"
+                            style={{
+                              background: on ? "var(--action)" : undefined,
+                            }}
+                          />
+                          {sub}
+                        </button>
+                      );
+                    })}
+                    {customs.map((sub) => (
+                      <button
+                        key={sub}
+                        type="button"
+                        onClick={() => toggleSubType(e1, sub)}
+                        className="tag border-action text-action"
+                      >
+                        <span
+                          className="dot"
+                          style={{ background: "var(--action)" }}
+                        />
+                        {sub} ×
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Section>
+
+      <Section label="Klassifizierung">
+        <div className="grid grid-cols-2 gap-4">
+          <Field
+            label="Industrie"
+            hint="Tech / FinTech / HealthTech / Consumer / …"
+          >
+            <input
+              value={industry}
+              onChange={(e) => setIndustry(e.target.value)}
+              placeholder="Tech"
+              className={inputClass}
+            />
+          </Field>
+          <Field
+            label="Funktion"
+            hint="Founder / Exec / Operator / Investor"
+          >
+            <input
+              value={jobFunction}
+              onChange={(e) => setJobFunction(e.target.value)}
+              placeholder="Operator"
+              className={inputClass}
+            />
+          </Field>
+        </div>
+      </Section>
+
+      <Section
+        label="Geographien"
+        hint="Mehrwertig + zeit-sensitiv. Wohnort, aktueller Aufenthalt, Herkunft, beruflicher Hub."
+      >
+        <RepeatableList
+          items={geographies}
+          empty="Keine Orte hinterlegt."
+          onAdd={() =>
+            setGeographies([
+              ...geographies,
+              { kind: "Wohnort", place: "", since: null, until: null },
+            ])
+          }
+          renderItem={(g, i) => (
+            <div className="space-y-2 rounded border border-rule-soft bg-paper-2 p-3">
+              <div className="grid grid-cols-[140px_1fr_auto] gap-2">
+                <select
+                  value={g.kind}
+                  onChange={(e) => {
+                    const next = [...geographies];
+                    next[i] = { ...next[i], kind: e.target.value };
+                    setGeographies(next);
+                  }}
+                  className={selectClass}
+                >
+                  {GEO_KINDS.map((k) => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  value={g.place}
+                  onChange={(e) => {
+                    const next = [...geographies];
+                    next[i] = { ...next[i], place: e.target.value };
+                    setGeographies(next);
+                  }}
+                  placeholder="Berlin / Tel Aviv / São Paulo …"
+                  className={inputClass}
+                />
+                <RemoveButton
+                  onClick={() =>
+                    setGeographies(geographies.filter((_, j) => j !== i))
+                  }
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Seit">
+                  <input
+                    type="month"
+                    value={g.since ?? ""}
+                    onChange={(e) => {
+                      const next = [...geographies];
+                      next[i] = { ...next[i], since: e.target.value || null };
+                      setGeographies(next);
+                    }}
+                    className={inputClass}
+                  />
+                </Field>
+                <Field label="Bis (optional)">
+                  <input
+                    type="month"
+                    value={g.until ?? ""}
+                    onChange={(e) => {
+                      const next = [...geographies];
+                      next[i] = { ...next[i], until: e.target.value || null };
+                      setGeographies(next);
+                    }}
+                    className={inputClass}
+                  />
+                </Field>
+              </div>
+            </div>
+          )}
+        />
+      </Section>
+
+      <Section
+        label="Steuerung"
+        hint="Wofür ist diese Person gerade auf deinem Schirm?"
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Call-to-Action">
+            <select
+              value={cta}
+              onChange={(e) => setCta(e.target.value)}
+              className={`${selectClass} w-full`}
+            >
+              <option value="">— keine —</option>
+              {CTA_OPTIONS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="CTA läuft ab am" hint="optional, leer = unbegrenzt">
+            <input
+              type="date"
+              value={ctaExpiresAt}
+              onChange={(e) => setCtaExpiresAt(e.target.value)}
+              disabled={!cta}
+              className={`${inputClass} disabled:opacity-50`}
+            />
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Priorität (A/B/C)">
+            <div className="flex h-9 rounded border border-rule bg-paper p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setPriority("")}
+                className={`flex-1 rounded transition-colors ${
+                  priority === ""
+                    ? "bg-paper-2 text-ink-1"
+                    : "text-ink-3 hover:text-ink-1"
+                }`}
+              >
+                —
+              </button>
+              {PRIORITY_LETTERS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPriority(p)}
+                  className={`flex-1 rounded transition-colors ${
+                    priority === p
+                      ? "bg-paper-2 text-ink-1"
+                      : "text-ink-3 hover:text-ink-1"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </Field>
+          <Field
+            label="Zeit-Bucket"
+            hint="Auto-Decay: this-week → next-week nach 7 Tagen, → later nach 14"
+          >
+            <div className="flex h-9 rounded border border-rule bg-paper p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setPriorityBucket("")}
+                className={`flex-1 rounded transition-colors ${
+                  priorityBucket === ""
+                    ? "bg-paper-2 text-ink-1"
+                    : "text-ink-3 hover:text-ink-1"
+                }`}
+              >
+                —
+              </button>
+              {PRIORITY_BUCKETS.map((b) => (
+                <button
+                  key={b}
+                  type="button"
+                  onClick={() => setPriorityBucket(b)}
+                  className={`flex-1 rounded transition-colors ${
+                    priorityBucket === b
+                      ? "bg-paper-2 text-ink-1"
+                      : "text-ink-3 hover:text-ink-1"
+                  }`}
+                >
+                  {b === "this-week"
+                    ? "Diese Woche"
+                    : b === "next-week"
+                      ? "Nächste Woche"
+                      : "Später"}
+                </button>
+              ))}
+            </div>
+          </Field>
+        </div>
+      </Section>
+
+      <Section
+        label="Interessen & Synergien"
+        hint="Was verbindet euch — Hobbys, Themen, Geschäftliches. Tippe + Enter."
+      >
+        <div className="flex min-h-9 flex-wrap items-center gap-1.5 rounded border border-rule bg-paper px-2 py-1.5 focus-within:border-action focus-within:ring-2 focus-within:ring-action/20">
+          {interests.map((t) => (
+            <span key={t} className="tag">
+              <span className="dot" />
+              {t}
+              <button
+                type="button"
+                onClick={() => setInterests(interests.filter((x) => x !== t))}
+                aria-label={`Interesse ${t} entfernen`}
+                className="-mr-0.5 ml-0.5 text-ink-4 transition hover:text-bad"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          <input
+            type="text"
+            value={interestInput}
+            onChange={(e) => setInterestInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === ",") {
+                e.preventDefault();
+                commitInterest();
+                return;
+              }
+              if (
+                e.key === "Backspace" &&
+                interestInput === "" &&
+                interests.length > 0
+              ) {
+                setInterests(interests.slice(0, -1));
+              }
+            }}
+            onBlur={commitInterest}
+            placeholder={
+              interests.length === 0
+                ? "Longevity, Skiing, Web3, Klassische Musik …"
+                : ""
+            }
+            className="min-w-32 flex-1 bg-transparent text-sm text-ink-1 outline-none placeholder:text-ink-4"
+          />
+        </div>
+      </Section>
+
+      <Section
+        label="Beziehungstiefe (Override)"
+        hint="Standard wird aus Interaktions-Anzahl + Dauer berechnet. Hier nur überschreiben wenn deine Wahrnehmung deutlich abweicht."
+      >
+        <div className="flex h-9 rounded border border-rule bg-paper p-0.5 text-xs">
+          <button
+            type="button"
+            onClick={() => setDepthOverride("")}
+            className={`flex-1 rounded transition-colors ${
+              depthOverride === ""
+                ? "bg-paper-2 text-ink-1"
+                : "text-ink-3 hover:text-ink-1"
+            }`}
+          >
+            Auto
+          </button>
+          {RELATIONSHIP_DEPTHS.map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setDepthOverride(d)}
+              className={`flex-1 rounded transition-colors ${
+                depthOverride === d
+                  ? "bg-paper-2 text-ink-1"
+                  : "text-ink-3 hover:text-ink-1"
+              }`}
+            >
+              {d}
+            </button>
+          ))}
+        </div>
       </Section>
 
       <Section label="Notizen">

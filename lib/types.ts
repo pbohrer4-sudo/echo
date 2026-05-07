@@ -141,6 +141,59 @@ export interface RelationshipEntry {
   label: RelationshipLabel;
 }
 
+// ===== Stakeholder model (Phase 1+2) =====
+
+export const RELATIONSHIP_DEPTHS = [
+  "Fremd",
+  "Bekannt",
+  "Vertraut",
+  "Persönlich",
+] as const;
+export type RelationshipDepth = (typeof RELATIONSHIP_DEPTHS)[number];
+
+export const RELATIONSHIP_WARMTHS = [
+  "Aktiv",
+  "Warm",
+  "Kühl",
+  "Kalt",
+] as const;
+export type RelationshipWarmth = (typeof RELATIONSHIP_WARMTHS)[number];
+
+export const GEO_KINDS = [
+  "Wohnort",
+  "Aufenthalt",
+  "Herkunft",
+  "Hub",
+] as const;
+export type GeoKind = (typeof GEO_KINDS)[number] | string;
+
+export interface GeographyEntry {
+  kind: GeoKind;
+  place: string;
+  since?: string | null; // ISO date / YYYY-MM
+  until?: string | null;
+}
+
+export const CTA_OPTIONS = [
+  "Newsletter",
+  "Proposal",
+  "Pitchdeck",
+  "Meeting",
+  "Intro",
+  "Nichts",
+] as const;
+export type CtaValue = (typeof CTA_OPTIONS)[number] | string;
+
+export const PRIORITY_LETTERS = ["A", "B", "C"] as const;
+export type PriorityLetter = (typeof PRIORITY_LETTERS)[number];
+
+export const PRIORITY_BUCKETS = [
+  "this-week",
+  "next-week",
+  "later",
+] as const;
+export type PriorityBucket = (typeof PRIORITY_BUCKETS)[number];
+
 // ===== Service Connections (external MCP-style integrations) =====
 // Distinct from the `Connection` interface below which models the
 // person-to-person edge graph from the original brief.
@@ -324,6 +377,19 @@ export interface Person {
   avatar_url: string | null;
   notes: string | null;
   is_self: boolean;
+  // Phase 1+2 stakeholder model
+  stakeholder_types: string[];
+  stakeholder_sub_types: Record<string, string[]>;
+  geographies: GeographyEntry[];
+  industry: string | null;
+  job_function: string | null;
+  cta: string | null;
+  cta_expires_at: string | null;
+  priority: PriorityLetter | null;
+  priority_bucket: PriorityBucket | null;
+  priority_set_at: string | null;
+  interests: string[];
+  depth_override: RelationshipDepth | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
