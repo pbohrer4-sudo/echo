@@ -61,21 +61,64 @@ export function PeopleTable({
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("all");
+  const [stakeholderFilter, setStakeholderFilter] = useState<string>("all");
+  const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  // Build the stakeholder-type filter options from what's actually in
+  // the dataset — manual taxonomy + any custom values the user added.
+  const stakeholderOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of people) {
+      for (const t of p.stakeholder_types ?? []) set.add(t);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [people]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return people.filter((p) => {
       if (scopeFilter !== "all" && p.scope !== scopeFilter) return false;
+      if (
+        stakeholderFilter !== "all" &&
+        !(p.stakeholder_types ?? []).includes(stakeholderFilter)
+      )
+        return false;
+      if (priorityFilter !== "all") {
+        if (priorityFilter === "—" && p.priority) return false;
+        if (priorityFilter !== "—" && p.priority !== priorityFilter) return false;
+      }
       if (!q) return true;
-      const haystack = [p.name, p.company, p.role, ...(p.tags ?? [])]
+      // Search across everything that helps the user find a person:
+      // name, company, role, tags, stakeholder typings, classification,
+      // CTA, interests, geographies (place names + kinds).
+      const subTypeValues = Object.values(p.stakeholder_sub_types ?? {}).flat();
+      const geoValues = (p.geographies ?? []).flatMap((g) => [
+        g.kind,
+        g.place,
+      ]);
+      const haystack = [
+        p.name,
+        p.company,
+        p.role,
+        p.industry,
+        p.job_function,
+        p.cta,
+        p.notes,
+        p.notes_summary,
+        ...(p.tags ?? []),
+        ...(p.stakeholder_types ?? []),
+        ...subTypeValues,
+        ...(p.interests ?? []),
+        ...geoValues,
+      ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [people, search, scopeFilter]);
+  }, [people, search, scopeFilter, stakeholderFilter, priorityFilter]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -128,7 +171,7 @@ export function PeopleTable({
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Name, Firma, Rolle, Tags…"
+            placeholder="Name, Firma, Stakeholder, Industrie, Interessen, Orte…"
             className="flex-1 bg-transparent text-sm text-ink-1 outline-none placeholder:text-ink-4"
           />
         </div>
@@ -155,6 +198,74 @@ export function PeopleTable({
           + Person
         </Link>
       </div>
+
+      {(stakeholderOptions.length > 0 || true) && (
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          {stakeholderOptions.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="t-label mr-1">Stakeholder</span>
+              <button
+                type="button"
+                onClick={() => setStakeholderFilter("all")}
+                className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
+                  stakeholderFilter === "all"
+                    ? "border-action bg-action-soft text-action"
+                    : "border-rule bg-paper text-ink-3 hover:border-ink-3 hover:text-ink-1"
+                }`}
+              >
+                Alle
+              </button>
+              {stakeholderOptions.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() =>
+                    setStakeholderFilter(stakeholderFilter === t ? "all" : t)
+                  }
+                  className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
+                    stakeholderFilter === t
+                      ? "border-action bg-action-soft text-action"
+                      : "border-rule bg-paper text-ink-3 hover:border-ink-3 hover:text-ink-1"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="t-label mr-1">Priorität</span>
+            {(["all", "A", "B", "C", "—"] as const).map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPriorityFilter(p)}
+                className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
+                  priorityFilter === p
+                    ? "border-action bg-action-soft text-action"
+                    : "border-rule bg-paper text-ink-3 hover:border-ink-3 hover:text-ink-1"
+                }`}
+              >
+                {p === "all" ? "Alle" : p === "—" ? "Keine" : p}
+              </button>
+            ))}
+          </div>
+
+          {(stakeholderFilter !== "all" || priorityFilter !== "all") && (
+            <button
+              type="button"
+              onClick={() => {
+                setStakeholderFilter("all");
+                setPriorityFilter("all");
+              }}
+              className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3 transition hover:text-ink-1"
+            >
+              × alle Filter zurücksetzen
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="overflow-hidden rounded border border-rule bg-paper">
         <div className="grid grid-cols-[28px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1.4fr)_70px_120px] gap-4 border-b border-rule bg-paper-2 px-4 py-2.5">

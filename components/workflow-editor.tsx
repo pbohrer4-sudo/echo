@@ -743,10 +743,6 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
       <div className="grid flex-1 grid-cols-[220px_1fr_300px] overflow-hidden">
         {/* Library */}
         <aside className="overflow-y-auto border-r border-rule bg-paper-2 px-3 py-4">
-          <WorkflowModelDefaults
-            value={defaultModelPrefs}
-            onChange={setDefaultModelPrefs}
-          />
           <p className="t-label mb-3">Library</p>
           {(["trigger", "filter", "transform", "action"] as WorkflowNodeKind[]).map(
             (kind) => (
@@ -859,7 +855,13 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
           ) : mock ? (
             <MockPanel results={mock} onClear={() => setMock(null)} />
           ) : (
-            <EmptyHint nodeCount={nodes.length} />
+            <div className="space-y-5">
+              <WorkflowModelDefaults
+                value={defaultModelPrefs}
+                onChange={setDefaultModelPrefs}
+              />
+              <EmptyHint nodeCount={nodes.length} />
+            </div>
           )}
         </aside>
       </div>
