@@ -191,12 +191,20 @@ export function PeopleTable({
             </button>
           ))}
         </div>
-        <Link
-          href="/people/new"
-          className="inline-flex h-9 items-center rounded border border-action bg-action px-4 text-sm font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)]"
-        >
-          + Person
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/people/import"
+            className="inline-flex h-9 items-center rounded border border-rule px-3 text-xs text-ink-2 transition hover:border-action hover:text-action"
+          >
+            iPhone import
+          </Link>
+          <Link
+            href="/people/new"
+            className="inline-flex h-9 items-center rounded border border-action bg-action px-4 text-sm font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)]"
+          >
+            + Person
+          </Link>
+        </div>
       </div>
 
       {(stakeholderOptions.length > 0 || true) && (
