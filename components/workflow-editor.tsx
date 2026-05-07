@@ -12,15 +12,25 @@ import {
   ReactFlow,
   ReactFlowProvider,
   addEdge,
+  getBezierPath,
   useEdgesState,
   useNodesState,
   type Connection,
   type Edge,
+  type EdgeProps,
+  type EdgeTypes,
   type Node,
   type NodeProps,
   type NodeTypes,
 } from "@xyflow/react";
-import { useCallback, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   NODE_CATALOG,
@@ -37,11 +47,33 @@ import type {
 } from "@/lib/types";
 import { deleteWorkflow, saveWorkflowGraph } from "@/app/(app)/integrations/workflows/actions";
 
-const KIND_TONE: Record<WorkflowNodeKind, string> = {
-  trigger: "border-action bg-action-soft",
-  filter: "border-signal bg-signal-soft",
-  transform: "border-rule bg-paper-2",
-  action: "border-good/40 bg-good/10",
+// Per-kind tone tokens — used for the glyph badge + minimap colour.
+// We mirror the integrations canvas where each node has a coloured
+// glyph and the rest of the card stays paper.
+const KIND_TONE: Record<
+  WorkflowNodeKind,
+  { stroke: string; fill: string; glyph: string }
+> = {
+  trigger: {
+    stroke: "var(--action)",
+    fill: "var(--action-soft)",
+    glyph: "TR",
+  },
+  filter: {
+    stroke: "oklch(72% 0.13 75)",
+    fill: "oklch(96% 0.04 80)",
+    glyph: "FI",
+  },
+  transform: {
+    stroke: "var(--ink-3)",
+    fill: "var(--paper-2)",
+    glyph: "TX",
+  },
+  action: {
+    stroke: "oklch(58% 0.10 145)",
+    fill: "oklch(94% 0.04 145)",
+    glyph: "AC",
+  },
 };
 
 const KIND_LABEL: Record<WorkflowNodeKind, string> = {
@@ -85,60 +117,67 @@ const HANDLE_STYLE: React.CSSProperties = {
 function CustomNode({ data, selected }: NodeProps<FlowNode>) {
   const tpl = findTemplate(data.subtype);
   const live = tpl?.live ?? false;
-  const stripeColor = live ? "var(--good)" : "var(--bad)";
+  const tone = KIND_TONE[data.kind];
+  const liveColor = live ? "oklch(58% 0.10 145)" : "oklch(58% 0.14 25)";
 
   return (
     <div
-      className={`relative min-w-44 overflow-hidden rounded border-2 ${KIND_TONE[data.kind]} ${
-        selected ? "ring-2 ring-action ring-offset-2 ring-offset-paper" : ""
+      className={`relative flex w-56 items-start gap-3 rounded border bg-paper px-3 py-2.5 shadow-sm transition ${
+        selected
+          ? "border-action shadow-[0_0_0_3px_var(--action-ring)]"
+          : "border-rule"
       }`}
     >
-      <span
-        aria-hidden
-        className="absolute inset-y-0 left-0 w-1"
-        style={{ background: stripeColor }}
-      />
-
-      {/* Source + target handle on every side, both with the same
-          position. react-flow disambiguates source vs. target by what
-          the user is doing (initiating vs. completing a connection).
-          IDs are unique-per-side-per-type. */}
+      {/* Source + target handles on every side. ReactFlow disambiguates
+          by direction of the user's drag. IDs stay unique per side/type. */}
       {SIDES.map(({ side, pos }) => (
         <span key={side}>
           <Handle
             id={`${side}-target`}
             type="target"
             position={pos}
-            style={HANDLE_STYLE}
+            style={{ ...HANDLE_STYLE, background: tone.stroke }}
             isConnectable
           />
           <Handle
             id={`${side}-source`}
             type="source"
             position={pos}
-            style={HANDLE_STYLE}
+            style={{ ...HANDLE_STYLE, background: tone.stroke }}
             isConnectable
           />
         </span>
       ))}
 
-      <div className="pl-3 pr-3 py-2">
-        <div className="flex items-center justify-between gap-2">
-          <p className="font-mono text-[9px] uppercase tracking-wider text-ink-3">
-            {KIND_LABEL[data.kind]}
-          </p>
-          <span
-            className="font-mono text-[9px] uppercase tracking-wider"
-            style={{ color: stripeColor }}
-          >
-            {live ? "Live" : "V2"}
+      <span
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded font-mono text-[11px] font-semibold uppercase tracking-tight"
+        style={{
+          background: tone.fill,
+          color: tone.stroke,
+          border: `1px solid ${tone.stroke}`,
+        }}
+      >
+        {tone.glyph}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="truncate text-sm font-medium text-ink-1">
+            {data.label}
           </span>
+          <span
+            aria-hidden
+            className="h-1.5 w-1.5 rounded-full"
+            style={{ background: liveColor }}
+            title={live ? "Live" : "V2 (geplant)"}
+          />
         </div>
-        <p className="mt-0.5 text-sm font-medium text-ink-1">{data.label}</p>
+        <span className="block truncate font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3">
+          {KIND_LABEL[data.kind]}
+        </span>
         {tpl?.description && (
-          <p className="mt-1 text-[10px] leading-snug text-ink-4">
+          <span className="mt-1 block text-[10px] leading-snug text-ink-4">
             {tpl.description}
-          </p>
+          </span>
         )}
       </div>
     </div>
@@ -146,6 +185,64 @@ function CustomNode({ data, selected }: NodeProps<FlowNode>) {
 }
 
 const NODE_TYPES: NodeTypes = { custom: CustomNode };
+
+// Edge type that matches the integrations canvas — bezier path, with
+// a travelling dot + glow when the workflow is enabled. Falls back to
+// a static muted stroke when draft / disabled.
+function FlowEdge({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  data,
+  selected,
+}: EdgeProps<Edge<{ flowing?: boolean }>>) {
+  const [path] = getBezierPath({
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+  });
+
+  const flowing = !!data?.flowing;
+  const stroke = flowing ? "oklch(58% 0.10 145)" : "var(--ink-4)";
+  const width = selected ? 2.5 : flowing ? 2 : 1.25;
+
+  return (
+    <>
+      <path
+        id={id}
+        d={path}
+        fill="none"
+        stroke={stroke}
+        strokeWidth={width}
+        strokeDasharray={flowing ? undefined : "4 4"}
+        strokeOpacity={flowing ? 1 : 0.7}
+      />
+      {flowing && (
+        <>
+          <circle r={3} fill={stroke}>
+            <animateMotion dur="2.4s" repeatCount="indefinite">
+              <mpath href={`#${id}`} />
+            </animateMotion>
+          </circle>
+          <circle r={5} fill={stroke} fillOpacity={0.25}>
+            <animateMotion dur="2.4s" repeatCount="indefinite">
+              <mpath href={`#${id}`} />
+            </animateMotion>
+          </circle>
+        </>
+      )}
+    </>
+  );
+}
+
+const EDGE_TYPES: EdgeTypes = { flow: FlowEdge };
 
 function deserialize(workflow: Workflow): {
   nodes: FlowNode[];
@@ -157,13 +254,15 @@ function deserialize(workflow: Workflow): {
     position: n.position,
     data: n.data,
   }));
+  const flowing = workflow.status === "enabled";
   const edges: FlowEdge[] = (workflow.edges ?? []).map((e: WorkflowEdge) => ({
     id: e.id,
     source: e.source,
     target: e.target,
     sourceHandle: e.sourceHandle ?? null,
     targetHandle: e.targetHandle ?? null,
-    data: e.data,
+    type: "flow",
+    data: { ...(e.data ?? {}), flowing },
     markerEnd: { type: MarkerType.ArrowClosed },
   }));
   return { nodes, edges };
@@ -388,15 +487,35 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
 
   const selected = nodes.find((n) => n.id === selectedId) ?? null;
 
+  const flowing = status === "enabled";
+
+  // Keep edge `flowing` in sync with the current status — toggling the
+  // status segment from the toolbar should immediately animate the
+  // travelling dots without a save/reload.
+  useEffect(() => {
+    setEdges((eds) =>
+      eds.map((e) => ({
+        ...e,
+        type: "flow",
+        data: { ...(e.data ?? {}), flowing },
+      })),
+    );
+  }, [flowing, setEdges]);
+
   const onConnect = useCallback(
     (connection: Connection) =>
       setEdges((eds) =>
         addEdge(
-          { ...connection, markerEnd: { type: MarkerType.ArrowClosed } },
+          {
+            ...connection,
+            type: "flow",
+            data: { flowing },
+            markerEnd: { type: MarkerType.ArrowClosed },
+          },
           eds,
         ),
       ),
-    [setEdges],
+    [setEdges, flowing],
   );
 
   function addNodeFromTemplate(tpl: NodeTemplate) {
@@ -615,26 +734,29 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
               setSelectedId(sel[0]?.id ?? null);
             }}
             nodeTypes={NODE_TYPES}
+            edgeTypes={EDGE_TYPES}
             fitView
+            fitViewOptions={{ padding: 0.15 }}
             proOptions={{ hideAttribution: true }}
             deleteKeyCode={["Backspace", "Delete"]}
+            minZoom={0.4}
+            maxZoom={1.6}
           >
-            <Background gap={16} size={1} color="var(--rule-soft)" />
+            <Background gap={24} size={1} color="var(--rule-soft)" />
             <Controls
-              style={{
-                background: "var(--paper)",
-                border: "1px solid var(--rule)",
-              }}
+              showInteractive={false}
+              className="!bg-paper !border !border-rule"
             />
             <MiniMap
               pannable
               zoomable
-              style={{
-                background: "var(--paper-2)",
-                border: "1px solid var(--rule)",
+              maskColor="oklch(94% 0.012 90 / 0.6)"
+              nodeColor={(n) => {
+                const data = n.data as NodeData | undefined;
+                if (!data?.kind) return "var(--ink-4)";
+                return KIND_TONE[data.kind].stroke;
               }}
-              nodeColor={() => "#9c968b"}
-              maskColor="rgba(20,17,13,0.05)"
+              className="!bg-paper-2 !border !border-rule"
             />
           </ReactFlow>
         </div>
