@@ -55,6 +55,7 @@ export default async function AppLayout({
             <NavLink href="/integrations">Voice Vibe Integrations</NavLink>
             <NavLink href="/connections">Verbindungen</NavLink>
             <NavLink href="/integrations/workflows">Workflows</NavLink>
+            <NavLink href="/models">Modelle</NavLink>
           </nav>
         </div>
 
