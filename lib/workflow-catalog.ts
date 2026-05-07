@@ -1,4 +1,5 @@
 import type { WorkflowNodeKind } from "@/lib/types";
+import type { TaskId } from "@/lib/model-catalog";
 
 export interface NodeTemplate {
   subtype: string;
@@ -16,6 +17,14 @@ export interface NodeTemplate {
   // external service (Vercel cron, webhook receiver, mail provider,
   // OAuth-token vault, etc.) before it can execute.
   live: boolean;
+  // When set, this node uses an LLM. Resolution order at runtime:
+  //   node.config.model_id    (per-node override picked in ConfigPanel)
+  //   workflow.default_model_preferences[requires_task]
+  //   profile.model_preferences[requires_task]
+  //   TASKS.find(t => t.id === requires_task).default_model
+  // The ConfigPanel auto-renders a model picker for nodes that have
+  // requires_task set.
+  requires_task?: TaskId;
 }
 
 export interface ConfigField {
@@ -271,6 +280,155 @@ export const NODE_CATALOG: NodeTemplate[] = [
       },
     ],
     live: true,
+  },
+
+  // ======== AI TRANSFORMS ========
+  // Each of these uses an LLM and surfaces a model picker in the
+  // ConfigPanel. requires_task tells the resolution chain which slot
+  // in the model preferences to read.
+  {
+    subtype: "transform.ai_summarize",
+    kind: "transform",
+    label: "AI · Zusammenfassen",
+    description:
+      "Verdichtet einen Text auf 1-3 Sätze. Modell pro Node oder vom Workflow geerbt.",
+    outputFields: ["summary"],
+    configFields: [
+      {
+        key: "input_field",
+        label: "Input-Feld",
+        type: "text",
+        placeholder: "interaction.transcript",
+        required: true,
+      },
+      {
+        key: "max_sentences",
+        label: "Maximale Sätze",
+        type: "number",
+        placeholder: "3",
+      },
+    ],
+    live: false,
+    requires_task: "chat",
+  },
+  {
+    subtype: "transform.ai_classify",
+    kind: "transform",
+    label: "AI · Klassifizieren",
+    description:
+      "Schlägt Tags / Kategorien aus dem Inhalt vor. Mehr-Label-Output.",
+    outputFields: ["categories", "primary_category"],
+    configFields: [
+      {
+        key: "input_field",
+        label: "Input-Feld",
+        type: "text",
+        placeholder: "person.notes oder interaction.transcript",
+        required: true,
+      },
+      {
+        key: "label_set",
+        label: "Erlaubte Labels (Komma-separiert)",
+        type: "textarea",
+        placeholder: "Lead, Kunde, Partner, Interesse, Spam",
+      },
+    ],
+    live: false,
+    requires_task: "chat",
+  },
+  {
+    subtype: "transform.ai_extract_fields",
+    kind: "transform",
+    label: "AI · Felder extrahieren",
+    description:
+      "Strukturierte JSON-Felder aus Freitext (Tool-Use). Für Email-Signatur, Notizen, Web-Scrape.",
+    outputFields: ["extracted"],
+    configFields: [
+      {
+        key: "input_field",
+        label: "Input-Feld",
+        type: "text",
+        placeholder: "input.text",
+        required: true,
+      },
+      {
+        key: "schema_hint",
+        label: "Felder die gesucht werden",
+        type: "textarea",
+        placeholder: "name, company, role, email, phone",
+        required: true,
+      },
+    ],
+    live: false,
+    requires_task: "extract",
+  },
+  {
+    subtype: "transform.ai_ocr",
+    kind: "transform",
+    label: "AI · Bild zu Daten",
+    description:
+      "OCR + Strukturierung. Visitenkarte, Whiteboard-Foto, Screenshot — Vision-fähiges Modell nötig.",
+    outputFields: ["text", "structured"],
+    configFields: [
+      {
+        key: "image_field",
+        label: "Bild-URL Feld",
+        type: "text",
+        placeholder: "input.image_url",
+        required: true,
+      },
+      {
+        key: "kind_hint",
+        label: "Was wird erkannt?",
+        type: "select",
+        options: ["Visitenkarte", "Notiz", "Whiteboard", "Screenshot", "Sonstiges"],
+      },
+    ],
+    live: false,
+    requires_task: "vision",
+  },
+  {
+    subtype: "transform.ai_research",
+    kind: "transform",
+    label: "AI · Web-Recherche",
+    description:
+      "Frische Web-Daten zu einer Org oder Person. Perplexity / Gemini / GPT-Search empfohlen.",
+    outputFields: ["findings", "sources"],
+    configFields: [
+      {
+        key: "query_template",
+        label: "Recherche-Prompt",
+        type: "textarea",
+        placeholder: "Recent funding rounds for {{organization.name}}",
+        required: true,
+      },
+    ],
+    live: false,
+    requires_task: "enrich",
+  },
+  {
+    subtype: "action.ai_draft_email",
+    kind: "action",
+    label: "AI · Email-Entwurf",
+    description:
+      "Generiert einen Draft passend zum Anlass. Wird in Outbox gepusht, nicht direkt versendet.",
+    outputFields: ["draft.subject", "draft.body"],
+    configFields: [
+      {
+        key: "tone",
+        label: "Tonalität",
+        type: "select",
+        options: ["Formal", "Freundschaftlich", "Direkt", "Wärmer"],
+      },
+      {
+        key: "context_field",
+        label: "Kontext-Feld",
+        type: "text",
+        placeholder: "interaction.summary",
+      },
+    ],
+    live: false,
+    requires_task: "chat",
   },
 
   // ======== ACTIONS ========

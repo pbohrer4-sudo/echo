@@ -44,6 +44,7 @@ interface SaveGraphPayload {
   status?: WorkflowStatus;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
+  default_model_preferences?: Record<string, string>;
 }
 
 export async function saveWorkflowGraph(payload: SaveGraphPayload) {
@@ -56,6 +57,9 @@ export async function saveWorkflowGraph(payload: SaveGraphPayload) {
   if (payload.name !== undefined) update.name = payload.name;
   if (payload.description !== undefined) update.description = payload.description;
   if (payload.status !== undefined) update.status = payload.status;
+  if (payload.default_model_preferences !== undefined) {
+    update.default_model_preferences = payload.default_model_preferences;
+  }
 
   const { error } = await supabase
     .from("workflows")

@@ -38,6 +38,14 @@ import {
   templatesByKind,
   type NodeTemplate,
 } from "@/lib/workflow-catalog";
+import {
+  MODELS,
+  TASKS,
+  modelById,
+  modelsForCapabilities,
+  type CatalogModel,
+  type TaskId,
+} from "@/lib/model-catalog";
 import type {
   Workflow,
   WorkflowEdge,
@@ -174,13 +182,54 @@ function CustomNode({ data, selected }: NodeProps<FlowNode>) {
         <span className="block truncate font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3">
           {KIND_LABEL[data.kind]}
         </span>
-        {tpl?.description && (
+        {tpl?.requires_task && (
+          <NodeModelChip
+            modelOverrideId={String(data.config.model_id ?? "")}
+            requiresTask={tpl.requires_task}
+          />
+        )}
+        {tpl?.description && !tpl.requires_task && (
           <span className="mt-1 block text-[10px] leading-snug text-ink-4">
             {tpl.description}
           </span>
         )}
       </div>
     </div>
+  );
+}
+
+function NodeModelChip({
+  modelOverrideId,
+  requiresTask,
+}: {
+  modelOverrideId: string;
+  requiresTask: string;
+}) {
+  const override = modelOverrideId ? modelById(modelOverrideId) : null;
+  return (
+    <span
+      className="mt-1 inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider"
+      style={
+        override
+          ? {
+              borderColor: "var(--action)",
+              color: "var(--action)",
+              background: "var(--action-soft)",
+            }
+          : {
+              borderColor: "var(--rule)",
+              color: "var(--ink-4)",
+              background: "var(--paper-2)",
+            }
+      }
+      title={
+        override
+          ? `Override für ${requiresTask}: ${override.name}`
+          : `Nutzt Workflow- bzw. User-Default für ${requiresTask}`
+      }
+    >
+      {override ? override.name.split(" ").slice(0, 2).join(" ") : `AI · ${requiresTask}`}
+    </span>
   );
 }
 
@@ -414,6 +463,9 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
   const [pending, start] = useTransition();
   const [name, setName] = useState(workflow.name);
   const [status, setStatus] = useState<WorkflowStatus>(workflow.status);
+  const [defaultModelPrefs, setDefaultModelPrefs] = useState<
+    Record<string, string>
+  >(workflow.default_model_preferences ?? {});
   const initial = useMemo(() => deserialize(workflow), [workflow]);
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(initial.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<FlowEdge>(initial.edges);
@@ -569,6 +621,7 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
           status,
           nodes: payload.nodes,
           edges: payload.edges,
+          default_model_preferences: defaultModelPrefs,
         });
         setSavedAt(new Date());
       } catch (err) {
@@ -690,6 +743,10 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
       <div className="grid flex-1 grid-cols-[220px_1fr_300px] overflow-hidden">
         {/* Library */}
         <aside className="overflow-y-auto border-r border-rule bg-paper-2 px-3 py-4">
+          <WorkflowModelDefaults
+            value={defaultModelPrefs}
+            onChange={setDefaultModelPrefs}
+          />
           <p className="t-label mb-3">Library</p>
           {(["trigger", "filter", "transform", "action"] as WorkflowNodeKind[]).map(
             (kind) => (
@@ -703,9 +760,32 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
                       <button
                         type="button"
                         onClick={() => addNodeFromTemplate(tpl)}
-                        className={`w-full rounded border ${KIND_TONE[tpl.kind]} px-2 py-1.5 text-left text-xs text-ink-1 transition hover:shadow-sm`}
+                        title={
+                          tpl.requires_task
+                            ? `Nutzt LLM (${tpl.requires_task})`
+                            : undefined
+                        }
+                        className="flex w-full items-center gap-2 rounded border border-rule bg-paper px-2 py-1.5 text-left text-xs text-ink-1 transition hover:border-action hover:bg-paper-2"
                       >
-                        {tpl.label}
+                        <span
+                          className="flex h-5 w-5 shrink-0 items-center justify-center rounded font-mono text-[8px] font-semibold uppercase"
+                          style={{
+                            background: KIND_TONE[tpl.kind].fill,
+                            color: KIND_TONE[tpl.kind].stroke,
+                            border: `1px solid ${KIND_TONE[tpl.kind].stroke}`,
+                          }}
+                        >
+                          {KIND_TONE[tpl.kind].glyph}
+                        </span>
+                        <span className="flex-1 truncate">{tpl.label}</span>
+                        {tpl.requires_task && (
+                          <span
+                            className="font-mono text-[8px] uppercase tracking-wider text-ink-4"
+                            aria-hidden
+                          >
+                            AI
+                          </span>
+                        )}
                       </button>
                     </li>
                   ))}
@@ -768,6 +848,11 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
               key={selected.id}
               template={tplOfSelected}
               config={selected.data.config}
+              workflowDefaultModelId={
+                tplOfSelected.requires_task
+                  ? defaultModelPrefs[tplOfSelected.requires_task] ?? ""
+                  : ""
+              }
               onChange={updateSelectedConfig}
               onRemove={removeSelected}
             />
@@ -804,11 +889,13 @@ function EmptyHint({ nodeCount }: { nodeCount: number }) {
 function ConfigPanel({
   template,
   config,
+  workflowDefaultModelId,
   onChange,
   onRemove,
 }: {
   template: NodeTemplate;
   config: Record<string, unknown>;
+  workflowDefaultModelId: string;
   onChange: (key: string, value: string | number) => void;
   onRemove: () => void;
 }) {
@@ -819,6 +906,15 @@ function ConfigPanel({
         <h2 className="text-sm font-semibold text-ink-1">{template.label}</h2>
         <p className="mt-1 text-xs text-ink-3">{template.description}</p>
       </div>
+
+      {template.requires_task && (
+        <NodeModelPicker
+          taskId={template.requires_task}
+          currentModelId={String(config.model_id ?? "")}
+          workflowDefault={workflowDefaultModelId}
+          onChange={(id) => onChange("model_id", id)}
+        />
+      )}
 
       {template.outputFields.length > 0 && (
         <div>
@@ -951,3 +1047,134 @@ function MockPanel({
 // Used to compute total catalog size for diagnostics — pulled in so
 // the catalog import isn't pruned by tree-shaking.
 export const CATALOG_SIZE = NODE_CATALOG.length;
+
+// ───────── Model picker helpers ─────────
+
+// Tasks the workflow's nodes can need a model for. We render rows for
+// every catalog task so the user can pre-set workflow-wide defaults
+// even before adding the corresponding nodes.
+const WORKFLOW_TASKS: { id: TaskId; label: string }[] = TASKS.filter(
+  (t) => t.id !== "stt",
+).map((t) => ({ id: t.id, label: t.label }));
+
+function WorkflowModelDefaults({
+  value,
+  onChange,
+}: {
+  value: Record<string, string>;
+  onChange: (next: Record<string, string>) => void;
+}) {
+  function setTask(task: TaskId, modelId: string) {
+    const next = { ...value };
+    if (modelId) next[task] = modelId;
+    else delete next[task];
+    onChange(next);
+  }
+
+  const taskRequires = new Map<TaskId, readonly CatalogModel[]>();
+  for (const t of TASKS) {
+    taskRequires.set(t.id, modelsForCapabilities(t.requires));
+  }
+
+  return (
+    <section className="mb-4 rounded border border-rule bg-paper p-3">
+      <p className="t-label mb-2">Workflow-Modelle</p>
+      <p className="mb-3 text-[10px] text-ink-4">
+        Pro Aufgabe das bevorzugte Modell für diesen Workflow. Pro Node
+        kannst du es im Config-Panel rechts überschreiben.
+      </p>
+      <div className="space-y-1.5">
+        {WORKFLOW_TASKS.map((t) => {
+          const eligible = taskRequires.get(t.id) ?? [];
+          const current = value[t.id] ?? "";
+          return (
+            <label
+              key={t.id}
+              className="grid grid-cols-[60px_1fr] items-center gap-2 text-[11px]"
+            >
+              <span className="font-mono uppercase tracking-wider text-ink-3">
+                {t.label}
+              </span>
+              <select
+                value={current}
+                onChange={(e) => setTask(t.id, e.target.value)}
+                className="h-7 rounded border border-rule bg-paper px-1.5 text-[11px] text-ink-1 outline-none focus:border-action"
+              >
+                <option value="">(User-Default)</option>
+                {eligible.map((m) => (
+                  <option
+                    key={m.id}
+                    value={m.id}
+                    disabled={!m.available}
+                  >
+                    {m.name}
+                    {!m.available && " (geplant)"}
+                  </option>
+                ))}
+              </select>
+            </label>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+// Per-node picker — rendered inside ConfigPanel when the selected
+// node's template declares requires_task.
+function NodeModelPicker({
+  taskId,
+  currentModelId,
+  workflowDefault,
+  onChange,
+}: {
+  taskId: TaskId;
+  currentModelId: string;
+  workflowDefault: string;
+  onChange: (modelId: string) => void;
+}) {
+  const task = TASKS.find((t) => t.id === taskId);
+  const eligible = task ? modelsForCapabilities(task.requires) : [];
+
+  // Resolve the effective model the node would use right now if this
+  // override is empty — useful for the placeholder hint.
+  const effectiveDefault = workflowDefault || task?.default_model || "";
+  const effectiveModel = modelById(effectiveDefault);
+
+  return (
+    <div className="rounded border border-action/30 bg-action-soft px-3 py-2.5">
+      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+        <p className="t-label" style={{ color: "var(--action)" }}>
+          Modell · {taskId}
+        </p>
+        {currentModelId && (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            className="font-mono text-[9px] uppercase tracking-wider text-ink-3 transition hover:text-ink-1"
+          >
+            Default
+          </button>
+        )}
+      </div>
+      <select
+        value={currentModelId}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-8 w-full rounded border border-rule bg-paper px-2 text-xs text-ink-1 outline-none focus:border-action"
+      >
+        <option value="">
+          Workflow-Default
+          {effectiveModel ? ` · ${effectiveModel.name}` : ""}
+        </option>
+        {eligible.map((m) => (
+          <option key={m.id} value={m.id} disabled={!m.available}>
+            {m.name}
+            {!m.available && " (geplant)"}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+void MODELS;

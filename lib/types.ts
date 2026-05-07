@@ -327,6 +327,10 @@ export interface Workflow {
   status: WorkflowStatus;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
+  // Per-workflow default model per task. Overrides the user's global
+  // model_preferences. Per-node config.model_id overrides this in
+  // turn. Empty record = inherit user defaults.
+  default_model_preferences: Record<string, string>;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
