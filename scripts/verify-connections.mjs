@@ -118,7 +118,7 @@ await fetch(
   { method: "DELETE", headers: HEADERS },
 );
 
-const upsert = await fetch(`${REST}/service_connections`, {
+const upsert = await fetch(`${REST}/service_connections?on_conflict=user_id,provider`, {
   method: "POST",
   headers: {
     ...HEADERS,
@@ -167,7 +167,7 @@ check(
 
 // Idempotency: upsert again with same (user_id, provider) — should
 // update, not duplicate.
-const upsert2 = await fetch(`${REST}/service_connections`, {
+const upsert2 = await fetch(`${REST}/service_connections?on_conflict=user_id,provider`, {
   method: "POST",
   headers: {
     ...HEADERS,
