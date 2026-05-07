@@ -1,27 +1,6 @@
-import Link from "next/link";
 import { listWorkflows } from "@/lib/workflows";
 import { createDemoWorkflow, createWorkflow } from "./actions";
-
-const STATUS_TONE: Record<string, string> = {
-  draft: "border-rule bg-paper-2 text-ink-3",
-  enabled: "border-action/40 bg-action-soft text-action",
-  disabled: "border-bad/30 bg-bad/5 text-bad",
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  draft: "Entwurf",
-  enabled: "Aktiv",
-  disabled: "Deaktiviert",
-};
-
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleString("de-DE", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+import { WorkflowRow } from "./workflow-row";
 
 export default async function WorkflowsListPage() {
   const workflows = await listWorkflows();
@@ -73,37 +52,16 @@ export default async function WorkflowsListPage() {
         ) : (
           <ul className="overflow-hidden rounded border border-rule bg-paper">
             {workflows.map((w) => (
-              <li
+              <WorkflowRow
                 key={w.id}
-                className="border-b border-rule-soft last:border-0"
-              >
-                <Link
-                  href={`/integrations/workflows/${w.id}`}
-                  className="grid grid-cols-[1fr_auto_auto] items-center gap-4 px-4 py-4 transition hover:bg-paper-2"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-ink-1">
-                      {w.name}
-                    </p>
-                    {w.description && (
-                      <p className="truncate text-xs text-ink-4">
-                        {w.description}
-                      </p>
-                    )}
-                    <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-4">
-                      {w.nodes.length} Nodes · {w.edges.length} Verbindungen
-                    </p>
-                  </div>
-                  <span
-                    className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${STATUS_TONE[w.status]}`}
-                  >
-                    {STATUS_LABEL[w.status]}
-                  </span>
-                  <span className="font-mono text-xs text-ink-3">
-                    {fmtDate(w.updated_at)}
-                  </span>
-                </Link>
-              </li>
+                id={w.id}
+                name={w.name}
+                description={w.description}
+                status={w.status}
+                nodeCount={w.nodes.length}
+                edgeCount={w.edges.length}
+                updatedAt={w.updated_at}
+              />
             ))}
           </ul>
         )}

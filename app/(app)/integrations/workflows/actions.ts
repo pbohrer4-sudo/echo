@@ -226,3 +226,29 @@ export async function deleteWorkflow(id: string) {
   revalidatePath("/integrations/workflows");
   redirect("/integrations/workflows");
 }
+
+// Inline status change from the workflows list. Doesn't redirect so
+// the list view stays put — just revalidates so the row reflects the
+// new status on next render.
+export async function setWorkflowStatus(id: string, status: WorkflowStatus) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("workflows")
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+  revalidatePath("/integrations/workflows");
+  revalidatePath(`/integrations/workflows/${id}`);
+}
+
+// Same delete logic, but without the redirect — used from the list
+// where we stay on the page after the row is gone.
+export async function deleteWorkflowInPlace(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("workflows")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+  revalidatePath("/integrations/workflows");
+}
