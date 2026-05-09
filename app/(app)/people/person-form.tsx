@@ -590,7 +590,7 @@ export function PersonForm({
           }
           renderItem={(a, i) => (
             <div className="space-y-2 rounded border border-rule-soft bg-paper-2 p-3">
-              <div className="grid grid-cols-[140px_1fr_auto] gap-2">
+              <div className="flex items-center justify-between gap-2">
                 <select
                   value={a.label}
                   onChange={(e) => {
@@ -598,7 +598,7 @@ export function PersonForm({
                     next[i] = { ...next[i], label: e.target.value };
                     setAddresses(next);
                   }}
-                  className={selectClass}
+                  className={`${selectClass} w-36`}
                 >
                   {ADDRESS_LABELS.map((l) => (
                     <option key={l} value={l}>
@@ -606,7 +606,6 @@ export function PersonForm({
                     </option>
                   ))}
                 </select>
-                <span />
                 <RemoveButton
                   onClick={() =>
                     setAddresses(addresses.filter((_, j) => j !== i))
