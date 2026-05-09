@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getDebriefContext } from "@/lib/debriefs";
-import { DebriefFlow } from "@/components/debrief-flow";
+import { AlarmClock } from "@/components/alarm-clock";
+import { DebriefTrigger } from "@/components/debrief-trigger";
 
 export default async function DebriefPage() {
   const supabase = await createClient();
@@ -16,20 +17,22 @@ export default async function DebriefPage() {
   const context = await getDebriefContext();
 
   return (
-    <div className="px-8 py-10">
-      <div className="mx-auto max-w-3xl space-y-10">
-        <header className="space-y-2">
-          <p className="t-label">Abendlicher Debrief</p>
-          <h1 className="text-3xl font-semibold tracking-tight text-ink-1">
-            Heute Abend
+    <div className="px-6 py-8 sm:px-8 sm:py-10">
+      <div className="mx-auto max-w-xl space-y-8">
+        <header className="space-y-1 text-center">
+          <p className="t-label">Gute Nacht</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-ink-1">
+            Wecker für morgen
           </h1>
-          <p className="text-sm text-ink-3">
-            Sprich frei. ECHO strukturiert mit, du bestätigst pro Schritt.
-            Ziel: 3 Minuten, hart cap bei 5.
-          </p>
         </header>
 
-        <DebriefFlow displayName={displayName} context={context} />
+        {/* Hero: alarm clock — primary surface, set time + snooze + sound */}
+        <AlarmClock />
+
+        {/* Subtle: debrief CTA below — supporting role, no auto-talk */}
+        <div className="pt-4">
+          <DebriefTrigger displayName={displayName} context={context} />
+        </div>
       </div>
     </div>
   );
