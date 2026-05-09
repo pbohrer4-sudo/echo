@@ -76,7 +76,12 @@ export function StickySaveBar({
     if (initialRef.current === null) {
       initialRef.current = readFormState(form);
     }
-    const onChange = () => check();
+    const onChange = () => {
+      // Any new edit clears a stale "Speichere…" state — covers the
+      // case where a server action errored and the form re-rendered.
+      setSubmitting((prev) => (prev ? false : prev));
+      check();
+    };
     form.addEventListener("input", onChange);
     form.addEventListener("change", onChange);
     return () => {
