@@ -33,6 +33,7 @@ import {
 } from "@/lib/stakeholder-taxonomy";
 import { StrengthMeterInput } from "@/components/strength-meter";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
+import { StickySaveBar } from "@/components/sticky-save-bar";
 
 interface PersonOption {
   id: string;
@@ -170,6 +171,7 @@ export function PersonForm({
   }
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanSummary, setScanSummary] = useState<string | null>(null);
@@ -264,7 +266,8 @@ export function PersonForm({
   }
 
   return (
-    <form action={action} className="space-y-10">
+    <form ref={formRef} action={action} className="space-y-10">
+      <StickySaveBar formRef={formRef} cancelHref={cancelHref} />
       <input type="hidden" name="scope" value={scope} />
       <input type="hidden" name="phones" value={JSON.stringify(phones)} />
       <input type="hidden" name="emails" value={JSON.stringify(emails)} />

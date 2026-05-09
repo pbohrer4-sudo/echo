@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Organization } from "@/lib/types";
+import { StickySaveBar } from "@/components/sticky-save-bar";
 
 type Action = (formData: FormData) => void | Promise<void>;
 
@@ -42,6 +43,8 @@ export function OrganizationForm({
   const [enrichConfidence, setEnrichConfidence] = useState<
     "high" | "medium" | "low" | null
   >(null);
+
+  const formRef = useRef<HTMLFormElement | null>(null);
 
   function commitTag() {
     const v = tagInput.trim();
@@ -138,7 +141,8 @@ export function OrganizationForm({
   }
 
   return (
-    <form action={action} className="space-y-10">
+    <form ref={formRef} action={action} className="space-y-10">
+      <StickySaveBar formRef={formRef} cancelHref={cancelHref} />
       <input type="hidden" name="tags" value={tags.join(", ")} />
       {justEnriched && <input type="hidden" name="enriched" value="1" />}
 
