@@ -2,18 +2,28 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { RefObject } from "react";
 
-// Sticky toolbar that floats at the top of the viewport while the user
-// is scrolled deep into a long form. Stays hidden until the form is
-// dirty (anything has been changed from its initial state) so the
-// chrome stays clean during read-only review.
+// Floating toolbar that pins to the top of the viewport whenever a
+// person/org form is dirty. Two reasons we do this with a portaled
+// `position: fixed` element instead of CSS `position: sticky`:
 //
-// Dirty detection works by snapshotting the form's FormData on first
-// effect, then comparing current FormData against that snapshot on
-// every render. Because the parent form's hidden inputs reflect React
-// state, every state change triggers a re-render → effect fires →
-// snapshot compares fresh.
+// 1. The app shell's <main> has `overflow-x: hidden`, which the
+//    browser auto-promotes to `overflow-y: auto`, making <main> a
+//    scroll container even though it never actually scrolls (the
+//    body scrolls). Sticky descendants stick within <main> and
+//    therefore never engage. Portaling to <body> + fixed sidesteps
+//    that entire failure mode.
+// 2. Fixed positioning escapes any ancestor with transform/filter
+//    that would otherwise capture it. Bulletproof.
+//
+// Dirty detection runs on three signals to catch every kind of edit:
+//   - native input/change events (typed fields, dropdowns)
+//   - the form's render cycle (controlled inputs, JSON hidden fields
+//     for tags / phones / addresses / etc.)
+//   - a 500ms safety poll (catches edge cases like programmatic
+//     state changes from auto-enrich or vCard scan)
 export function StickySaveBar({
   formRef,
   cancelHref,
@@ -28,29 +38,69 @@ export function StickySaveBar({
   const initialRef = useRef<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  // Run on every render so any state change in the parent (controlled
-  // inputs, hidden JSON fields, list mutations) gets picked up. Calling
-  // setDirty with the same value is a no-op in React, so no loop.
+  // Portal target — only render after mount so SSR and the first
+  // client paint agree. document.body is unavailable on the server.
   useEffect(() => {
-    const form = formRef.current;
-    if (!form) return;
+    setMounted(true);
+  }, []);
+
+  function readFormState(form: HTMLFormElement): string {
     const fd = new FormData(form);
     const params = new URLSearchParams();
     for (const [key, val] of fd.entries()) {
       params.append(key, typeof val === "string" ? val : "");
     }
-    const current = params.toString();
+    return params.toString();
+  }
+
+  function check() {
+    const form = formRef.current;
+    if (!form) return;
+    const current = readFormState(form);
     if (initialRef.current === null) {
       initialRef.current = current;
       return;
     }
     const next = current !== initialRef.current;
-    if (next !== dirty) setDirty(next);
+    setDirty((prev) => (prev === next ? prev : next));
+  }
+
+  // Capture initial snapshot once + attach native listeners. The
+  // listeners catch most edits (typing / selecting) instantly without
+  // waiting for a re-render.
+  useEffect(() => {
+    const form = formRef.current;
+    if (!form) return;
+    if (initialRef.current === null) {
+      initialRef.current = readFormState(form);
+    }
+    const onChange = () => check();
+    form.addEventListener("input", onChange);
+    form.addEventListener("change", onChange);
+    return () => {
+      form.removeEventListener("input", onChange);
+      form.removeEventListener("change", onChange);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formRef]);
+
+  // Re-check after every parent render — captures React-only state
+  // changes (tag X-button removal, list item add/remove, auto-enrich
+  // populating fields) that don't emit native input events.
+  useEffect(() => {
+    check();
   });
 
-  // Watch for native form submit so the bar's button-disabled state
-  // mirrors the bottom button without us having to wire a callback up.
+  // Belt-and-suspenders 500ms poll for the rare case both above miss.
+  useEffect(() => {
+    const id = window.setInterval(check, 500);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Track submit state so the bar's button echoes the bottom one.
   useEffect(() => {
     const form = formRef.current;
     if (!form) return;
@@ -61,15 +111,21 @@ export function StickySaveBar({
     return () => form.removeEventListener("submit", onSubmit);
   }, [formRef]);
 
-  if (!dirty) return null;
+  if (!mounted || !dirty) return null;
 
   function handleSave() {
     formRef.current?.requestSubmit();
   }
 
-  return (
-    <div className="sticky top-0 z-30 -mx-6 mb-4 border-b border-rule bg-paper-2/95 px-6 py-2.5 backdrop-blur sm:-mx-8 sm:px-8">
-      <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
+  // Sidebar in (app)/layout.tsx is `w-56` = 14rem at every breakpoint,
+  // so the bar always sits to its right.
+  const bar = (
+    <div
+      role="region"
+      aria-label="Ungespeicherte Änderungen"
+      className="fixed left-56 right-0 top-0 z-50 border-b border-rule bg-paper-2/95 shadow-[0_2px_12px_rgba(20,17,13,0.04)] backdrop-blur"
+    >
+      <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-2.5 sm:px-8">
         <p className="flex items-center gap-2 text-xs text-ink-3">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-action motion-safe:animate-pulse" />
           Ungespeicherte Änderungen
@@ -93,4 +149,6 @@ export function StickySaveBar({
       </div>
     </div>
   );
+
+  return createPortal(bar, document.body);
 }
