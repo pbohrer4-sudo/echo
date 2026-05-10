@@ -26,6 +26,12 @@ import {
   SocialList,
 } from "./contact-fields";
 import { WhatsappSendBox } from "@/components/whatsapp-send-box";
+import {
+  SelfProfileTabs,
+  parseSelfTab,
+  type SelfTab,
+} from "@/components/self-profile-tabs";
+import { PaymentsTab } from "@/components/payments-tab";
 
 const SCOPE_LABEL: Record<Scope, string> = {
   work: "Beruflich",
@@ -263,12 +269,22 @@ function initials(name: string): string {
 
 export default async function PersonDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   const { id } = await params;
+  const { tab } = await searchParams;
   const person = await getPersonById(id);
   if (!person) notFound();
+
+  // Tab state is only meaningful for the self profile. For other
+  // people we always render the full flat layout — they don't have
+  // streaks / payments / settings tabs.
+  const activeTab: SelfTab = person.is_self
+    ? parseSelfTab(tab)
+    : "profile";
 
   const relatedIds = (person.relationships ?? []).map(
     (r) => r.related_person_id,
@@ -282,6 +298,13 @@ export default async function PersonDetailPage({
       getPeopleMap(relatedIds),
       findSimilarPeople(id, person.tags ?? []),
     ]);
+
+  // Sub-flags so the JSX stays readable. For non-self people, every
+  // section renders as before. For self, sections are scoped to the
+  // active tab.
+  const showProfileBody = !person.is_self || activeTab === "profile";
+  const showStreaksTab = person.is_self && activeTab === "streaks";
+  const showPaymentsTab = person.is_self && activeTab === "payments";
 
   return (
     <div className="px-8 py-10">
@@ -373,14 +396,6 @@ export default async function PersonDetailPage({
 
           <div className="flex flex-col items-end gap-3">
             <div className="flex items-center gap-2">
-              {person.is_self && (
-                <Link
-                  href="/settings"
-                  className="rounded border border-rule px-3 py-1.5 text-xs text-ink-2 transition hover:border-ink-3 hover:text-ink-1"
-                >
-                  Settings
-                </Link>
-              )}
               <Link
                 href={`/people/${person.id}/edit`}
                 className="rounded border border-rule px-3 py-1.5 text-xs text-ink-2 transition hover:border-ink-3 hover:text-ink-1"
@@ -396,6 +411,10 @@ export default async function PersonDetailPage({
         </div>
 
         {person.is_self && (
+          <SelfProfileTabs personId={person.id} activeTab={activeTab} />
+        )}
+
+        {showStreaksTab && (
           <section>
             <div className="section-head">
               <span className="t-label">Streaks · Erfolge · XP</span>
@@ -405,29 +424,33 @@ export default async function PersonDetailPage({
           </section>
         )}
 
-        <div className="grid gap-10 md:grid-cols-2">
-          <section className="space-y-3">
-            <div className="section-head">
-              <span className="t-label">Telefon</span>
-              <span className="rule" />
-            </div>
-            <PhoneList phones={person.phones ?? []} />
-            <WhatsappSendBox
-              personId={person.id}
-              phones={person.phones ?? []}
-            />
-          </section>
+        {showPaymentsTab && <PaymentsTab />}
 
-          <section>
-            <div className="section-head">
-              <span className="t-label">Email</span>
-              <span className="rule" />
-            </div>
-            <EmailList emails={person.emails ?? []} />
-          </section>
-        </div>
+        {showProfileBody && (
+          <div className="grid gap-10 md:grid-cols-2">
+            <section className="space-y-3">
+              <div className="section-head">
+                <span className="t-label">Telefon</span>
+                <span className="rule" />
+              </div>
+              <PhoneList phones={person.phones ?? []} />
+              <WhatsappSendBox
+                personId={person.id}
+                phones={person.phones ?? []}
+              />
+            </section>
 
-        {(person.addresses?.length ?? 0) > 0 && (
+            <section>
+              <div className="section-head">
+                <span className="t-label">Email</span>
+                <span className="rule" />
+              </div>
+              <EmailList emails={person.emails ?? []} />
+            </section>
+          </div>
+        )}
+
+        {showProfileBody && (person.addresses?.length ?? 0) > 0 && (
           <section>
             <div className="section-head">
               <span className="t-label">Adressen</span>
@@ -437,7 +460,7 @@ export default async function PersonDetailPage({
           </section>
         )}
 
-        {(person.socials?.length ?? 0) > 0 && (
+        {showProfileBody && (person.socials?.length ?? 0) > 0 && (
           <section>
             <div className="section-head">
               <span className="t-label">Social</span>
@@ -447,29 +470,31 @@ export default async function PersonDetailPage({
           </section>
         )}
 
-        <div className="grid gap-10 md:grid-cols-2">
-          <section>
-            <div className="section-head">
-              <span className="t-label">Wichtige Daten</span>
-              <span className="rule" />
-            </div>
-            <DateList
-              dates={person.important_dates ?? []}
-              personId={person.id}
-            />
-          </section>
+        {showProfileBody && (
+          <div className="grid gap-10 md:grid-cols-2">
+            <section>
+              <div className="section-head">
+                <span className="t-label">Wichtige Daten</span>
+                <span className="rule" />
+              </div>
+              <DateList
+                dates={person.important_dates ?? []}
+                personId={person.id}
+              />
+            </section>
 
-          <section>
-            <div className="section-head">
-              <span className="t-label">Beziehungen</span>
-              <span className="rule" />
-            </div>
-            <RelationshipList
-              relationships={person.relationships ?? []}
-              peopleMap={peopleMap}
-            />
-          </section>
-        </div>
+            <section>
+              <div className="section-head">
+                <span className="t-label">Beziehungen</span>
+                <span className="rule" />
+              </div>
+              <RelationshipList
+                relationships={person.relationships ?? []}
+                peopleMap={peopleMap}
+              />
+            </section>
+          </div>
+        )}
 
         {!person.is_self && hasStakeholderInfo(person) && (
           <section>
@@ -511,7 +536,7 @@ export default async function PersonDetailPage({
           </section>
         )}
 
-        {(person.notes || person.notes_summary) && (
+        {showProfileBody && (person.notes || person.notes_summary) && (
           <section>
             <div className="section-head">
               <span className="t-label">Notizen</span>
@@ -531,7 +556,7 @@ export default async function PersonDetailPage({
           </section>
         )}
 
-        {person.expected_cadence_days && (
+        {showProfileBody && person.expected_cadence_days && (
           <section>
             <div className="section-head">
               <span className="t-label">Cadence</span>
@@ -543,33 +568,37 @@ export default async function PersonDetailPage({
           </section>
         )}
 
-        <div className="grid gap-10 md:grid-cols-2">
-          <section>
-            <div className="section-head">
-              <span className="t-label">Erinnerungen</span>
-              <span className="rule" />
-            </div>
-            <PersonReminders reminders={reminders} />
-          </section>
+        {showProfileBody && (
+          <div className="grid gap-10 md:grid-cols-2">
+            <section>
+              <div className="section-head">
+                <span className="t-label">Erinnerungen</span>
+                <span className="rule" />
+              </div>
+              <PersonReminders reminders={reminders} />
+            </section>
 
-          <section>
-            <div className="section-head">
-              <span className="t-label">Aufgaben</span>
-              <span className="rule" />
-            </div>
-            <PersonTodos todos={todos} />
-          </section>
-        </div>
-
-        <section>
-          <div className="section-head">
-            <span className="t-label">Timeline</span>
-            <span className="rule" />
+            <section>
+              <div className="section-head">
+                <span className="t-label">Aufgaben</span>
+                <span className="rule" />
+              </div>
+              <PersonTodos todos={todos} />
+            </section>
           </div>
-          <PersonTimeline interactions={interactions} notes={notes} />
-        </section>
+        )}
 
-        {similar.length > 0 && (
+        {showProfileBody && (
+          <section>
+            <div className="section-head">
+              <span className="t-label">Timeline</span>
+              <span className="rule" />
+            </div>
+            <PersonTimeline interactions={interactions} notes={notes} />
+          </section>
+        )}
+
+        {showProfileBody && similar.length > 0 && (
           <section>
             <div className="section-head">
               <span className="t-label">Ähnliche Personen</span>
