@@ -224,6 +224,104 @@ export async function getPaymentsTabStatus(): Promise<TabStatus> {
   return { chances: [], problems: [] };
 }
 
+export async function getSettingsTabStatus(): Promise<TabStatus> {
+  const supabase = await createClient();
+  const chances: TabSignal[] = [];
+  const problems: TabSignal[] = [];
+
+  // Surface state about the things the Settings page actually
+  // controls — voice/debrief/keys/integrations — so the user sees
+  // what's missing or live at a glance.
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select(
+      "display_name, voice_id, debrief_time, claude_key_byo, elevenlabs_key_byo",
+    )
+    .maybeSingle();
+
+  if (!profile?.display_name) {
+    problems.push({
+      icon: "🪪",
+      label: "Kein Anzeigename gesetzt",
+      detail: "ECHO spricht dich ohne Namen an",
+    });
+  }
+  if (!profile?.voice_id) {
+    chances.push({
+      icon: "🎙",
+      label: "Eigene Voice setzen",
+      detail: "Sarah Eve ist Default — du kannst eine andere ElevenLabs-Stimme wählen",
+    });
+  }
+  if (!profile?.debrief_time) {
+    chances.push({
+      icon: "⏰",
+      label: "Debrief-Zeit setzen",
+      detail: "Wann ECHO dich abends ans Debrief erinnert",
+    });
+  }
+  if (!profile?.claude_key_byo) {
+    chances.push({
+      icon: "🔑",
+      label: "Eigenen Anthropic-Key",
+      detail: "Optional — sonst läuft alles über den shared default",
+    });
+  }
+  if (!profile?.elevenlabs_key_byo) {
+    chances.push({
+      icon: "🔑",
+      label: "Eigenen ElevenLabs-Key",
+      detail: "Optional — höheres TTS-Quota mit eigenem Key",
+    });
+  }
+
+  // Connection status — show how many providers are live vs how
+  // many sit at "stub" (mostly auf catalog-only Phase).
+  const { data: conns } = await supabase
+    .from("service_connections")
+    .select("provider, status, access_token, last_error")
+    .is("deleted_at", null);
+  if (conns) {
+    const live = conns.filter(
+      (c) =>
+        c.status === "connected" &&
+        !(c.access_token ?? "").startsWith("stub_"),
+    ).length;
+    const stubs = conns.filter((c) =>
+      (c.access_token ?? "").startsWith("stub_"),
+    ).length;
+    const errors = conns.filter((c) => c.status === "error" || c.last_error).length;
+
+    if (live > 0) {
+      chances.push({
+        icon: "🔌",
+        label: `${live} echte Verbindung${live === 1 ? "" : "en"}`,
+        detail: "Calendar/Gmail/WhatsApp-Sync läuft",
+        href: "/connections",
+      });
+    }
+    if (stubs > 0) {
+      chances.push({
+        icon: "🧪",
+        label: `${stubs} Stub-Verbindung${stubs === 1 ? "" : "en"}`,
+        detail: "OAuth-Credentials eintragen um echte Daten zu pullen",
+        href: "/connections",
+      });
+    }
+    if (errors > 0) {
+      problems.push({
+        icon: "🚨",
+        label: `${errors} Verbindung${errors === 1 ? "" : "en"} mit Fehler`,
+        detail: "Token abgelaufen oder Provider-Quota — neu connecten",
+        href: "/connections",
+      });
+    }
+  }
+
+  return { chances, problems };
+}
+
 interface UpcomingBday {
   name: string;
   daysAway: number;

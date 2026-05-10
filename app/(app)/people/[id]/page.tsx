@@ -32,11 +32,13 @@ import {
   type SelfTab,
 } from "@/components/self-profile-tabs";
 import { PaymentsTab } from "@/components/payments-tab";
+import { SettingsTab } from "@/components/settings-tab";
 import { TabStatusOverview } from "@/components/tab-status-overview";
 import {
   getProfileTabStatus,
   getStreaksTabStatus,
   getPaymentsTabStatus,
+  getSettingsTabStatus,
   type TabStatus,
 } from "@/lib/tab-status";
 
@@ -279,10 +281,10 @@ export default async function PersonDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; saved?: string; error?: string }>;
 }) {
   const { id } = await params;
-  const { tab } = await searchParams;
+  const { tab, saved, error: flashError } = await searchParams;
   const person = await getPersonById(id);
   if (!person) notFound();
 
@@ -312,6 +314,7 @@ export default async function PersonDetailPage({
   const showProfileBody = !person.is_self || activeTab === "profile";
   const showStreaksTab = person.is_self && activeTab === "streaks";
   const showPaymentsTab = person.is_self && activeTab === "payments";
+  const showSettingsTab = person.is_self && activeTab === "settings";
 
   // Status overview per tab. Only compute the one we'll actually
   // render so non-active tabs don't pay for their queries.
@@ -322,6 +325,8 @@ export default async function PersonDetailPage({
     else if (activeTab === "streaks") tabStatus = await getStreaksTabStatus();
     else if (activeTab === "payments")
       tabStatus = await getPaymentsTabStatus();
+    else if (activeTab === "settings")
+      tabStatus = await getSettingsTabStatus();
   }
 
   return (
@@ -463,6 +468,19 @@ export default async function PersonDetailPage({
               />
             )}
             <PaymentsTab />
+          </div>
+        )}
+
+        {showSettingsTab && (
+          <div
+            key="tab-settings"
+            className="animate-in fade-in slide-in-from-top-2 duration-300 space-y-8"
+          >
+            {tabStatus && <TabStatusOverview status={tabStatus} />}
+            <SettingsTab
+              selfPersonId={person.id}
+              flash={{ saved, error: flashError }}
+            />
           </div>
         )}
 

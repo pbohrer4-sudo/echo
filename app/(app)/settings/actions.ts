@@ -59,11 +59,18 @@ export async function updateSettings(formData: FormData) {
     .update(update)
     .eq("id", user.id);
 
+  // Optional return_to lets the inline-tab variant of this form
+  // route back to /people/[self.id]?tab=settings instead of the
+  // standalone /settings page.
+  const returnTo = trimOrNull(formData.get("return_to"));
+  const base = returnTo ?? "/settings";
+  const join = base.includes("?") ? "&" : "?";
+
   if (error) {
-    redirect(`/settings?error=${encodeURIComponent(error.message)}`);
+    redirect(`${base}${join}error=${encodeURIComponent(error.message)}`);
   }
 
   revalidatePath("/settings");
   revalidatePath("/", "layout");
-  redirect("/settings?saved=1");
+  redirect(`${base}${join}saved=1`);
 }

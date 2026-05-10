@@ -1,18 +1,16 @@
 import Link from "next/link";
 
-// Tab navigation rendered only for the self-person profile. Each tab
-// maps to a `?tab=…` query param except Settings, which is a top-
-// level page (its own deep config screen). The Settings tab still
-// renders inline so visually it lives "under the name" like the
-// others — clicking just navigates out.
+// Tab navigation rendered only for the self-person profile. All four
+// tabs map to a `?tab=…` query param — including Settings, which now
+// renders inline as a screen-within-screen rather than navigating
+// out to /settings.
 
-export type SelfTab = "profile" | "streaks" | "payments";
+export type SelfTab = "profile" | "streaks" | "payments" | "settings";
 
 interface TabDef {
-  id: SelfTab | "settings";
+  id: SelfTab;
   label: string;
   href: string;
-  external?: boolean;
 }
 
 export function SelfProfileTabs({
@@ -37,8 +35,7 @@ export function SelfProfileTabs({
     {
       id: "settings",
       label: "Settings",
-      href: "/settings",
-      external: true,
+      href: `/people/${personId}?tab=settings`,
     },
   ];
 
@@ -49,7 +46,7 @@ export function SelfProfileTabs({
       className="flex flex-wrap gap-1 border-b border-rule"
     >
       {tabs.map((t) => {
-        const isActive = !t.external && activeTab === t.id;
+        const isActive = activeTab === t.id;
         const className = `relative -mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition ${
           isActive
             ? "border-action font-medium text-ink-1"
@@ -58,11 +55,6 @@ export function SelfProfileTabs({
         return (
           <Link key={t.id} href={t.href} className={className} role="tab">
             {t.label}
-            {t.external && (
-              <span aria-hidden className="text-[10px] text-ink-4">
-                ↗
-              </span>
-            )}
           </Link>
         );
       })}
@@ -73,6 +65,8 @@ export function SelfProfileTabs({
 // Validate + narrow the `?tab=` query param so callers don't have
 // to repeat the string list.
 export function parseSelfTab(raw: string | undefined): SelfTab {
-  if (raw === "streaks" || raw === "payments") return raw;
+  if (raw === "streaks" || raw === "payments" || raw === "settings") {
+    return raw;
+  }
   return "profile";
 }
