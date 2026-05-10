@@ -215,6 +215,10 @@ export function VoiceOrb() {
   const [error, setError] = useState<string | null>(null);
   const [composer, setComposer] = useState("");
   const [scanning, setScanning] = useState(false);
+  // Pixel-Abstand vom unteren Rand des Scroll-Containers. > Schwelle
+  // → Fade + Chevron-Knopf anzeigen damit der User merkt dass unten
+  // noch Content folgt (z.B. weitere Confirmation-Cards).
+  const [scrolledFromBottom, setScrolledFromBottom] = useState(0);
 
   const recognitionRef = useRef<RecognitionInstance | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -258,6 +262,37 @@ export function VoiceOrb() {
     if (!el) return;
     el.scrollTop = el.scrollHeight;
   }, [transcript, interim, pendingToolCalls.length, orbState]);
+
+  // Track scroll-position relative to bottom. Recomputes on scroll AND
+  // when content grows (ResizeObserver) — die Confirmation-Card kann
+  // erst nachträglich groß werden, wenn Claude noch Items reinträgt.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    function recompute() {
+      const dist = el!.scrollHeight - el!.scrollTop - el!.clientHeight;
+      setScrolledFromBottom(dist);
+    }
+    recompute();
+    el.addEventListener("scroll", recompute, { passive: true });
+    const ro = new ResizeObserver(recompute);
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    return () => {
+      el.removeEventListener("scroll", recompute);
+      ro.disconnect();
+    };
+  }, []);
+
+  function scrollToBottom() {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }
+
+  // Schwelle: > 40px Abstand zum Boden = Indikator zeigen. 40 ist grob
+  // unterhalb der Sichtbarkeit einer halben Confirmation-Card-Zeile.
+  const showScrollHint = scrolledFromBottom > 40;
 
   // The chat history we send to the model: only user/assistant turns,
   // tool-call action records are CRM bookkeeping and don't belong in
@@ -746,10 +781,14 @@ export function VoiceOrb() {
         </div>
       </div>
 
-      {/* Transcript — scrollable LLM-style thread */}
+      {/* Transcript — scrollable LLM-style thread.
+          Outer wrapper ist `relative` damit der Scroll-Hinweis
+          (Fade + Chevron) als overlay drüber liegen kann ohne in den
+          Scroll-Content reinzulaufen. */}
+      <div className="relative min-h-0 flex-1">
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-4 py-6 sm:px-8"
+        className="h-full overflow-y-auto px-4 py-6 sm:px-8"
       >
         <div className="mx-auto flex max-w-2xl flex-col gap-5">
           {isEmpty && (
@@ -914,6 +953,38 @@ export function VoiceOrb() {
             </p>
           )}
         </div>
+      </div>
+      {/* Scroll-Hint: Fade-Gradient unten + Chevron-Knopf. Beide nur
+          wenn der User merklich vom unteren Rand entfernt ist. Fade
+          ist non-interaktiv, der Knopf klickt zum sanften Scroll. */}
+      {showScrollHint && (
+        <>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-paper to-paper/0"
+          />
+          <button
+            type="button"
+            onClick={scrollToBottom}
+            aria-label="Nach unten scrollen"
+            className="absolute bottom-3 right-4 inline-flex h-9 items-center gap-1.5 rounded-full border border-rule bg-paper px-3 text-xs text-ink-2 shadow-[0_2px_8px_rgba(20,17,13,0.08)] transition hover:border-action hover:text-action"
+          >
+            <span>weiter unten</span>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-3.5 w-3.5"
+              aria-hidden
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+        </>
+      )}
       </div>
 
       {/* Composer — voice as hero, text as fallback */}
