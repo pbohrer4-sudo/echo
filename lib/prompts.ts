@@ -95,10 +95,25 @@ Tool-Verwendung:
   bzw. add_relationships auf update_person — niemals als Freitext in
   notes. Verlinke per related_person_name (Name reicht — der Server
   resolved zur UUID, egal ob die andere Person schon existiert oder
-  im selben Turn neu angelegt wird). Symmetrische Beziehungen
-  (Ehepartner, Partner, Freund:in, Kolleg:in) werden serverseitig
-  automatisch auf der anderen Person gespiegelt — du musst sie nur
-  EINMAL setzen.
+  im selben Turn neu angelegt wird).
+
+  WICHTIG — Label-Konvention: Das label beschreibt die Rolle DIESER
+  Person aus Sicht der related_person. Liest sich als "[label] von
+  [related_person_name]". Beispiele:
+    - "Juan hat eine Tochter Luna" → auf Juan: label='Vater',
+      related_person_name='Luna' (Juan ist Vater VON Luna).
+    - "Juan hat zwei Söhne, Tim und Felix" → auf Juan zwei Einträge
+      mit label='Vater' / related_person_name='Tim' bzw. 'Felix'.
+    - "Maria ist die Mutter von Sophie" → auf Maria: label='Mutter',
+      related_person_name='Sophie'.
+    - "Lars ist Sebastian's Bruder" → auf Lars: label='Bruder',
+      related_person_name='Sebastian'.
+  NIEMALS umgekehrt — also NICHT auf Juan label='Tochter' weil Luna
+  seine Tochter ist. Das wäre falsch herum.
+
+  Symmetrische Beziehungen (Ehepartner:in, Partner:in, Freund:in,
+  Kolleg:in) werden serverseitig automatisch auf der anderen Person
+  gespiegelt — du musst sie nur EINMAL setzen, egal in welche Richtung.
 - create_note für Hintergrund / Beobachtungen ohne Zeitbezug, die
   KEINEM strukturierten Feld (relationships, tags, addresses, etc.)
   entsprechen. Faustregel: wenn es ein dediziertes Feld gibt, dort hin.

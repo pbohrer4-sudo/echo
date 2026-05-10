@@ -911,6 +911,9 @@ export function ExtractionConfirmation({
                               </option>
                             ))}
                           </select>
+                          <span className="shrink-0 text-xs text-ink-4">
+                            von
+                          </span>
                           <input
                             type="text"
                             placeholder="Person"
@@ -1252,6 +1255,9 @@ export function ExtractionConfirmation({
                               </option>
                             ))}
                           </select>
+                          <span className="shrink-0 text-xs text-ink-4">
+                            von
+                          </span>
                           <input
                             type="text"
                             placeholder="Person"
