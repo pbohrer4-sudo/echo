@@ -753,7 +753,7 @@ export function VoiceOrb() {
   const isEmpty = allSessions.length === 0 && !interim;
 
   return (
-    <div className="flex h-full w-full flex-col">
+    <div className="relative flex h-full w-full flex-col">
       {/* Header strip — voice-first messaging + clear button */}
       <div className="flex items-center justify-between gap-3 border-b border-rule px-6 py-3">
         <div className="flex items-center gap-2">
@@ -781,14 +781,12 @@ export function VoiceOrb() {
         </div>
       </div>
 
-      {/* Transcript — scrollable LLM-style thread.
-          Outer wrapper ist `relative` damit der Scroll-Hinweis
-          (Fade + Chevron) als overlay drüber liegen kann ohne in den
-          Scroll-Content reinzulaufen. */}
-      <div className="relative min-h-0 flex-1">
+      {/* Transcript — scrollable LLM-style thread. Scroll-Hint
+          (Fade + Chevron) sind absolute Children der Voice-Orb-Root,
+          positioniert relativ zum Composer-Boden. */}
       <div
         ref={scrollRef}
-        className="h-full overflow-y-auto px-4 py-6 sm:px-8"
+        className="flex-1 overflow-y-auto px-4 py-6 sm:px-8"
       >
         <div className="mx-auto flex max-w-2xl flex-col gap-5">
           {isEmpty && (
@@ -954,38 +952,33 @@ export function VoiceOrb() {
           )}
         </div>
       </div>
-      {/* Scroll-Hint: Fade-Gradient unten + Chevron-Knopf. Beide nur
-          wenn der User merklich vom unteren Rand entfernt ist. Fade
-          ist non-interaktiv, der Knopf klickt zum sanften Scroll. */}
+
+      {/* Scroll-Hint: erscheint nur wenn der Verlauf merklich nach
+          unten weiterläuft. Klick scrollt sanft ans Ende. Positioned
+          absolute zur Voice-Orb-Root, sitzt knapp oberhalb der
+          Composer-Bar damit es nicht den Orb verdeckt. */}
       {showScrollHint && (
-        <>
-          <div
+        <button
+          type="button"
+          onClick={scrollToBottom}
+          aria-label="Nach unten scrollen"
+          className="absolute bottom-[170px] right-6 z-10 inline-flex h-9 items-center gap-1.5 rounded-full border border-rule bg-paper px-3 text-xs text-ink-2 shadow-[0_2px_12px_rgba(20,17,13,0.10)] transition hover:border-action hover:text-action"
+        >
+          <span>weiter unten</span>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-3.5 w-3.5"
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-paper to-paper/0"
-          />
-          <button
-            type="button"
-            onClick={scrollToBottom}
-            aria-label="Nach unten scrollen"
-            className="absolute bottom-3 right-4 inline-flex h-9 items-center gap-1.5 rounded-full border border-rule bg-paper px-3 text-xs text-ink-2 shadow-[0_2px_8px_rgba(20,17,13,0.08)] transition hover:border-action hover:text-action"
           >
-            <span>weiter unten</span>
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-3.5 w-3.5"
-              aria-hidden
-            >
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </button>
-        </>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
       )}
-      </div>
 
       {/* Composer — voice as hero, text as fallback */}
       <div className="border-t border-rule bg-paper-2 px-4 py-4 sm:px-8">
