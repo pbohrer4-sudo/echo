@@ -36,7 +36,7 @@ export default async function AppLayout({
 
   return (
     <div className="flex min-h-screen">
-      <aside className="sticky top-0 flex h-screen w-56 shrink-0 flex-col justify-between overflow-y-auto border-r border-rule bg-paper px-5 py-6">
+      <aside className="sticky top-0 flex h-screen w-56 shrink-0 flex-col overflow-y-auto border-r border-rule bg-paper px-5 py-6">
         <div className="space-y-8">
           <Link
             href="/"
@@ -47,7 +47,7 @@ export default async function AppLayout({
           <SearchTrigger />
           <nav className="flex flex-col gap-1 text-sm">
             <NavLink href="/">Voice</NavLink>
-            <NavLink href="/debrief">Debrief</NavLink>
+            <NavLink href="/debrief">Wecker</NavLink>
             <NavLink href="/people">Personen</NavLink>
             <NavLink href="/organizations">Organisationen</NavLink>
             <NavLink href="/pipelines">Pipelines</NavLink>
@@ -61,47 +61,46 @@ export default async function AppLayout({
             <NavLink href="/models">Modelle</NavLink>
           </nav>
         </div>
-
-        <div className="space-y-3">
+      </aside>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Sticky topbar — Profil + Account oben rechts, scrollt mit
+            content nicht weg. Avatar führt zur Profil-Seite, Email dient
+            als Account-Anzeige, Logout direkt erreichbar. */}
+        <header className="sticky top-0 z-40 flex items-center justify-end gap-3 border-b border-rule bg-paper/95 px-6 py-2 backdrop-blur">
           <Link
             href="/profile"
-            className="flex items-center gap-3 rounded border border-rule bg-paper-2 p-2 transition hover:border-action hover:bg-action-soft"
+            className="flex items-center gap-2.5 rounded border border-rule bg-paper-2 px-2 py-1 transition hover:border-action hover:bg-action-soft"
           >
             {self.avatar_url ? (
               <Image
                 src={self.avatar_url}
                 alt={self.name}
-                width={32}
-                height={32}
-                className="h-8 w-8 rounded-full object-cover"
+                width={28}
+                height={28}
+                className="h-7 w-7 rounded-full object-cover"
                 unoptimized
               />
             ) : (
-              <span className="avatar" aria-hidden>
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-action/15 font-mono text-[10px] font-medium uppercase tracking-wider text-action">
                 {initials(self.name)}
               </span>
             )}
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-ink-1">
+            <span className="hidden min-w-0 flex-col text-left sm:flex">
+              <span className="truncate text-xs font-medium text-ink-1">
                 {self.name}
               </span>
-              <span className="block truncate font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3">
-                Mein Profil
+              <span
+                className="truncate font-mono text-[9px] uppercase tracking-[0.12em] text-ink-4"
+                title={user.email ?? ""}
+              >
+                {user.email}
               </span>
             </span>
           </Link>
-          <div className="flex items-center justify-between gap-2">
-            <span
-              className="min-w-0 flex-1 truncate font-mono text-[10px] uppercase tracking-[0.12em] text-ink-4"
-              title={user.email ?? ""}
-            >
-              {user.email}
-            </span>
-            <SignOutButton />
-          </div>
-        </div>
-      </aside>
-      <main className="flex-1 overflow-x-hidden">{children}</main>
+          <SignOutButton />
+        </header>
+        <main className="flex-1 overflow-x-hidden">{children}</main>
+      </div>
       <NotificationManager />
       <SearchModal />
     </div>

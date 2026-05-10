@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Person, Scope } from "@/lib/types";
 import { StrengthMeter } from "@/components/strength-meter";
 
@@ -15,6 +15,81 @@ const SCOPE_LABEL: Record<Scope, string> = {
   personal: "Privat",
   both: "Beides",
 };
+
+// Spalten-Registry. Avatar + Name sind immer da (Avatar als Anker,
+// Name als Klick-Ziel). Alles andere ist togglebar via Popover. Reihen-
+// folge unten = Reihenfolge im Header. Defaults entsprechen der
+// vorherigen Ansicht damit Bestandsuser nichts vermissen.
+type ColumnKey =
+  | "company"
+  | "role"
+  | "scope"
+  | "tags"
+  | "stakeholder"
+  | "priority"
+  | "strength"
+  | "industry"
+  | "cta"
+  | "cadence"
+  | "last_interaction";
+
+interface ColumnDef {
+  key: ColumnKey;
+  label: string;
+  gridSize: string;
+  default: boolean;
+  sortKey?: SortKey;
+  align?: "right";
+}
+
+const COLUMNS: ColumnDef[] = [
+  { key: "company", label: "Firma", gridSize: "minmax(0,1.2fr)", default: true, sortKey: "company" },
+  { key: "role", label: "Rolle", gridSize: "minmax(0,1fr)", default: false },
+  { key: "scope", label: "Scope", gridSize: "minmax(0,0.8fr)", default: true, sortKey: "scope" },
+  { key: "tags", label: "Tags", gridSize: "minmax(0,1.4fr)", default: true },
+  { key: "stakeholder", label: "Stakeholder", gridSize: "minmax(0,1fr)", default: false },
+  { key: "priority", label: "Prio", gridSize: "60px", default: false },
+  { key: "strength", label: "Stärke", gridSize: "70px", default: true },
+  { key: "industry", label: "Industrie", gridSize: "minmax(0,1fr)", default: false },
+  { key: "cta", label: "CTA", gridSize: "minmax(0,1.2fr)", default: false },
+  { key: "cadence", label: "Cadence", gridSize: "80px", default: false },
+  { key: "last_interaction", label: "Letzte Interaktion", gridSize: "120px", default: true, sortKey: "last_interaction_at", align: "right" },
+];
+
+const COLUMNS_STORAGE_KEY = "echo:people:columns:v1";
+
+function loadVisibleColumns(): Set<ColumnKey> {
+  if (typeof window === "undefined") {
+    return new Set(COLUMNS.filter((c) => c.default).map((c) => c.key));
+  }
+  try {
+    const raw = window.localStorage.getItem(COLUMNS_STORAGE_KEY);
+    if (!raw) {
+      return new Set(COLUMNS.filter((c) => c.default).map((c) => c.key));
+    }
+    const parsed = JSON.parse(raw) as string[];
+    if (!Array.isArray(parsed)) {
+      return new Set(COLUMNS.filter((c) => c.default).map((c) => c.key));
+    }
+    const valid = new Set<ColumnKey>();
+    for (const k of parsed) {
+      if (COLUMNS.some((c) => c.key === k)) valid.add(k as ColumnKey);
+    }
+    return valid;
+  } catch {
+    return new Set(COLUMNS.filter((c) => c.default).map((c) => c.key));
+  }
+}
+
+function saveVisibleColumns(set: Set<ColumnKey>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      COLUMNS_STORAGE_KEY,
+      JSON.stringify(Array.from(set)),
+    );
+  } catch {}
+}
 
 function initials(name: string): string {
   return name
@@ -65,6 +140,47 @@ export function PeopleTable({
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  // Hydrate-after-mount, damit SSR und Client-Render auf den Defaults
+  // matchen und localStorage später die User-Auswahl reinzieht.
+  const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(
+    () => new Set(COLUMNS.filter((c) => c.default).map((c) => c.key)),
+  );
+  const [columnsHydrated, setColumnsHydrated] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const columnsBtnRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setVisibleColumns(loadVisibleColumns());
+    setColumnsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!columnsHydrated) return;
+    saveVisibleColumns(visibleColumns);
+  }, [visibleColumns, columnsHydrated]);
+
+  // Click-outside fürs Popover.
+  useEffect(() => {
+    if (!columnsOpen) return;
+    function onDoc(e: MouseEvent) {
+      if (!columnsBtnRef.current) return;
+      if (!columnsBtnRef.current.contains(e.target as Node)) {
+        setColumnsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [columnsOpen]);
+
+  function toggleColumn(key: ColumnKey) {
+    setVisibleColumns((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   // Build the stakeholder-type filter options from what's actually in
   // the dataset — manual taxonomy + any custom values the user added.
@@ -139,6 +255,13 @@ export function PeopleTable({
     }
   }
 
+  // Build the grid-template-columns string from the currently visible
+  // column set. Avatar + Name are always present, in that order.
+  const visibleColDefs = COLUMNS.filter((c) => visibleColumns.has(c.key));
+  const gridTemplate =
+    `28px minmax(0,1.6fr) ` +
+    visibleColDefs.map((c) => c.gridSize).join(" ");
+
   return (
     <div className="space-y-4">
       {activeTag && (
@@ -191,6 +314,62 @@ export function PeopleTable({
             </button>
           ))}
         </div>
+        <div className="relative" ref={columnsBtnRef}>
+          <button
+            type="button"
+            onClick={() => setColumnsOpen((v) => !v)}
+            aria-haspopup="true"
+            aria-expanded={columnsOpen}
+            className="inline-flex h-9 items-center gap-1.5 rounded border border-rule px-3 text-xs text-ink-2 transition hover:border-action hover:text-action"
+          >
+            Spalten
+            <span aria-hidden className="text-[10px]">▾</span>
+          </button>
+          {columnsOpen && (
+            <div
+              role="menu"
+              className="absolute right-0 top-10 z-30 w-56 space-y-1 rounded border border-rule bg-paper p-2 shadow-[0_8px_24px_rgba(20,17,13,0.08)]"
+            >
+              <p className="t-label px-2 pt-1">Sichtbare Spalten</p>
+              {COLUMNS.map((c) => (
+                <label
+                  key={c.key}
+                  className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm text-ink-1 hover:bg-paper-2"
+                >
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.has(c.key)}
+                    onChange={() => toggleColumn(c.key)}
+                    className="h-3.5 w-3.5 rounded border-rule accent-action"
+                  />
+                  <span>{c.label}</span>
+                </label>
+              ))}
+              <div className="flex items-center justify-between border-t border-rule pt-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setVisibleColumns(
+                      new Set(
+                        COLUMNS.filter((c) => c.default).map((c) => c.key),
+                      ),
+                    )
+                  }
+                  className="px-2 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3 transition hover:text-ink-1"
+                >
+                  zurücksetzen
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setColumnsOpen(false)}
+                  className="rounded border border-rule px-2 py-1 text-[10px] text-ink-2 transition hover:border-action hover:text-action"
+                >
+                  Schließen
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <Link
             href="/people/import"
@@ -207,76 +386,77 @@ export function PeopleTable({
         </div>
       </div>
 
-      {(stakeholderOptions.length > 0 || true) && (
-        <div className="flex flex-wrap items-center gap-3 text-xs">
-          {stakeholderOptions.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="t-label mr-1">Stakeholder</span>
-              <button
-                type="button"
-                onClick={() => setStakeholderFilter("all")}
-                className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
-                  stakeholderFilter === "all"
-                    ? "border-action bg-action-soft text-action"
-                    : "border-rule bg-paper text-ink-3 hover:border-ink-3 hover:text-ink-1"
-                }`}
-              >
-                Alle
-              </button>
-              {stakeholderOptions.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() =>
-                    setStakeholderFilter(stakeholderFilter === t ? "all" : t)
-                  }
-                  className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
-                    stakeholderFilter === t
-                      ? "border-action bg-action-soft text-action"
-                      : "border-rule bg-paper text-ink-3 hover:border-ink-3 hover:text-ink-1"
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          )}
-
+      <div className="flex flex-wrap items-center gap-3 text-xs">
+        {stakeholderOptions.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="t-label mr-1">Priorität</span>
-            {(["all", "A", "B", "C", "—"] as const).map((p) => (
+            <span className="t-label mr-1">Stakeholder</span>
+            <button
+              type="button"
+              onClick={() => setStakeholderFilter("all")}
+              className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
+                stakeholderFilter === "all"
+                  ? "border-action bg-action-soft text-action"
+                  : "border-rule bg-paper text-ink-3 hover:border-ink-3 hover:text-ink-1"
+              }`}
+            >
+              Alle
+            </button>
+            {stakeholderOptions.map((t) => (
               <button
-                key={p}
+                key={t}
                 type="button"
-                onClick={() => setPriorityFilter(p)}
+                onClick={() =>
+                  setStakeholderFilter(stakeholderFilter === t ? "all" : t)
+                }
                 className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
-                  priorityFilter === p
+                  stakeholderFilter === t
                     ? "border-action bg-action-soft text-action"
                     : "border-rule bg-paper text-ink-3 hover:border-ink-3 hover:text-ink-1"
                 }`}
               >
-                {p === "all" ? "Alle" : p === "—" ? "Keine" : p}
+                {t}
               </button>
             ))}
           </div>
+        )}
 
-          {(stakeholderFilter !== "all" || priorityFilter !== "all") && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="t-label mr-1">Priorität</span>
+          {(["all", "A", "B", "C", "—"] as const).map((p) => (
             <button
+              key={p}
               type="button"
-              onClick={() => {
-                setStakeholderFilter("all");
-                setPriorityFilter("all");
-              }}
-              className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3 transition hover:text-ink-1"
+              onClick={() => setPriorityFilter(p)}
+              className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
+                priorityFilter === p
+                  ? "border-action bg-action-soft text-action"
+                  : "border-rule bg-paper text-ink-3 hover:border-ink-3 hover:text-ink-1"
+              }`}
             >
-              × alle Filter zurücksetzen
+              {p === "all" ? "Alle" : p === "—" ? "Keine" : p}
             </button>
-          )}
+          ))}
         </div>
-      )}
+
+        {(stakeholderFilter !== "all" || priorityFilter !== "all") && (
+          <button
+            type="button"
+            onClick={() => {
+              setStakeholderFilter("all");
+              setPriorityFilter("all");
+            }}
+            className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3 transition hover:text-ink-1"
+          >
+            × alle Filter zurücksetzen
+          </button>
+        )}
+      </div>
 
       <div className="overflow-hidden rounded border border-rule bg-paper">
-        <div className="grid grid-cols-[28px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1.4fr)_70px_120px] gap-4 border-b border-rule bg-paper-2 px-4 py-2.5">
+        <div
+          className="grid gap-4 border-b border-rule bg-paper-2 px-4 py-2.5"
+          style={{ gridTemplateColumns: gridTemplate }}
+        >
           <span className="t-label" />
           <SortHeader
             label="Name"
@@ -284,27 +464,25 @@ export function PeopleTable({
             dir={sortDir}
             onClick={() => toggleSort("name")}
           />
-          <SortHeader
-            label="Firma"
-            active={sortKey === "company"}
-            dir={sortDir}
-            onClick={() => toggleSort("company")}
-          />
-          <SortHeader
-            label="Scope"
-            active={sortKey === "scope"}
-            dir={sortDir}
-            onClick={() => toggleSort("scope")}
-          />
-          <span className="t-label">Tags</span>
-          <span className="t-label">Stärke</span>
-          <SortHeader
-            label="Letzte Interaktion"
-            active={sortKey === "last_interaction_at"}
-            dir={sortDir}
-            onClick={() => toggleSort("last_interaction_at")}
-            align="right"
-          />
+          {visibleColDefs.map((c) =>
+            c.sortKey ? (
+              <SortHeader
+                key={c.key}
+                label={c.label}
+                active={sortKey === c.sortKey}
+                dir={sortDir}
+                onClick={() => toggleSort(c.sortKey!)}
+                align={c.align}
+              />
+            ) : (
+              <span
+                key={c.key}
+                className={`t-label ${c.align === "right" ? "text-right" : ""}`}
+              >
+                {c.label}
+              </span>
+            ),
+          )}
         </div>
 
         {sorted.length === 0 ? (
@@ -326,7 +504,8 @@ export function PeopleTable({
                   router.push(`/people/${p.id}`);
                 }
               }}
-              className="grid grid-cols-[28px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1.4fr)_70px_120px] cursor-pointer gap-4 border-b border-rule-soft px-4 py-3 transition-colors hover:bg-paper-2 last:border-b-0 focus:bg-paper-2 focus:outline-none"
+              className="grid cursor-pointer gap-4 border-b border-rule-soft px-4 py-3 transition-colors hover:bg-paper-2 last:border-b-0 focus:bg-paper-2 focus:outline-none"
+              style={{ gridTemplateColumns: gridTemplate }}
             >
               <span className="avatar self-center" aria-hidden>
                 {initials(p.name)}
@@ -341,49 +520,9 @@ export function PeopleTable({
                   </span>
                 )}
               </span>
-              <span className="self-center truncate text-sm text-ink-2">
-                {p.company ? (
-                  p.organization_id ? (
-                    <Link
-                      href={`/organizations/${p.organization_id}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="transition hover:text-action"
-                    >
-                      {p.company}
-                    </Link>
-                  ) : (
-                    p.company
-                  )
-                ) : (
-                  "—"
-                )}
-              </span>
-              <span className="self-center font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3">
-                {SCOPE_LABEL[p.scope]}
-              </span>
-              <span className="flex flex-wrap gap-1 self-center">
-                {(p.tags ?? []).slice(0, 3).map((t) => (
-                  <Link
-                    key={t}
-                    href={`/people?tag=${encodeURIComponent(t)}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="tag transition hover:border-action hover:text-action"
-                  >
-                    <span className="dot" />
-                    {t}
-                  </Link>
-                ))}
-              </span>
-              <span className="self-center">
-                {(p.strength_score ?? 0) > 0 ? (
-                  <StrengthMeter value={p.strength_score ?? 0} showLabel={false} />
-                ) : (
-                  <span className="font-mono text-xs text-ink-4">—</span>
-                )}
-              </span>
-              <span className="self-center text-right font-mono text-[11px] tracking-wider text-ink-3">
-                {formatDate(p.last_interaction_at)}
-              </span>
+              {visibleColDefs.map((c) => (
+                <Cell key={c.key} col={c} person={p} />
+              ))}
             </div>
           ))
         )}
@@ -395,6 +534,119 @@ export function PeopleTable({
       </p>
     </div>
   );
+}
+
+// Single-cell renderer keyed off the column. Switch is exhaustive
+// over ColumnKey — adding a new column here means the table picks it
+// up automatically.
+function Cell({ col, person }: { col: ColumnDef; person: Person }) {
+  const align = col.align === "right" ? "text-right" : "";
+
+  switch (col.key) {
+    case "company":
+      return (
+        <span className={`self-center truncate text-sm text-ink-2 ${align}`}>
+          {person.company ? (
+            person.organization_id ? (
+              <Link
+                href={`/organizations/${person.organization_id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="transition hover:text-action"
+              >
+                {person.company}
+              </Link>
+            ) : (
+              person.company
+            )
+          ) : (
+            "—"
+          )}
+        </span>
+      );
+    case "role":
+      return (
+        <span className="self-center truncate text-sm text-ink-2">
+          {person.role ?? "—"}
+        </span>
+      );
+    case "scope":
+      return (
+        <span className="self-center font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3">
+          {SCOPE_LABEL[person.scope]}
+        </span>
+      );
+    case "tags":
+      return (
+        <span className="flex flex-wrap gap-1 self-center">
+          {(person.tags ?? []).slice(0, 3).map((t) => (
+            <Link
+              key={t}
+              href={`/people?tag=${encodeURIComponent(t)}`}
+              onClick={(e) => e.stopPropagation()}
+              className="tag transition hover:border-action hover:text-action"
+            >
+              <span className="dot" />
+              {t}
+            </Link>
+          ))}
+        </span>
+      );
+    case "stakeholder":
+      return (
+        <span className="flex flex-wrap gap-1 self-center font-mono text-[9px] uppercase tracking-wider text-ink-3">
+          {(person.stakeholder_types ?? []).slice(0, 2).map((s) => (
+            <span key={s} className="tag">
+              {s}
+            </span>
+          )) || "—"}
+        </span>
+      );
+    case "priority":
+      return (
+        <span className="self-center text-center font-mono text-[11px] font-medium tracking-wider text-ink-1">
+          {person.priority ?? "—"}
+        </span>
+      );
+    case "strength":
+      return (
+        <span className="self-center">
+          {(person.strength_score ?? 0) > 0 ? (
+            <StrengthMeter
+              value={person.strength_score ?? 0}
+              showLabel={false}
+            />
+          ) : (
+            <span className="font-mono text-xs text-ink-4">—</span>
+          )}
+        </span>
+      );
+    case "industry":
+      return (
+        <span className="self-center truncate text-sm text-ink-2">
+          {person.industry ?? "—"}
+        </span>
+      );
+    case "cta":
+      return (
+        <span className="self-center truncate text-sm text-ink-2">
+          {person.cta ?? "—"}
+        </span>
+      );
+    case "cadence":
+      return (
+        <span className="self-center text-center font-mono text-[11px] tracking-wider text-ink-3">
+          {person.expected_cadence_days
+            ? `${person.expected_cadence_days}d`
+            : "—"}
+        </span>
+      );
+    case "last_interaction":
+      return (
+        <span className="self-center text-right font-mono text-[11px] tracking-wider text-ink-3">
+          {formatDate(person.last_interaction_at)}
+        </span>
+      );
+  }
 }
 
 function SortHeader({
