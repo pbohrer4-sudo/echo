@@ -25,6 +25,7 @@ import {
   RelationshipList,
   SocialList,
 } from "./contact-fields";
+import { WhatsappSendBox } from "@/components/whatsapp-send-box";
 
 const SCOPE_LABEL: Record<Scope, string> = {
   work: "Beruflich",
@@ -405,12 +406,16 @@ export default async function PersonDetailPage({
         )}
 
         <div className="grid gap-10 md:grid-cols-2">
-          <section>
+          <section className="space-y-3">
             <div className="section-head">
               <span className="t-label">Telefon</span>
               <span className="rule" />
             </div>
             <PhoneList phones={person.phones ?? []} />
+            <WhatsappSendBox
+              personId={person.id}
+              phones={person.phones ?? []}
+            />
           </section>
 
           <section>
