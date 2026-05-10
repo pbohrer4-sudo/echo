@@ -36,6 +36,30 @@ interface DateEntry {
   remind: boolean;
 }
 
+// Relationships use related_person_name in the UI — server resolves
+// to UUID at commit time. Showing a free-text input lets the user
+// correct mis-extracted names ("Lara" → "Laura") inline.
+interface RelEntry {
+  related_person_name: string;
+  related_person_id?: string;
+  label: string;
+}
+
+const RELATIONSHIP_LABEL_OPTIONS = [
+  "Partner:in",
+  "Ehepartner:in",
+  "Mutter",
+  "Vater",
+  "Sohn",
+  "Tochter",
+  "Bruder",
+  "Schwester",
+  "Freund:in",
+  "Kolleg:in",
+  "Mentor:in",
+  "andere",
+];
+
 interface ItemEdit<T> {
   enabled: boolean;
   value: T;
@@ -68,6 +92,7 @@ interface CallEdit {
   addresses?: ItemEdit<AddressEntry>[];
   socials?: ItemEdit<SocialEntry>[];
   important_dates?: ItemEdit<DateEntry>[];
+  relationships?: ItemEdit<RelEntry>[];
 
   // update_person additive arrays
   add_tags?: ItemEdit<string>[];
@@ -76,6 +101,7 @@ interface CallEdit {
   add_addresses?: ItemEdit<AddressEntry>[];
   add_socials?: ItemEdit<SocialEntry>[];
   add_important_dates?: ItemEdit<DateEntry>[];
+  add_relationships?: ItemEdit<RelEntry>[];
 
   // log_interaction
   type?: ScalarEdit;
@@ -169,6 +195,14 @@ function makeEdit(call: ToolCall): CallEdit {
             remind: Boolean(v.remind),
           },
         })),
+        relationships: arr<RelEntry>(input.relationships).map((v) => ({
+          enabled: true,
+          value: {
+            related_person_name: asString(v.related_person_name),
+            related_person_id: asString(v.related_person_id) || undefined,
+            label: asString(v.label) || "andere",
+          },
+        })),
       };
 
     case "update_person":
@@ -218,6 +252,14 @@ function makeEdit(call: ToolCall): CallEdit {
             label: asString(v.label) || "andere",
             date: asString(v.date),
             remind: Boolean(v.remind),
+          },
+        })),
+        add_relationships: arr<RelEntry>(input.add_relationships).map((v) => ({
+          enabled: true,
+          value: {
+            related_person_name: asString(v.related_person_name),
+            related_person_id: asString(v.related_person_id) || undefined,
+            label: asString(v.label) || "andere",
           },
         })),
       };
@@ -322,6 +364,15 @@ function applyEdit(edit: CallEdit): ToolCall {
       setArr("addresses", edit.addresses, (a) => !(a.street?.trim() || a.city?.trim()));
       setArr("socials", edit.socials, (s) => !s.handle_or_url.trim());
       setArr("important_dates", edit.important_dates, (d) => !d.date.trim());
+      // Relationships: drop entries without a name AND without an id —
+      // the server can't resolve them either way. Label is required.
+      setArr(
+        "relationships",
+        edit.relationships,
+        (r) =>
+          (!r.related_person_name.trim() && !r.related_person_id) ||
+          !r.label.trim(),
+      );
       break;
     case "update_person":
       setIf("company", edit.company);
@@ -334,6 +385,13 @@ function applyEdit(edit: CallEdit): ToolCall {
       setArr("add_addresses", edit.add_addresses, (a) => !(a.street?.trim() || a.city?.trim()));
       setArr("add_socials", edit.add_socials, (s) => !s.handle_or_url.trim());
       setArr("add_important_dates", edit.add_important_dates, (d) => !d.date.trim());
+      setArr(
+        "add_relationships",
+        edit.add_relationships,
+        (r) =>
+          (!r.related_person_name.trim() && !r.related_person_id) ||
+          !r.label.trim(),
+      );
       break;
     case "log_interaction":
       setIf("type", edit.type);
@@ -811,6 +869,70 @@ export function ExtractionConfirmation({
                           />
                         </ArrayRow>
                       ))}
+                      {edit.relationships?.map((r, i) => (
+                        <ArrayRow
+                          key={`rel-${i}`}
+                          enabled={r.enabled}
+                          onToggle={(en) =>
+                            patchArrayItem<RelEntry>(
+                              idx,
+                              "relationships",
+                              i,
+                              { enabled: en },
+                            )
+                          }
+                          label="Beziehung"
+                        >
+                          <select
+                            value={r.value.label}
+                            disabled={!r.enabled}
+                            onChange={(e) =>
+                              patchArrayItem<RelEntry>(
+                                idx,
+                                "relationships",
+                                i,
+                                {
+                                  value: { ...r.value, label: e.target.value },
+                                },
+                              )
+                            }
+                            className={`${inputCls} max-w-[7.5rem]`}
+                          >
+                            {RELATIONSHIP_LABEL_OPTIONS.includes(r.value.label)
+                              ? null
+                              : (
+                                  <option value={r.value.label}>
+                                    {r.value.label}
+                                  </option>
+                                )}
+                            {RELATIONSHIP_LABEL_OPTIONS.map((l) => (
+                              <option key={l} value={l}>
+                                {l}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            type="text"
+                            placeholder="Person"
+                            value={r.value.related_person_name}
+                            disabled={!r.enabled}
+                            onChange={(e) =>
+                              patchArrayItem<RelEntry>(
+                                idx,
+                                "relationships",
+                                i,
+                                {
+                                  value: {
+                                    ...r.value,
+                                    related_person_name: e.target.value,
+                                  },
+                                },
+                              )
+                            }
+                            className={inputCls}
+                          />
+                        </ArrayRow>
+                      ))}
                     </>
                   )}
 
@@ -1081,6 +1203,70 @@ export function ExtractionConfirmation({
                                 i,
                                 {
                                   value: { ...d.value, date: e.target.value },
+                                },
+                              )
+                            }
+                            className={inputCls}
+                          />
+                        </ArrayRow>
+                      ))}
+                      {edit.add_relationships?.map((r, i) => (
+                        <ArrayRow
+                          key={`addrel-${i}`}
+                          enabled={r.enabled}
+                          onToggle={(en) =>
+                            patchArrayItem<RelEntry>(
+                              idx,
+                              "add_relationships",
+                              i,
+                              { enabled: en },
+                            )
+                          }
+                          label="+ Beziehung"
+                        >
+                          <select
+                            value={r.value.label}
+                            disabled={!r.enabled}
+                            onChange={(e) =>
+                              patchArrayItem<RelEntry>(
+                                idx,
+                                "add_relationships",
+                                i,
+                                {
+                                  value: { ...r.value, label: e.target.value },
+                                },
+                              )
+                            }
+                            className={`${inputCls} max-w-[7.5rem]`}
+                          >
+                            {RELATIONSHIP_LABEL_OPTIONS.includes(r.value.label)
+                              ? null
+                              : (
+                                  <option value={r.value.label}>
+                                    {r.value.label}
+                                  </option>
+                                )}
+                            {RELATIONSHIP_LABEL_OPTIONS.map((l) => (
+                              <option key={l} value={l}>
+                                {l}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            type="text"
+                            placeholder="Person"
+                            value={r.value.related_person_name}
+                            disabled={!r.enabled}
+                            onChange={(e) =>
+                              patchArrayItem<RelEntry>(
+                                idx,
+                                "add_relationships",
+                                i,
+                                {
+                                  value: {
+                                    ...r.value,
+                                    related_person_name: e.target.value,
+                                  },
                                 },
                               )
                             }

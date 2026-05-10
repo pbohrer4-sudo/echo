@@ -126,6 +126,32 @@ export const EXTRACTION_TOOLS: Anthropic.Tool[] = [
             required: ["label", "date"],
           },
         },
+        relationships: {
+          type: "array",
+          description:
+            "Beziehungen zu anderen Personen (Ehepartner, Mutter, Vater, Bruder, Schwester, Sohn, Tochter, Kollege, Freund, Mentor). NIEMALS in 'notes' packen — immer hier.",
+          items: {
+            type: "object",
+            properties: {
+              related_person_id: {
+                type: "string",
+                description:
+                  "UUID der verknüpften Person, falls sie im Context bereits existiert.",
+              },
+              related_person_name: {
+                type: "string",
+                description:
+                  "Name der verknüpften Person, falls sie im selben Turn neu via create_person angelegt wird ODER falls die UUID nicht bekannt ist.",
+              },
+              label: {
+                type: "string",
+                description:
+                  "Beziehung. Empfohlen: 'Partner:in', 'Ehepartner:in', 'Mutter', 'Vater', 'Sohn', 'Tochter', 'Bruder', 'Schwester', 'Freund:in', 'Kolleg:in', 'Mentor:in', 'andere'.",
+              },
+            },
+            required: ["label"],
+          },
+        },
       },
       required: ["name"],
     },
@@ -213,6 +239,31 @@ export const EXTRACTION_TOOLS: Anthropic.Tool[] = [
               remind: { type: "boolean" },
             },
             required: ["label", "date"],
+          },
+        },
+        add_relationships: {
+          type: "array",
+          description:
+            "Neue Beziehungen anhängen (Ehepartner, Mutter, Vater, Bruder, Schwester, Sohn, Tochter, Kollege, Freund, Mentor). NIEMALS in 'notes' packen.",
+          items: {
+            type: "object",
+            properties: {
+              related_person_id: {
+                type: "string",
+                description: "UUID der verknüpften Person, falls bekannt.",
+              },
+              related_person_name: {
+                type: "string",
+                description:
+                  "Name der verknüpften Person — wird serverseitig zur UUID aufgelöst.",
+              },
+              label: {
+                type: "string",
+                description:
+                  "Beziehung wie 'Ehepartner:in', 'Mutter', 'Bruder', 'Kolleg:in' etc.",
+              },
+            },
+            required: ["label"],
           },
         },
       },

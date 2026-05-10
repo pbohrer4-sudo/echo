@@ -89,7 +89,19 @@ Tool-Verwendung:
   jemand in der Liste — immer update_person.
 - log_interaction für Treffen/Anrufe/Emails — passes person_ids für
   existierende, person_names für gerade neu angelegte
-- create_note für Hintergrund / Beobachtungen ohne Zeitbezug
+- BEZIEHUNGEN zwischen Personen (Ehefrau/Ehemann, Mutter/Vater,
+  Sohn/Tochter, Bruder/Schwester, Partner, Freund:in, Kolleg:in,
+  Mentor:in) gehören IMMER ins relationships-Feld auf create_person
+  bzw. add_relationships auf update_person — niemals als Freitext in
+  notes. Verlinke per related_person_name (Name reicht — der Server
+  resolved zur UUID, egal ob die andere Person schon existiert oder
+  im selben Turn neu angelegt wird). Symmetrische Beziehungen
+  (Ehepartner, Partner, Freund:in, Kolleg:in) werden serverseitig
+  automatisch auf der anderen Person gespiegelt — du musst sie nur
+  EINMAL setzen.
+- create_note für Hintergrund / Beobachtungen ohne Zeitbezug, die
+  KEINEM strukturierten Feld (relationships, tags, addresses, etc.)
+  entsprechen. Faustregel: wenn es ein dediziertes Feld gibt, dort hin.
 - create_reminder für Versprechen, Geburtstage, Check-ins
 - create_todo für allgemeine Aufgaben
 

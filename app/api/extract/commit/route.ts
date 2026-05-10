@@ -13,6 +13,12 @@ import {
   stringOr,
   stringOrNull,
 } from "@/lib/parse-contact";
+import {
+  applyRelationshipEdges,
+  mirrorSymmetric,
+  parseRawRel,
+  resolveRelatedIds,
+} from "@/lib/relationships";
 
 export const runtime = "nodejs";
 
@@ -57,6 +63,12 @@ export async function POST(request: Request) {
   // tools (log_interaction, create_note, etc.) can reference them.
   const newByName = new Map<string, string>();
 
+  // Relationship edges are deferred to Pass 1.7: we need both
+  // create_person AND update_person done so we can resolve
+  // related_person_name against the full set of new + existing people.
+  type RawRel = NonNullable<ReturnType<typeof parseRawRel>>;
+  const pendingRelEdges: { fromPersonId: string; rawRel: RawRel }[] = [];
+
   for (const call of calls) {
     if (call.name !== "create_person") continue;
     const input = call.input as Record<string, unknown>;
@@ -97,6 +109,16 @@ export async function POST(request: Request) {
     }
     newByName.set(name.toLowerCase(), data.id);
     commits.people += 1;
+
+    // Stash any relationships for Pass 1.7. We can't resolve them yet
+    // because related_person_name might point at a person not-yet-
+    // created in a later call.
+    if (Array.isArray(input.relationships)) {
+      for (const raw of input.relationships) {
+        const parsed = parseRawRel(raw);
+        if (parsed) pendingRelEdges.push({ fromPersonId: data.id, rawRel: parsed });
+      }
+    }
   }
 
   // Pass 1.5: update_person — needs to read the existing row so we
@@ -177,6 +199,14 @@ export async function POST(request: Request) {
       ];
     }
 
+    // Stash add_relationships for Pass 1.7 — same reason as create.
+    if (Array.isArray(input.add_relationships)) {
+      for (const raw of input.add_relationships) {
+        const parsed = parseRawRel(raw);
+        if (parsed) pendingRelEdges.push({ fromPersonId: id, rawRel: parsed });
+      }
+    }
+
     if (Object.keys(update).length === 0) continue;
 
     const { error } = await supabase
@@ -193,6 +223,44 @@ export async function POST(request: Request) {
       );
     }
     commits.people += 1;
+  }
+
+  // Pass 1.7: relationships. Resolve every related_person_name against
+  // newByName + DB, mirror symmetric labels, apply (read-merge-write
+  // per affected person, RLS-scoped).
+  if (pendingRelEdges.length > 0) {
+    const resolveMap = await resolveRelatedIds({
+      supabase,
+      userId: user.id,
+      newByName,
+      rawRels: pendingRelEdges.map((e) => e.rawRel),
+    });
+
+    const directedEdges: { from: string; to: string; label: string }[] = [];
+    for (const e of pendingRelEdges) {
+      const lookupKey = e.rawRel.id ?? e.rawRel.name ?? "";
+      const toId = resolveMap.get(lookupKey);
+      if (!toId) continue;
+      if (toId === e.fromPersonId) continue; // can't relate to self
+      directedEdges.push({
+        from: e.fromPersonId,
+        to: toId,
+        label: e.rawRel.label,
+      });
+    }
+
+    const allEdges = mirrorSymmetric(directedEdges);
+    try {
+      await applyRelationshipEdges({
+        supabase,
+        userId: user.id,
+        edges: allEdges,
+      });
+    } catch (err) {
+      console.error("relationship apply failed", err);
+      // Fall through — relationships failing shouldn't kill the whole
+      // commit; the rest of the data is already in.
+    }
   }
 
   const resolvePersonId = (input: Record<string, unknown>): string | null => {
