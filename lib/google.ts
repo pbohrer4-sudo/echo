@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { ServiceConnection } from "@/lib/types";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 // Shared Google OAuth helper used by Gmail + Calendar sync. Refreshes
 // the access token if expired, persists the new one, and returns a
@@ -25,8 +26,18 @@ interface RefreshReply {
   token_type?: string;
 }
 
+// Scope for match-functions and token-persistence helpers — explicit
+// rather than implied so the webhook (no user session) can pass an
+// admin client + user_id while the API routes pass the RLS-scoped
+// session client.
+export interface SupabaseScope {
+  supabase: SupabaseClient;
+  userId: string;
+}
+
 export async function getGoogleAccess(
   conn: ServiceConnection,
+  scope?: SupabaseScope,
 ): Promise<GoogleAuth> {
   if (conn.access_token?.startsWith("stub_")) {
     throw new Error(
@@ -84,7 +95,7 @@ export async function getGoogleAccess(
   const newExpires = new Date(now + reply.expires_in * 1000).toISOString();
 
   // Persist refreshed token so subsequent calls don't pay the round-trip.
-  const supabase = await createClient();
+  const supabase = scope?.supabase ?? (await createClient());
   await supabase
     .from("service_connections")
     .update({
@@ -104,19 +115,23 @@ export async function getGoogleAccess(
 // Match an attendee or sender email to a known person. Returns the
 // person id if found, else null. Used by both calendar and gmail
 // sync to wire ingested rows up to people automatically.
+//
+// Always requires an explicit scope so callers from webhook (admin
+// client + user_id) and API routes (session client) both get
+// correctly user-bounded results.
 export async function matchPersonByEmail(
   email: string,
+  scope: SupabaseScope,
 ): Promise<string | null> {
   if (!email) return null;
   const lower = email.trim().toLowerCase();
   if (!lower) return null;
 
-  const supabase = await createClient();
-  // emails column is jsonb [{label, value}]. We use a JSON contains
-  // probe via OR with both top-level legacy column and the array.
+  const { supabase, userId } = scope;
   const { data: legacy } = await supabase
     .from("people")
     .select("id")
+    .eq("user_id", userId)
     .ilike("email", lower)
     .limit(1)
     .maybeSingle();
@@ -127,6 +142,7 @@ export async function matchPersonByEmail(
   const { data: rows } = await supabase
     .from("people")
     .select("id, emails")
+    .eq("user_id", userId)
     .not("emails", "is", null);
   for (const row of rows ?? []) {
     const arr = (row.emails as Array<{ value?: string }> | null) ?? [];
@@ -142,15 +158,17 @@ export async function matchPersonByEmail(
 // "+4989-1234" matches "00498912 34").
 export async function matchPersonByPhone(
   phone: string,
+  scope: SupabaseScope,
 ): Promise<string | null> {
   const normalize = (s: string) => s.replace(/\D/g, "");
   const target = normalize(phone);
   if (target.length < 5) return null;
 
-  const supabase = await createClient();
+  const { supabase, userId } = scope;
   const { data: rows } = await supabase
     .from("people")
-    .select("id, phones, phone");
+    .select("id, phones, phone")
+    .eq("user_id", userId);
   for (const row of rows ?? []) {
     if (row.phone && normalize(row.phone) === target) return row.id as string;
     const arr = (row.phones as Array<{ value?: string }> | null) ?? [];

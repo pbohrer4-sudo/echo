@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { matchPersonByPhone } from "@/lib/google";
+import type { SupabaseScope } from "@/lib/google";
 
 // WhatsApp Cloud API webhook ingestion + send. The webhook receives
 // inbound messages addressed to the user's WA Business Number; we
@@ -102,8 +103,10 @@ export async function ingestWhatsappPayload(
       const ourNumber = value.metadata?.display_phone_number ?? "";
       const supabase = createAdminClient();
 
+      const scope: SupabaseScope = { supabase, userId };
+
       for (const msg of value.messages ?? []) {
-        const personId = await matchPersonByPhone(msg.from);
+        const personId = await matchPersonByPhone(msg.from, scope);
         if (personId) result.matched += 1;
 
         const at = new Date(parseInt(msg.timestamp, 10) * 1000).toISOString();

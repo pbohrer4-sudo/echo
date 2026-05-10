@@ -53,7 +53,9 @@ export async function POST(request: Request) {
   // Resolve person if not passed in. Outbound messages should still
   // land on the right timeline.
   const personId =
-    body.person_id ?? (await matchPersonByPhone(to)) ?? null;
+    body.person_id ??
+    (await matchPersonByPhone(to, { supabase, userId: ctx.user_id })) ??
+    null;
 
   // Persist the outbound copy. external_id from Meta lets future
   // status webhooks (sent/delivered/read) update the same row.

@@ -261,6 +261,27 @@ export default async function ConnectionDetailPage({
               <dd className="mono">{fmtDate(conn.token_expires_at)}</dd>
               <dt>Zuletzt benutzt</dt>
               <dd className="mono">{fmtDate(conn.last_used_at)}</dd>
+              {(conn.config as { last_sync_at?: string })?.last_sync_at && (
+                <>
+                  <dt>Zuletzt synchronisiert</dt>
+                  <dd className="mono">
+                    {fmtDate(
+                      (conn.config as { last_sync_at?: string }).last_sync_at!,
+                    )}
+                    {(conn.config as { last_sync_ingested?: number })
+                      ?.last_sync_ingested !== undefined && (
+                      <span className="ml-2 text-ink-3">
+                        ·{" "}
+                        {
+                          (conn.config as { last_sync_ingested?: number })
+                            .last_sync_ingested
+                        }{" "}
+                        Items
+                      </span>
+                    )}
+                  </dd>
+                </>
+              )}
               {conn.last_error && (
                 <>
                   <dt>Letzter Fehler</dt>

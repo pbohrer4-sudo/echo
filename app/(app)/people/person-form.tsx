@@ -34,6 +34,7 @@ import {
 import { StrengthMeterInput } from "@/components/strength-meter";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { StickySaveBar } from "@/components/sticky-save-bar";
+import { DuplicateCheckBanner } from "@/components/duplicate-check-banner";
 
 interface PersonOption {
   id: string;
@@ -265,9 +266,18 @@ export function PersonForm({
     setTagInput("");
   }
 
+  const isNew = !initial?.id;
+
   return (
     <form ref={formRef} action={action} className="space-y-10">
       <StickySaveBar formRef={formRef} cancelHref={cancelHref} />
+      {isNew && (
+        <DuplicateCheckBanner
+          name={name}
+          primaryEmail={emails[0]?.value ?? ""}
+          primaryPhone={phones[0]?.value ?? ""}
+        />
+      )}
       <input type="hidden" name="scope" value={scope} />
       <input type="hidden" name="phones" value={JSON.stringify(phones)} />
       <input type="hidden" name="emails" value={JSON.stringify(emails)} />

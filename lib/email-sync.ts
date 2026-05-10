@@ -1,16 +1,17 @@
 import { createClient } from "@/lib/supabase/server";
 import { getUserContext } from "@/lib/user-context";
-import { getGoogleAccess, matchPersonByEmail } from "@/lib/google";
+import {
+  getGoogleAccess,
+  matchPersonByEmail,
+  type SupabaseScope,
+} from "@/lib/google";
 import { getConnectionByProvider } from "@/lib/connections";
+import type { ServiceConnection } from "@/lib/types";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-// Gmail sync via Users.messages.list + Users.messages.get. We pull
-// the most recent N messages, ingest minimal metadata + snippet, and
-// create an interaction row for each message that matches a known
-// person via sender or recipient.
-//
-// Body fetching is opt-in per message. Snippet (first ~120 chars) is
-// always cheap. We DON'T pull body by default to keep tokens / quota
-// low; the user can drill into Gmail directly via the deeplink.
+// Gmail sync via Users.messages.list + Users.messages.get. Same
+// session/cron dual-entry-point pattern as calendar-sync. Body
+// fetching is opt-in per message; we always pull snippet (cheap).
 
 const MAX_MESSAGES = 30;
 
@@ -21,7 +22,7 @@ interface GmailListReply {
 interface GmailMessage {
   id: string;
   threadId: string;
-  internalDate?: string; // ms epoch as string
+  internalDate?: string;
   snippet?: string;
   labelIds?: string[];
   payload?: {
@@ -38,6 +39,7 @@ export interface EmailSyncResult {
   error?: string;
 }
 
+// Session-context entry point used by /api/email/sync.
 export async function syncGmail(): Promise<EmailSyncResult> {
   const ctx = await getUserContext();
   if (!ctx) return zero({ ok: false, error: "unauthorized" });
@@ -47,9 +49,18 @@ export async function syncGmail(): Promise<EmailSyncResult> {
     return zero({ ok: false, error: "not connected" });
   }
 
+  const supabase = await createClient();
+  return runGmailSync({ supabase, userId: ctx.user_id }, conn);
+}
+
+// Explicit-context entry point used by cron.
+export async function runGmailSync(
+  scope: SupabaseScope,
+  conn: ServiceConnection,
+): Promise<EmailSyncResult> {
   let auth;
   try {
-    auth = await getGoogleAccess(conn);
+    auth = await getGoogleAccess(conn, scope);
   } catch (err) {
     return zero({
       ok: false,
@@ -57,13 +68,12 @@ export async function syncGmail(): Promise<EmailSyncResult> {
     });
   }
 
-  const myEmail = (conn.account_label ?? ctx.email ?? "").toLowerCase();
+  const myEmail = (conn.account_label ?? "").toLowerCase();
 
   const listUrl = new URL(
     "https://gmail.googleapis.com/gmail/v1/users/me/messages",
   );
   listUrl.searchParams.set("maxResults", String(MAX_MESSAGES));
-  // Skip promo/social labels — Patrick wants real correspondence.
   listUrl.searchParams.set("q", "-category:promotions -category:social");
 
   const listRes = await fetch(listUrl.toString(), {
@@ -80,7 +90,7 @@ export async function syncGmail(): Promise<EmailSyncResult> {
   const list = (await listRes.json()) as GmailListReply;
   const ids = (list.messages ?? []).map((m) => m.id);
 
-  const supabase = await createClient();
+  const supabase: SupabaseClient = scope.supabase;
   let ingested = 0;
   let matched = 0;
   let interactions = 0;
@@ -111,23 +121,24 @@ export async function syncGmail(): Promise<EmailSyncResult> {
     const direction: "in" | "out" =
       from.email && from.email.toLowerCase() === myEmail ? "out" : "in";
 
-    // Match the OTHER party — for incoming, the sender; for outgoing,
-    // each recipient. This is what makes the message show up on the
-    // right person's timeline.
     const otherEmails =
       direction === "in"
         ? [from.email].filter((e): e is string => !!e)
         : toList.map((t) => t.email).filter((e): e is string => !!e);
 
-    const matches = await Promise.all(otherEmails.map((e) => matchPersonByEmail(e)));
-    const matchedIds = Array.from(new Set(matches.filter((m): m is string => !!m)));
+    const matches = await Promise.all(
+      otherEmails.map((e) => matchPersonByEmail(e, scope)),
+    );
+    const matchedIds = Array.from(
+      new Set(matches.filter((m): m is string => !!m)),
+    );
     if (matchedIds.length > 0) matched += matchedIds.length;
 
     const { data: upserted, error: upsertErr } = await supabase
       .from("external_messages")
       .upsert(
         {
-          user_id: ctx.user_id,
+          user_id: scope.userId,
           provider: "gmail",
           external_id: msg.id,
           thread_id: msg.threadId ?? null,
@@ -162,10 +173,10 @@ export async function syncGmail(): Promise<EmailSyncResult> {
         const { data: ins } = await supabase
           .from("interactions")
           .insert({
-            user_id: ctx.user_id,
+            user_id: scope.userId,
             person_id: personId,
             type: "email",
-            source: "calendar", // schema only allows debrief|manual|calendar — group sync sources under calendar for now
+            source: "calendar",
             occurred_at: messageAt,
             summary,
           })
@@ -190,6 +201,7 @@ export async function syncGmail(): Promise<EmailSyncResult> {
         ...(conn.config as Record<string, unknown>),
         last_sync_at: new Date().toISOString(),
         last_sync_pulled: ids.length,
+        last_sync_ingested: ingested,
       },
     })
     .eq("id", conn.id);
@@ -203,8 +215,6 @@ export async function syncGmail(): Promise<EmailSyncResult> {
   };
 }
 
-// Parse "Name <email@host>" header into structured form. Tolerant of
-// the many ways email clients format these.
 function parseEmail(raw: string | undefined): {
   name: string | null;
   email: string | null;
@@ -220,8 +230,6 @@ function parseEmailList(raw: string | undefined): Array<{
   email: string | null;
 }> {
   if (!raw) return [];
-  // Naive split — handles most real-world headers; commas inside
-  // quoted display names get handled by parseEmail's regex.
   return raw.split(/,(?=(?:[^"]|"[^"]*")*$)/).map((part) => parseEmail(part));
 }
 

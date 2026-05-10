@@ -1,7 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { getUserContext } from "@/lib/user-context";
-import { getGoogleAccess, matchPersonByEmail } from "@/lib/google";
+import {
+  getGoogleAccess,
+  matchPersonByEmail,
+  type SupabaseScope,
+} from "@/lib/google";
 import { getConnectionByProvider } from "@/lib/connections";
+import type { ServiceConnection } from "@/lib/types";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 // Google Calendar sync. Pulls events from the user's primary calendar
 // for the last 7 days + next 30 days, ingests each into
@@ -9,10 +15,13 @@ import { getConnectionByProvider } from "@/lib/connections";
 // matching row in interactions for each match (so events show up
 // alongside voice-logged interactions on a person's timeline).
 //
+// Callable from two contexts:
+//   - API route (user session) — call syncGoogleCalendar() with no args
+//   - Cron (admin client, looping users) — call runCalendarSync(scope, conn)
+//
 // We use a sliding window rather than nextSyncToken-based incremental
 // sync because the user-facing window is small and the simpler code
-// is worth the few extra API calls. Switch to syncToken if scale
-// demands it.
+// is worth the few extra API calls.
 
 const PRIMARY_CALENDAR = "primary";
 const WINDOW_BACK_DAYS = 7;
@@ -47,20 +56,30 @@ export interface CalendarSyncResult {
   error?: string;
 }
 
+// Session-context entry point used by /api/calendar/sync.
 export async function syncGoogleCalendar(): Promise<CalendarSyncResult> {
   const ctx = await getUserContext();
-  if (!ctx) {
-    return zeroResult({ ok: false, error: "unauthorized" });
-  }
+  if (!ctx) return zeroResult({ ok: false, error: "unauthorized" });
 
   const conn = await getConnectionByProvider("google_calendar");
   if (!conn || conn.status !== "connected") {
     return zeroResult({ ok: false, error: "not connected" });
   }
 
+  const supabase = await createClient();
+  return runCalendarSync({ supabase, userId: ctx.user_id }, conn);
+}
+
+// Explicit-context entry point used by cron. The caller resolves the
+// user + supabase client; this function only owns the upstream API
+// work + DB writes.
+export async function runCalendarSync(
+  scope: SupabaseScope,
+  conn: ServiceConnection,
+): Promise<CalendarSyncResult> {
   let auth;
   try {
-    auth = await getGoogleAccess(conn);
+    auth = await getGoogleAccess(conn, scope);
   } catch (err) {
     return zeroResult({
       ok: false,
@@ -98,7 +117,7 @@ export async function syncGoogleCalendar(): Promise<CalendarSyncResult> {
   const payload = (await res.json()) as { items?: GCalEvent[] };
   const events = payload.items ?? [];
 
-  const supabase = await createClient();
+  const supabase: SupabaseClient = scope.supabase;
   let ingested = 0;
   let matched = 0;
   let interactions = 0;
@@ -113,9 +132,8 @@ export async function syncGoogleCalendar(): Promise<CalendarSyncResult> {
       .filter((a) => !a.self && a.email)
       .map((a) => ({ email: a.email!, name: a.displayName ?? null }));
 
-    // Resolve attendee emails → person ids in parallel.
     const matches = await Promise.all(
-      attendeeRows.map((a) => matchPersonByEmail(a.email)),
+      attendeeRows.map((a) => matchPersonByEmail(a.email, scope)),
     );
     const matchedIds = matches.filter((m): m is string => m !== null);
     if (matchedIds.length > 0) matched += matchedIds.length;
@@ -124,7 +142,7 @@ export async function syncGoogleCalendar(): Promise<CalendarSyncResult> {
       .from("external_events")
       .upsert(
         {
-          user_id: ctx.user_id,
+          user_id: scope.userId,
           provider: "google_calendar",
           external_id: ev.id,
           calendar_id: PRIMARY_CALENDAR,
@@ -150,17 +168,13 @@ export async function syncGoogleCalendar(): Promise<CalendarSyncResult> {
     }
     ingested += 1;
 
-    // For each matched attendee that doesn't yet have an interaction
-    // row linked to this event, create one. Past events become a
-    // 'meeting' interaction; future events stay as planning context
-    // and don't create interactions yet.
     const isPast = new Date(startsAt).getTime() < Date.now();
     if (isPast && upserted && !upserted.interaction_id) {
       for (const personId of matchedIds) {
         const { data: ins } = await supabase
           .from("interactions")
           .insert({
-            user_id: ctx.user_id,
+            user_id: scope.userId,
             person_id: personId,
             type: "meeting",
             source: "calendar",
@@ -171,8 +185,6 @@ export async function syncGoogleCalendar(): Promise<CalendarSyncResult> {
           .maybeSingle();
         if (ins?.id) {
           interactions += 1;
-          // Link first interaction back to the event so we don't
-          // create dupes on next sync.
           await supabase
             .from("external_events")
             .update({ interaction_id: ins.id })
@@ -182,7 +194,6 @@ export async function syncGoogleCalendar(): Promise<CalendarSyncResult> {
     }
   }
 
-  // Stamp the connection with last_used_at + sync metadata.
   await supabase
     .from("service_connections")
     .update({
@@ -191,6 +202,7 @@ export async function syncGoogleCalendar(): Promise<CalendarSyncResult> {
         ...(conn.config as Record<string, unknown>),
         last_sync_at: new Date().toISOString(),
         last_sync_pulled: events.length,
+        last_sync_ingested: ingested,
       },
     })
     .eq("id", conn.id);
