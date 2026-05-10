@@ -2,7 +2,9 @@ import {
   listAllOrganizationTags,
   listOrganizations,
 } from "@/lib/organizations";
+import { listOrganizationDuplicates } from "@/lib/duplicates";
 import { OrganizationsTable } from "./organizations-table";
+import { DuplicateBanner } from "@/components/duplicate-banner";
 
 export default async function OrganizationsPage({
   searchParams,
@@ -10,9 +12,10 @@ export default async function OrganizationsPage({
   searchParams: Promise<{ tag?: string }>;
 }) {
   const { tag } = await searchParams;
-  const [all, allTags] = await Promise.all([
+  const [all, allTags, dupes] = await Promise.all([
     listOrganizations(),
     listAllOrganizationTags(),
+    listOrganizationDuplicates(),
   ]);
 
   const activeTag = tag?.trim() || null;
@@ -23,10 +26,11 @@ export default async function OrganizationsPage({
         ),
       )
     : all;
+  const highCount = dupes.filter((d) => d.confidence === "high").length;
 
   return (
     <div className="px-8 py-10">
-      <div className="mx-auto max-w-6xl space-y-8">
+      <div className="mx-auto max-w-6xl space-y-6">
         <header className="space-y-2">
           <p className="t-label">Personal CRM</p>
           <h1 className="text-3xl font-semibold tracking-tight text-ink-1">
@@ -37,6 +41,12 @@ export default async function OrganizationsPage({
             Person-Seite hier angedockt — automatisch oder manuell.
           </p>
         </header>
+        <DuplicateBanner
+          count={dupes.length}
+          highCount={highCount}
+          href="/organizations/duplicates"
+          entity="Organisationen"
+        />
         <OrganizationsTable
           orgs={filtered}
           activeTag={activeTag}
