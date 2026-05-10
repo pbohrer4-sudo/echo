@@ -27,7 +27,62 @@ type OrbState =
 type TranscriptItem =
   | { kind: "user"; content: string; via: "voice" | "text"; ts: number }
   | { kind: "assistant"; content: string; ts: number }
-  | { kind: "actions"; calls: ToolCall[]; ts: number };
+  | { kind: "actions"; calls: ToolCall[]; ts: number }
+  | { kind: "break"; ts: number };
+
+// Wenn zwischen zwei Items mehr als 4 Stunden liegen, behandeln wir das
+// als neue Session — typisches Pattern wie ChatGPT / Slack-Threads.
+// Ein expliziter "break"-Item (durch "Neue Session"-Klick) zwingt
+// ebenfalls eine Trennung.
+const SESSION_GAP_MS = 4 * 60 * 60 * 1000;
+// Wieviele Sessions werden gleichzeitig gerendert (älteres bleibt im
+// localStorage, ist aber nicht im DOM — verhindert dass extrem lange
+// Verläufe die Page langsam machen).
+const VISIBLE_SESSIONS = 3;
+
+interface Session {
+  startTs: number;
+  items: TranscriptItem[];
+}
+
+function groupSessions(items: TranscriptItem[]): Session[] {
+  const sessions: Session[] = [];
+  let current: TranscriptItem[] = [];
+  let lastTs = 0;
+  for (const item of items) {
+    const isBreak = item.kind === "break";
+    const gap = lastTs > 0 && item.ts - lastTs > SESSION_GAP_MS;
+    if ((isBreak || gap) && current.length > 0) {
+      sessions.push({ startTs: current[0].ts, items: current });
+      current = [];
+    }
+    if (!isBreak) current.push(item);
+    lastTs = item.ts;
+  }
+  if (current.length > 0) {
+    sessions.push({ startTs: current[0].ts, items: current });
+  }
+  return sessions;
+}
+
+function sessionLabel(ts: number): string {
+  const date = new Date(ts);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const time = date.toLocaleTimeString("de-DE", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  if (ts >= today.getTime()) return `Heute · ${time}`;
+  if (ts >= yesterday.getTime()) return `Gestern · ${time}`;
+  return date.toLocaleDateString("de-DE", {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+  });
+}
 
 interface RecognitionResult {
   isFinal: boolean;
@@ -515,7 +570,26 @@ export function VoiceOrb() {
     e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
   }
 
+  // "Neue Session"-Knopf: setzt einen Trenner statt zu löschen, damit
+  // der bisherige Verlauf scrollbar bleibt (User wollte die letzten ~3
+  // Sessions oben weiter sehen können um Angefangenes fertig zu machen).
+  function startNewSession() {
+    setTranscript((prev) => {
+      // Doppel-Trenner vermeiden — hilft falls User mehrfach klickt.
+      const last = prev[prev.length - 1];
+      if (last && last.kind === "break") return prev;
+      return [...prev, { kind: "break", ts: Date.now() }];
+    });
+    setSuggestedReplies([]);
+    setPendingToolCalls([]);
+    setOrbState("idle");
+    setError(null);
+  }
+
+  // Hard-Wipe — hinter Confirm versteckt damit's nicht aus Versehen
+  // passiert. Erreichbar nur wenn man Shift hält beim Klick.
   function clearTranscript() {
+    if (!window.confirm("Wirklich den kompletten Verlauf löschen?")) return;
     setTranscript([]);
     setSuggestedReplies([]);
     setPendingToolCalls([]);
@@ -556,7 +630,15 @@ export function VoiceOrb() {
   }, [orbState, startListening]);
 
   const orbDisabled = orbState === "thinking" || orbState === "confirming";
-  const isEmpty = transcript.length === 0 && !interim;
+
+  // Sessions zeigen wir nur die letzten N — Älteres bleibt im
+  // localStorage erhalten aber nicht im DOM. Falls ein older-flag, blenden
+  // wir oben einen Hinweis ein, damit der User weiß dass nicht alles
+  // gerendert ist.
+  const allSessions = useMemo(() => groupSessions(transcript), [transcript]);
+  const visibleSessions = allSessions.slice(-VISIBLE_SESSIONS);
+  const hiddenSessionCount = allSessions.length - visibleSessions.length;
+  const isEmpty = allSessions.length === 0 && !interim;
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -575,10 +657,13 @@ export function VoiceOrb() {
           {transcript.length > 0 && (
             <button
               type="button"
-              onClick={clearTranscript}
+              onClick={(e) =>
+                e.shiftKey ? clearTranscript() : startNewSession()
+              }
+              title="Klick: neue Session beginnen (Verlauf bleibt). Shift+Klick: alles löschen."
               className="rounded border border-rule px-2.5 py-1 text-xs text-ink-3 transition hover:border-ink-3 hover:text-ink-1"
             >
-              Neuer Chat
+              Neue Session
             </button>
           )}
         </div>
@@ -605,61 +690,88 @@ export function VoiceOrb() {
             </div>
           )}
 
-          {transcript.map((item, idx) => {
-            if (item.kind === "user") {
-              return (
-                <div key={idx} className="flex justify-end">
-                  <div className="max-w-[85%] rounded-2xl rounded-br-md border border-action/30 bg-action-soft px-4 py-2.5 text-sm text-ink-1 shadow-sm">
-                    {item.via === "voice" && (
-                      <span className="t-label mr-2 inline align-middle">
-                        🎙
-                      </span>
-                    )}
-                    {item.content}
-                  </div>
-                </div>
-              );
-            }
-            if (item.kind === "assistant") {
-              return (
-                <div key={idx} className="flex justify-start">
-                  <div className="max-w-[85%] rounded-2xl rounded-bl-md border border-rule bg-paper px-4 py-2.5 text-sm text-ink-1 shadow-sm">
-                    <span className="t-label mr-2 inline align-middle">
-                      ECHO
-                    </span>
-                    {item.content}
-                  </div>
-                </div>
-              );
-            }
-            // committed tool calls — small green-ish chips inline so
-            // the thread reads like "what we said + what got saved"
+          {hiddenSessionCount > 0 && (
+            <p className="text-center font-mono text-[10px] uppercase tracking-[0.12em] text-ink-4">
+              {hiddenSessionCount}{" "}
+              {hiddenSessionCount === 1 ? "ältere Session" : "ältere Sessions"}{" "}
+              ausgeblendet
+            </p>
+          )}
+
+          {visibleSessions.map((session, sIdx) => {
+            const isFirstSession = sIdx === 0 && hiddenSessionCount === 0;
             return (
-              <div
-                key={idx}
-                className="flex flex-wrap items-center gap-2 self-start"
-              >
-                {item.calls.map((c, ci) => (
-                  <span
-                    key={ci}
-                    className="inline-flex items-center gap-2 rounded border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider"
-                    style={{
-                      borderColor: "oklch(58% 0.10 145)",
-                      color: "oklch(28% 0.06 145)",
-                      background: "oklch(95% 0.03 145)",
-                    }}
-                  >
-                    <span>✓</span>
-                    <span className="font-sans normal-case tracking-normal">
-                      {ACTION_LABEL[c.name] ?? c.name}
-                      {summarizeAction(c) && (
-                        <span className="ml-1 text-ink-3">
-                          · {summarizeAction(c)}
-                        </span>
-                      )}
+              <div key={session.startTs} className="flex flex-col gap-5">
+                {!isFirstSession && (
+                  <div className="flex items-center gap-3 pt-2">
+                    <hr className="flex-1 border-t border-rule" />
+                    <span className="t-label">
+                      {sessionLabel(session.startTs)}
                     </span>
-                  </span>
-                ))}
+                    <hr className="flex-1 border-t border-rule" />
+                  </div>
+                )}
+                {session.items.map((item, idx) => {
+                  if (item.kind === "user") {
+                    return (
+                      <div key={idx} className="flex justify-end">
+                        <div className="max-w-[85%] rounded-2xl rounded-br-md border border-action/30 bg-action-soft px-4 py-2.5 text-sm text-ink-1 shadow-sm">
+                          {item.via === "voice" && (
+                            <span className="t-label mr-2 inline align-middle">
+                              🎙
+                            </span>
+                          )}
+                          {item.content}
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (item.kind === "assistant") {
+                    return (
+                      <div key={idx} className="flex justify-start">
+                        <div className="max-w-[85%] rounded-2xl rounded-bl-md border border-rule bg-paper px-4 py-2.5 text-sm text-ink-1 shadow-sm">
+                          <span className="t-label mr-2 inline align-middle">
+                            ECHO
+                          </span>
+                          {item.content}
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (item.kind === "actions") {
+                    // committed tool calls — small green-ish chips inline so
+                    // the thread reads like "what we said + what got saved"
+                    return (
+                      <div
+                        key={idx}
+                        className="flex flex-wrap items-center gap-2 self-start"
+                      >
+                        {item.calls.map((c, ci) => (
+                          <span
+                            key={ci}
+                            className="inline-flex items-center gap-2 rounded border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider"
+                            style={{
+                              borderColor: "oklch(58% 0.10 145)",
+                              color: "oklch(28% 0.06 145)",
+                              background: "oklch(95% 0.03 145)",
+                            }}
+                          >
+                            <span>✓</span>
+                            <span className="font-sans normal-case tracking-normal">
+                              {ACTION_LABEL[c.name] ?? c.name}
+                              {summarizeAction(c) && (
+                                <span className="ml-1 text-ink-3">
+                                  · {summarizeAction(c)}
+                                </span>
+                              )}
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  }
+                  return null; // break-Items werden via groupSessions konsumiert
+                })}
               </div>
             );
           })}
