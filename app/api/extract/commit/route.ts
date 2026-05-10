@@ -19,6 +19,7 @@ import {
   parseRawRel,
   resolveRelatedIds,
 } from "@/lib/relationships";
+import { resolveOrCreateOrganization } from "@/lib/organizations";
 
 export const runtime = "nodejs";
 
@@ -78,12 +79,24 @@ export async function POST(request: Request) {
     const phones = parsePhones(input.phones);
     const emails = parseEmails(input.emails);
 
+    // Auto-link / auto-create organization wenn der Voice-Extract eine
+    // Firma mitliefert. Macht den Voice-Pfad konsistent mit dem
+    // Form-Pfad in app/(app)/people/actions.ts — sonst landet die Org
+    // nur als Freitext auf der Person und taucht nicht im
+    // Organisationen-Tab auf.
+    const companyText = stringOrNull(input.company);
+    const organization_id = await resolveOrCreateOrganization(
+      companyText,
+      user.id,
+    );
+
     const { data, error } = await supabase
       .from("people")
       .insert({
         user_id: user.id,
         name,
-        company: stringOrNull(input.company),
+        company: companyText,
+        organization_id,
         role: stringOrNull(input.role),
         scope: scopeOr(input.scope, "both"),
         tags: stringArray(input.tags),
@@ -153,8 +166,16 @@ export async function POST(request: Request) {
     };
 
     const update: Record<string, unknown> = {};
-    if (typeof input.company === "string")
-      update.company = stringOrNull(input.company);
+    if (typeof input.company === "string") {
+      const companyText = stringOrNull(input.company);
+      update.company = companyText;
+      // Bei Firmen-Änderung auch organization_id neu auflösen — sonst
+      // bleibt der alte FK-Pointer hängen oder fehlt komplett.
+      update.organization_id = await resolveOrCreateOrganization(
+        companyText,
+        user.id,
+      );
+    }
     if (typeof input.role === "string")
       update.role = stringOrNull(input.role);
     if (typeof input.scope === "string")
