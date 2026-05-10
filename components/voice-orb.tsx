@@ -274,13 +274,16 @@ export function VoiceOrb() {
     [transcript],
   );
 
+  // 3 Sekunden Stille = automatisch beenden + submitten. Lang genug
+  // damit normale Atempausen mitten im Satz nicht abschneiden, kurz
+  // genug dass der User nach dem Sprechen nicht warten muss.
   function resetSilenceTimer() {
     if (silenceTimerRef.current) window.clearTimeout(silenceTimerRef.current);
     silenceTimerRef.current = window.setTimeout(() => {
       try {
         recognitionRef.current?.stop();
       } catch {}
-    }, 2000);
+    }, 3000);
   }
 
   const playSpeech = useCallback(

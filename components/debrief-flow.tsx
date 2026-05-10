@@ -183,13 +183,15 @@ export function DebriefFlow({
     return recognition;
   }, []);
 
+  // 3 Sekunden Stille = beenden. Konsistent mit voice-orb damit beide
+  // Flows sich gleich anfühlen.
   function resetSilenceTimer() {
     if (silenceTimerRef.current) window.clearTimeout(silenceTimerRef.current);
     silenceTimerRef.current = window.setTimeout(() => {
       try {
         recognitionRef.current?.stop();
       } catch {}
-    }, 2000);
+    }, 3000);
   }
 
   const listenOnce = useCallback(
