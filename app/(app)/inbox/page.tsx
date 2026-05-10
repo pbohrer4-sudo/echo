@@ -20,7 +20,7 @@ export default async function InboxPage() {
         <header className="space-y-2">
           <p className="t-label">Was offen ist</p>
           <h1 className="text-3xl font-semibold tracking-tight text-ink-1">
-            Inbox
+            Reminders
           </h1>
           <p className="text-sm text-ink-3">
             Erinnerungen, Aufgaben und ungelesene WhatsApp-Nachrichten — alles
