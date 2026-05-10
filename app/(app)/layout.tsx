@@ -3,6 +3,7 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getOrCreateSelfPerson } from "@/lib/people";
+import { isAdminEmail } from "@/lib/admin";
 import { SignOutButton } from "./sign-out-button";
 import { NavLink } from "./nav-link";
 import { NotificationManager } from "@/components/notification-manager";
@@ -33,6 +34,7 @@ export default async function AppLayout({
   }
 
   const self = await getOrCreateSelfPerson();
+  const showAdmin = isAdminEmail(user.email);
 
   return (
     <div className="flex h-screen">
@@ -59,6 +61,14 @@ export default async function AppLayout({
             <NavLink href="/connections">Verbindungen</NavLink>
             <NavLink href="/integrations/workflows">Workflows</NavLink>
             <NavLink href="/models">Modelle</NavLink>
+            {showAdmin && (
+              <>
+                <span className="mt-3 px-3 font-mono text-[9px] uppercase tracking-[0.12em] text-ink-4">
+                  Internal
+                </span>
+                <NavLink href="/admin">Admin</NavLink>
+              </>
+            )}
           </nav>
         </div>
       </aside>
