@@ -1,6 +1,19 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Reminder, Todo, Interaction, Note } from "@/lib/types";
 
+// Count of reminders that are due NOW or earlier and still pending.
+// Used by the sidebar nav to render the "Reminders" badge — keeps
+// the nudge visible until the user actually finalizes them.
+export async function countOverdueReminders(): Promise<number> {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("reminders")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "pending")
+    .lte("remind_at", new Date().toISOString());
+  return count ?? 0;
+}
+
 export interface InboxRow {
   kind: "reminder" | "todo";
   id: string;

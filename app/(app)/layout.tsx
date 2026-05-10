@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getOrCreateSelfPerson } from "@/lib/people";
 import { isAdminEmail } from "@/lib/admin";
+import { countOverdueReminders } from "@/lib/inbox";
 import { SignOutButton } from "./sign-out-button";
 import { NavLink } from "./nav-link";
 import { NotificationManager } from "@/components/notification-manager";
@@ -35,6 +36,7 @@ export default async function AppLayout({
 
   const self = await getOrCreateSelfPerson();
   const showAdmin = isAdminEmail(user.email);
+  const overdueReminders = await countOverdueReminders();
 
   return (
     <div className="flex h-screen">
@@ -53,7 +55,9 @@ export default async function AppLayout({
             <NavLink href="/people">Personen</NavLink>
             <NavLink href="/organizations">Organisationen</NavLink>
             <NavLink href="/pipelines">Pipelines</NavLink>
-            <NavLink href="/inbox">Reminders</NavLink>
+            <NavLink href="/inbox" badge={overdueReminders}>
+              Reminders
+            </NavLink>
             <NavLink href="/rhythmus">Rhythmus</NavLink>
             <NavLink href="/pulse">Sonntags-Puls</NavLink>
             <NavLink href="/recap">Rückblick</NavLink>

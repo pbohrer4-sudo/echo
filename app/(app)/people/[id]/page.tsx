@@ -32,6 +32,13 @@ import {
   type SelfTab,
 } from "@/components/self-profile-tabs";
 import { PaymentsTab } from "@/components/payments-tab";
+import { TabStatusOverview } from "@/components/tab-status-overview";
+import {
+  getProfileTabStatus,
+  getStreaksTabStatus,
+  getPaymentsTabStatus,
+  type TabStatus,
+} from "@/lib/tab-status";
 
 const SCOPE_LABEL: Record<Scope, string> = {
   work: "Beruflich",
@@ -306,6 +313,17 @@ export default async function PersonDetailPage({
   const showStreaksTab = person.is_self && activeTab === "streaks";
   const showPaymentsTab = person.is_self && activeTab === "payments";
 
+  // Status overview per tab. Only compute the one we'll actually
+  // render so non-active tabs don't pay for their queries.
+  let tabStatus: TabStatus | null = null;
+  if (person.is_self) {
+    if (activeTab === "profile")
+      tabStatus = await getProfileTabStatus(person);
+    else if (activeTab === "streaks") tabStatus = await getStreaksTabStatus();
+    else if (activeTab === "payments")
+      tabStatus = await getPaymentsTabStatus();
+  }
+
   return (
     <div className="px-8 py-10">
       <div className="mx-auto max-w-3xl space-y-10">
@@ -414,20 +432,51 @@ export default async function PersonDetailPage({
           <SelfProfileTabs personId={person.id} activeTab={activeTab} />
         )}
 
+        {/* Tab content animates in on every tab change. The
+            animate-in + slide-in classes come from tw-animate-css
+            (already imported globally). */}
         {showStreaksTab && (
-          <section>
-            <div className="section-head">
-              <span className="t-label">Streaks · Erfolge · XP</span>
-              <span className="rule" />
-            </div>
-            <GamificationDashboard />
-          </section>
+          <div
+            key="tab-streaks"
+            className="animate-in fade-in slide-in-from-top-2 duration-300 space-y-8"
+          >
+            {tabStatus && <TabStatusOverview status={tabStatus} />}
+            <section>
+              <div className="section-head">
+                <span className="t-label">Streaks · Erfolge · XP</span>
+                <span className="rule" />
+              </div>
+              <GamificationDashboard />
+            </section>
+          </div>
         )}
 
-        {showPaymentsTab && <PaymentsTab />}
+        {showPaymentsTab && (
+          <div
+            key="tab-payments"
+            className="animate-in fade-in slide-in-from-top-2 duration-300 space-y-8"
+          >
+            {tabStatus && (
+              <TabStatusOverview
+                status={tabStatus}
+                emptyLabel="Payments läuft noch nicht — keine Signale."
+              />
+            )}
+            <PaymentsTab />
+          </div>
+        )}
+
+        {showProfileBody && person.is_self && tabStatus && (
+          <div
+            key="tab-profile-status"
+            className="animate-in fade-in slide-in-from-top-2 duration-300"
+          >
+            <TabStatusOverview status={tabStatus} />
+          </div>
+        )}
 
         {showProfileBody && (
-          <div className="grid gap-10 md:grid-cols-2">
+          <div className="animate-in fade-in slide-in-from-top-2 duration-300 grid gap-10 md:grid-cols-2">
             <section className="space-y-3">
               <div className="section-head">
                 <span className="t-label">Telefon</span>
