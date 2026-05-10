@@ -42,18 +42,23 @@ interface ColumnDef {
   align?: "right";
 }
 
+// Spaltenbreiten als minmax(Npx, Mfr) — Npx ist die Lese-Minimumbreite,
+// unter die wir nie schrumpfen. Wenn die Summe aller sichtbaren Mins
+// > Container-Breite ist, scrollt der Wrapper horizontal (overflow-x-
+// auto + min-w-max auf den Grid-Rows). Wenn weniger, expandieren die
+// fr-Anteile und füllen die Breite — bisheriges Verhalten bleibt.
 const COLUMNS: ColumnDef[] = [
-  { key: "company", label: "Firma", gridSize: "minmax(0,1.2fr)", default: true, sortKey: "company" },
-  { key: "role", label: "Rolle", gridSize: "minmax(0,1fr)", default: false },
-  { key: "scope", label: "Scope", gridSize: "minmax(0,0.8fr)", default: true, sortKey: "scope" },
-  { key: "tags", label: "Tags", gridSize: "minmax(0,1.4fr)", default: true },
-  { key: "stakeholder", label: "Stakeholder", gridSize: "minmax(0,1fr)", default: false },
-  { key: "priority", label: "Prio", gridSize: "60px", default: false },
-  { key: "strength", label: "Stärke", gridSize: "70px", default: true },
-  { key: "industry", label: "Industrie", gridSize: "minmax(0,1fr)", default: false },
-  { key: "cta", label: "CTA", gridSize: "minmax(0,1.2fr)", default: false },
-  { key: "cadence", label: "Cadence", gridSize: "80px", default: false },
-  { key: "last_interaction", label: "Letzte Interaktion", gridSize: "120px", default: true, sortKey: "last_interaction_at", align: "right" },
+  { key: "company", label: "Firma", gridSize: "minmax(180px,1.2fr)", default: true, sortKey: "company" },
+  { key: "role", label: "Rolle", gridSize: "minmax(140px,1fr)", default: false },
+  { key: "scope", label: "Scope", gridSize: "minmax(90px,0.8fr)", default: true, sortKey: "scope" },
+  { key: "tags", label: "Tags", gridSize: "minmax(180px,1.4fr)", default: true },
+  { key: "stakeholder", label: "Stakeholder", gridSize: "minmax(140px,1fr)", default: false },
+  { key: "priority", label: "Prio", gridSize: "70px", default: false },
+  { key: "strength", label: "Stärke", gridSize: "80px", default: true },
+  { key: "industry", label: "Industrie", gridSize: "minmax(140px,1fr)", default: false },
+  { key: "cta", label: "CTA", gridSize: "minmax(160px,1.2fr)", default: false },
+  { key: "cadence", label: "Cadence", gridSize: "90px", default: false },
+  { key: "last_interaction", label: "Letzte Interaktion", gridSize: "140px", default: true, sortKey: "last_interaction_at", align: "right" },
 ];
 
 const COLUMNS_STORAGE_KEY = "echo:people:columns:v1";
@@ -257,9 +262,11 @@ export function PeopleTable({
 
   // Build the grid-template-columns string from the currently visible
   // column set. Avatar + Name are always present, in that order.
+  // Name kriegt ebenfalls eine Lese-Mindestbreite damit sie bei vielen
+  // sichtbaren Spalten nicht zur ersten Ellipsis-Quelle wird.
   const visibleColDefs = COLUMNS.filter((c) => visibleColumns.has(c.key));
   const gridTemplate =
-    `28px minmax(0,1.6fr) ` +
+    `28px minmax(200px,1.6fr) ` +
     visibleColDefs.map((c) => c.gridSize).join(" ");
 
   return (
@@ -452,9 +459,13 @@ export function PeopleTable({
         )}
       </div>
 
-      <div className="overflow-hidden rounded border border-rule bg-paper">
+      {/* Scroll-Wrapper: bei vielen Spalten scrollt der innere Bereich
+          horizontal ohne dass die Page selbst wegrutscht. min-w-max auf
+          den Grid-Rows zwingt sie auf ihre intrinsische Breite (Summe
+          der Spalten-Mins), wodurch overflow-x-auto greift. */}
+      <div className="overflow-x-auto rounded border border-rule bg-paper">
         <div
-          className="grid gap-4 border-b border-rule bg-paper-2 px-4 py-2.5"
+          className="grid min-w-max gap-4 border-b border-rule bg-paper-2 px-4 py-2.5"
           style={{ gridTemplateColumns: gridTemplate }}
         >
           <span className="t-label" />
@@ -504,7 +515,7 @@ export function PeopleTable({
                   router.push(`/people/${p.id}`);
                 }
               }}
-              className="grid cursor-pointer gap-4 border-b border-rule-soft px-4 py-3 transition-colors hover:bg-paper-2 last:border-b-0 focus:bg-paper-2 focus:outline-none"
+              className="grid min-w-max cursor-pointer gap-4 border-b border-rule-soft px-4 py-3 transition-colors hover:bg-paper-2 last:border-b-0 focus:bg-paper-2 focus:outline-none"
               style={{ gridTemplateColumns: gridTemplate }}
             >
               <span className="avatar self-center" aria-hidden>
