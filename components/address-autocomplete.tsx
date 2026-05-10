@@ -36,6 +36,8 @@ export function AddressAutocomplete({
   const debounceRef = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const lastQueryRef = useRef<string>("");
+  const abortRef = useRef<AbortController | null>(null);
+  const unmountedRef = useRef(false);
 
   // Close suggestion panel when user clicks outside.
   useEffect(() => {
@@ -45,6 +47,17 @@ export function AddressAutocomplete({
     }
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  // Cancel any pending fetch / debounce when the component unmounts.
+  // Without this, a slow Nominatim response after navigation triggers
+  // "setState on unmounted component" warnings.
+  useEffect(() => {
+    return () => {
+      unmountedRef.current = true;
+      if (debounceRef.current) window.clearTimeout(debounceRef.current);
+      abortRef.current?.abort();
+    };
   }, []);
 
   const runSearch = useCallback(
@@ -62,13 +75,18 @@ export function AddressAutocomplete({
       }
       setLoading(true);
       debounceRef.current = window.setTimeout(async () => {
+        // Cancel any earlier in-flight fetch — saves bandwidth and
+        // upstream Nominatim load. The lastQueryRef check below still
+        // protects against ordering even if abort doesn't fire in time.
+        abortRef.current?.abort();
+        const ctrl = new AbortController();
+        abortRef.current = ctrl;
         try {
           const res = await fetch(
             `/api/address-search?q=${encodeURIComponent(trimmed)}`,
+            { signal: ctrl.signal },
           );
-          // If a newer query has fired since we kicked off, drop the
-          // stale result. Prevents older slow responses overwriting
-          // newer fast ones.
+          if (unmountedRef.current) return;
           if (lastQueryRef.current !== query) return;
           if (!res.ok) {
             setSuggestions([]);
@@ -76,13 +94,18 @@ export function AddressAutocomplete({
             return;
           }
           const { results } = (await res.json()) as { results: Suggestion[] };
+          if (unmountedRef.current) return;
           setSuggestions(results ?? []);
           setOpen(true);
-        } catch {
+        } catch (err) {
+          if ((err as { name?: string })?.name === "AbortError") return;
+          if (unmountedRef.current) return;
           setSuggestions([]);
           setOpen(false);
         } finally {
-          if (lastQueryRef.current === query) setLoading(false);
+          if (!unmountedRef.current && lastQueryRef.current === query) {
+            setLoading(false);
+          }
         }
       }, 300);
     },

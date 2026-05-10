@@ -32,11 +32,33 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "no rows" }, { status: 400 });
   }
 
+  // Server-side dedup: load all existing non-self people for the user
+  // and skip any incoming row whose name (case-insensitive) already
+  // exists. The preview endpoint flags duplicates client-side, but the
+  // user could submit them anyway — this is the canonical guard.
+  const { data: existingPeople } = await supabase
+    .from("people")
+    .select("name")
+    .eq("user_id", user.id)
+    .is("deleted_at", null)
+    .eq("is_self", false);
+  const existingNames = new Set(
+    (existingPeople ?? []).map((p) =>
+      String(p.name ?? "").trim().toLowerCase(),
+    ),
+  );
+
   let inserted = 0;
+  let skipped = 0;
   const errors: string[] = [];
 
   for (const c of rows) {
-    if (!c.name?.trim()) continue;
+    const name = c.name?.trim();
+    if (!name) continue;
+    if (existingNames.has(name.toLowerCase())) {
+      skipped += 1;
+      continue;
+    }
 
     const organization_id = await resolveOrCreateOrganization(
       c.company,
@@ -52,7 +74,7 @@ export async function POST(request: Request) {
 
     const { error } = await supabase.from("people").insert({
       user_id: user.id,
-      name: c.name.trim(),
+      name,
       company: c.company,
       role: c.role,
       scope: "personal", // sensible default for iPhone Contacts; user can flip per-row later
@@ -74,15 +96,18 @@ export async function POST(request: Request) {
     });
 
     if (error) {
-      errors.push(`${c.name}: ${error.message}`);
+      errors.push(`${name}: ${error.message}`);
       continue;
     }
+    existingNames.add(name.toLowerCase());
     inserted += 1;
   }
 
   revalidatePath("/people");
-  return NextResponse.json({
-    inserted,
-    errors,
-  });
+
+  // Surface partial-success via a 207-style payload but keep 200 so
+  // the client can read the body — only fail loudly when nothing was
+  // inserted at all.
+  const status = inserted === 0 && errors.length > 0 ? 500 : 200;
+  return NextResponse.json({ inserted, skipped, errors }, { status });
 }

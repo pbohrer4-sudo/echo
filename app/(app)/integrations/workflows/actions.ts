@@ -49,6 +49,11 @@ interface SaveGraphPayload {
 
 export async function saveWorkflowGraph(payload: SaveGraphPayload) {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
   const update: Record<string, unknown> = {
     nodes: payload.nodes ?? [],
     edges: payload.edges ?? [],
@@ -64,7 +69,8 @@ export async function saveWorkflowGraph(payload: SaveGraphPayload) {
   const { error } = await supabase
     .from("workflows")
     .update(update)
-    .eq("id", payload.id);
+    .eq("id", payload.id)
+    .eq("user_id", user.id);
   if (error) throw error;
 
   revalidatePath("/integrations/workflows");
@@ -222,10 +228,16 @@ export async function createDemoWorkflow() {
 
 export async function deleteWorkflow(id: string) {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
   const { error } = await supabase
     .from("workflows")
     .update({ deleted_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("user_id", user.id);
   if (error) throw error;
   revalidatePath("/integrations/workflows");
   redirect("/integrations/workflows");
@@ -236,10 +248,16 @@ export async function deleteWorkflow(id: string) {
 // new status on next render.
 export async function setWorkflowStatus(id: string, status: WorkflowStatus) {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
   const { error } = await supabase
     .from("workflows")
     .update({ status, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("user_id", user.id);
   if (error) throw error;
   revalidatePath("/integrations/workflows");
   revalidatePath(`/integrations/workflows/${id}`);
@@ -249,10 +267,16 @@ export async function setWorkflowStatus(id: string, status: WorkflowStatus) {
 // where we stay on the page after the row is gone.
 export async function deleteWorkflowInPlace(id: string) {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
   const { error } = await supabase
     .from("workflows")
     .update({ deleted_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("user_id", user.id);
   if (error) throw error;
   revalidatePath("/integrations/workflows");
 }

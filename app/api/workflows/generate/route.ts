@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "@/lib/claude";
 import { getUserContext } from "@/lib/user-context";
 import { NODE_CATALOG, findTemplate } from "@/lib/workflow-catalog";
 import type { WorkflowEdge, WorkflowNode } from "@/lib/types";
+import { LIMITS, rateLimit } from "@/lib/rate-limit";
+import { mapAnthropicError } from "@/lib/anthropic-error";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -15,8 +18,10 @@ interface GenerateRequest {
 let sharedClient: Anthropic | null = null;
 function getClient(apiKey?: string | null): Anthropic {
   if (apiKey) return new Anthropic({ apiKey });
+  const envKey = process.env.ANTHROPIC_API_KEY;
+  if (!envKey) throw new Error("Kein Anthropic-Key konfiguriert");
   if (!sharedClient) {
-    sharedClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+    sharedClient = new Anthropic({ apiKey: envKey });
   }
   return sharedClient;
 }
@@ -123,6 +128,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  const rl = await rateLimit({
+    userId: ctx.user_id,
+    key: "ai_workflow_gen",
+    ...LIMITS.ai_workflow_gen,
+  });
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: "Zu viele Anfragen — kurz warten." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } },
+    );
+  }
+
   let body: GenerateRequest;
   try {
     body = await request.json();
@@ -154,15 +171,21 @@ export async function POST(request: Request) {
 
     const composed = toolUse.input as ComposeOutput;
     const result = realizeWorkflow(composed);
+    if (result.nodes.length === 0) {
+      return NextResponse.json(
+        { error: "Workflow leer — versuch es konkreter zu beschreiben." },
+        { status: 422 },
+      );
+    }
     return NextResponse.json(result);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "generate failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const { status, message } = mapAnthropicError(err);
+    return NextResponse.json({ error: message }, { status });
   }
 }
 
 function genId(prefix: string): string {
-  return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
+  return `${prefix}_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
 }
 
 function realizeWorkflow(composed: ComposeOutput): {
@@ -174,9 +197,12 @@ function realizeWorkflow(composed: ComposeOutput): {
   const warnings: string[] = [];
   const nodes: WorkflowNode[] = [];
   const indexToId = new Map<number, string>();
+  const rawNodes = Array.isArray(composed?.nodes) ? composed.nodes : [];
+  const rawEdges = Array.isArray(composed?.edges) ? composed.edges : [];
 
-  for (let i = 0; i < (composed.nodes ?? []).length; i++) {
-    const raw = composed.nodes[i];
+  for (let i = 0; i < rawNodes.length; i++) {
+    const raw = rawNodes[i];
+    if (!raw || typeof raw !== "object") continue;
     const tpl = findTemplate(raw.subtype);
     if (!tpl) {
       warnings.push(`Subtype unbekannt: ${raw.subtype} — übersprungen.`);
@@ -199,10 +225,12 @@ function realizeWorkflow(composed: ComposeOutput): {
   }
 
   const edges: WorkflowEdge[] = [];
-  for (const e of composed.edges ?? []) {
+  for (const e of rawEdges) {
+    if (!e || typeof e !== "object") continue;
     const sId = indexToId.get(e.from_index);
     const tId = indexToId.get(e.to_index);
     if (!sId || !tId) continue;
+    if (sId === tId) continue; // skip self-loops
     edges.push({
       id: genId("edge"),
       source: sId,
@@ -214,7 +242,20 @@ function realizeWorkflow(composed: ComposeOutput): {
 
   layoutNodes(nodes, edges);
 
-  return { summary: composed.summary ?? "", nodes, edges, warnings };
+  // Sanity-check the composed graph: warn but don't fail if there's
+  // no trigger (Claude sometimes builds an action-only sub-graph) or
+  // no action (the workflow does nothing on its own).
+  const hasTrigger = nodes.some((n) => n.data.kind === "trigger");
+  const hasAction = nodes.some((n) => n.data.kind === "action");
+  if (!hasTrigger) warnings.push("Kein Trigger — Workflow startet nie automatisch.");
+  if (!hasAction) warnings.push("Keine Action — Workflow tut nichts.");
+
+  return {
+    summary: typeof composed?.summary === "string" ? composed.summary : "",
+    nodes,
+    edges,
+    warnings,
+  };
 }
 
 // BFS-style layered layout: column = max depth from any trigger, row =

@@ -2,6 +2,17 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { ToolCall } from "@/lib/tools";
+import {
+  findBirthday,
+  parseAddresses,
+  parseEmails,
+  parseImportantDates,
+  parsePhones,
+  parseSocials,
+  stringArray,
+  stringOr,
+  stringOrNull,
+} from "@/lib/parse-contact";
 
 export const runtime = "nodejs";
 
@@ -52,6 +63,9 @@ export async function POST(request: Request) {
     const name = String(input.name ?? "").trim();
     if (!name) continue;
 
+    const phones = parsePhones(input.phones);
+    const emails = parseEmails(input.emails);
+
     const { data, error } = await supabase
       .from("people")
       .insert({
@@ -62,22 +76,22 @@ export async function POST(request: Request) {
         scope: scopeOr(input.scope, "both"),
         tags: stringArray(input.tags),
         notes: stringOrNull(input.notes),
-        phones: parsePhones(input.phones),
-        emails: parseEmails(input.emails),
+        phones,
+        emails,
         addresses: parseAddresses(input.addresses),
         socials: parseSocials(input.socials),
         important_dates: parseImportantDates(input.important_dates),
         // Mirror primary phone/email so legacy code paths still work.
-        phone: parsePhones(input.phones)[0]?.value ?? null,
-        email: parseEmails(input.emails)[0]?.value ?? null,
+        phone: phones[0]?.value ?? null,
+        email: emails[0]?.value ?? null,
         birthday: findBirthday(input.important_dates),
       })
       .select("id, name")
       .single();
 
-    if (error) {
+    if (error || !data) {
       return NextResponse.json(
-        { error: `create_person: ${error.message}`, commits },
+        { error: `create_person: ${error?.message ?? "no row returned"}`, commits },
         { status: 500 },
       );
     }
@@ -86,7 +100,10 @@ export async function POST(request: Request) {
   }
 
   // Pass 1.5: update_person — needs to read the existing row so we
-  // can append to array fields rather than replace.
+  // can append to array fields rather than replace. Scope every read
+  // and write to user_id explicitly: RLS guards us today, but the
+  // commit endpoint trusts whatever toolCalls the client sends, so a
+  // forged id from another tenant would otherwise no-op silently.
   for (const call of calls) {
     if (call.name !== "update_person") continue;
     const input = call.input as Record<string, unknown>;
@@ -99,6 +116,8 @@ export async function POST(request: Request) {
         "tags, phones, emails, addresses, socials, important_dates",
       )
       .eq("id", id)
+      .eq("user_id", user.id)
+      .is("deleted_at", null)
       .maybeSingle();
 
     if (existingRes.error || !existingRes.data) continue;
@@ -163,7 +182,9 @@ export async function POST(request: Request) {
     const { error } = await supabase
       .from("people")
       .update(update)
-      .eq("id", id);
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
 
     if (error) {
       return NextResponse.json(
@@ -227,22 +248,32 @@ export async function POST(request: Request) {
       }
       commits.interactions += 1;
 
-      // Bump last_interaction_at on the involved people.
+      // Bump last_interaction_at on the involved people. Filter by
+      // user_id and deleted_at so a forged or tombstoned id can't be
+      // touched, even if RLS weren't there.
       if (personIds.length) {
-        await supabase
+        const { error: bumpError } = await supabase
           .from("people")
           .update({ last_interaction_at: new Date().toISOString() })
-          .in("id", personIds);
+          .in("id", personIds)
+          .eq("user_id", user.id)
+          .is("deleted_at", null);
+        if (bumpError) {
+          console.error("last_interaction_at bump failed", bumpError);
+        }
       }
       continue;
     }
 
     if (call.name === "create_note") {
+      const body = stringOrNull(input.body);
+      const title = stringOrNull(input.title);
+      if (!body && !title) continue;
       const { error } = await supabase.from("notes").insert({
         user_id: user.id,
         person_id: resolvePersonId(input),
-        title: stringOrNull(input.title),
-        body: stringOrNull(input.body) ?? "",
+        title,
+        body: body ?? "",
         tags: stringArray(input.tags),
         source: "voice",
       });
@@ -258,11 +289,12 @@ export async function POST(request: Request) {
 
     if (call.name === "create_reminder") {
       const remindAt = stringOrNull(input.remind_at);
-      if (!remindAt) continue;
+      const text = stringOrNull(input.text);
+      if (!remindAt || !text) continue;
       const { error } = await supabase.from("reminders").insert({
         user_id: user.id,
         person_id: resolvePersonId(input),
-        text: stringOrNull(input.text) ?? "",
+        text,
         remind_at: remindAt,
         recurrence: recurrenceOr(input.recurrence, "once"),
         type: reminderTypeOr(input.type, "custom"),
@@ -280,10 +312,12 @@ export async function POST(request: Request) {
     }
 
     if (call.name === "create_todo") {
+      const text = stringOrNull(input.text);
+      if (!text) continue;
       const { error } = await supabase.from("todos").insert({
         user_id: user.id,
         person_id: resolvePersonId(input),
-        text: stringOrNull(input.text) ?? "",
+        text,
         due_date: stringOrNull(input.due_date),
         priority: priorityOr(input.priority, "medium"),
         status: "open",
@@ -303,21 +337,6 @@ export async function POST(request: Request) {
   revalidatePath("/inbox");
 
   return NextResponse.json({ ok: true, commits });
-}
-
-function stringOrNull(v: unknown): string | null {
-  if (typeof v !== "string") return null;
-  const t = v.trim();
-  return t ? t : null;
-}
-
-function stringOr(v: unknown, fallback: string): string {
-  return stringOrNull(v) ?? fallback;
-}
-
-function stringArray(v: unknown): string[] {
-  if (!Array.isArray(v)) return [];
-  return v.filter((x): x is string => typeof x === "string" && x.length > 0);
 }
 
 function scopeOr(v: unknown, fallback: "work" | "personal" | "both") {
@@ -348,113 +367,4 @@ function reminderTypeOr(
 
 function priorityOr(v: unknown, fallback: "low" | "medium" | "high") {
   return v === "low" || v === "medium" || v === "high" ? v : fallback;
-}
-
-interface PhoneEntry {
-  label: string;
-  value: string;
-}
-function parsePhones(v: unknown): PhoneEntry[] {
-  if (!Array.isArray(v)) return [];
-  return v
-    .map((e: unknown) => {
-      if (!e || typeof e !== "object") return null;
-      const obj = e as Record<string, unknown>;
-      const value = stringOrNull(obj.value);
-      if (!value) return null;
-      return { label: stringOr(obj.label, "mobile"), value };
-    })
-    .filter((e): e is PhoneEntry => e !== null);
-}
-
-interface EmailEntry {
-  label: string;
-  value: string;
-}
-function parseEmails(v: unknown): EmailEntry[] {
-  if (!Array.isArray(v)) return [];
-  return v
-    .map((e: unknown) => {
-      if (!e || typeof e !== "object") return null;
-      const obj = e as Record<string, unknown>;
-      const value = stringOrNull(obj.value);
-      if (!value) return null;
-      return { label: stringOr(obj.label, "persönlich"), value };
-    })
-    .filter((e): e is EmailEntry => e !== null);
-}
-
-interface AddressEntry {
-  label: string;
-  street: string | null;
-  city: string | null;
-  postal_code: string | null;
-  country: string | null;
-}
-function parseAddresses(v: unknown): AddressEntry[] {
-  if (!Array.isArray(v)) return [];
-  return v
-    .map((e: unknown) => {
-      if (!e || typeof e !== "object") return null;
-      const obj = e as Record<string, unknown>;
-      const street = stringOrNull(obj.street);
-      const city = stringOrNull(obj.city);
-      if (!street && !city) return null;
-      return {
-        label: stringOr(obj.label, "zuhause"),
-        street,
-        city,
-        postal_code: stringOrNull(obj.postal_code),
-        country: stringOrNull(obj.country),
-      };
-    })
-    .filter((e): e is AddressEntry => e !== null);
-}
-
-interface SocialEntry {
-  platform: string;
-  handle_or_url: string;
-}
-function parseSocials(v: unknown): SocialEntry[] {
-  if (!Array.isArray(v)) return [];
-  return v
-    .map((e: unknown) => {
-      if (!e || typeof e !== "object") return null;
-      const obj = e as Record<string, unknown>;
-      const handle = stringOrNull(obj.handle_or_url);
-      if (!handle) return null;
-      return {
-        platform: stringOr(obj.platform, "andere"),
-        handle_or_url: handle,
-      };
-    })
-    .filter((e): e is SocialEntry => e !== null);
-}
-
-interface ImportantDate {
-  label: string;
-  date: string;
-  remind: boolean;
-}
-function parseImportantDates(v: unknown): ImportantDate[] {
-  if (!Array.isArray(v)) return [];
-  return v
-    .map((e: unknown) => {
-      if (!e || typeof e !== "object") return null;
-      const obj = e as Record<string, unknown>;
-      const date = stringOrNull(obj.date);
-      if (!date) return null;
-      return {
-        label: stringOr(obj.label, "andere"),
-        date,
-        remind: Boolean(obj.remind),
-      };
-    })
-    .filter((e): e is ImportantDate => e !== null);
-}
-
-function findBirthday(v: unknown): string | null {
-  const dates = parseImportantDates(v);
-  const bday = dates.find((d) => d.label.toLowerCase() === "geburtstag");
-  return bday?.date ?? null;
 }

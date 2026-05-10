@@ -1,7 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/callback", "/auth"];
+// Exact paths or known prefixes only — `startsWith` here is intentional
+// for `/auth/`, but the trailing slash matters: bare `/auth` would also
+// match a hypothetical future `/authentication` or `/auth-debug` route
+// and silently bypass the gate.
+const PUBLIC_EXACT = new Set(["/login", "/callback"]);
+const PUBLIC_PREFIXES = ["/auth/"];
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -32,7 +37,9 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isPublic = PUBLIC_PATHS.some((p) => path.startsWith(p));
+  const isPublic =
+    PUBLIC_EXACT.has(path) ||
+    PUBLIC_PREFIXES.some((p) => path.startsWith(p));
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

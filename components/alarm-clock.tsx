@@ -144,18 +144,31 @@ function useAlarmTone() {
     const ctx = ensureCtx();
     if (!ctx) return;
     if (ctx.state === "suspended") void ctx.resume();
-    let id: number | null = null;
+    let intervalId: number | null = null;
+    const pendingTimeouts = new Set<number>();
     const tick = () => {
       // Triple-beep pattern: beep, gap, beep, gap, beep — feels like
-      // a real alarm rather than a mosquito.
+      // a real alarm rather than a mosquito. Track the nested timeouts
+      // so stopLoop can cancel pending beeps too — without this, a
+      // snooze/dismiss within ~600ms still emits the trailing beeps.
       playBeep(180);
-      window.setTimeout(() => playBeep(180), 280);
-      window.setTimeout(() => playBeep(180), 560);
+      const t1 = window.setTimeout(() => {
+        pendingTimeouts.delete(t1);
+        playBeep(180);
+      }, 280);
+      const t2 = window.setTimeout(() => {
+        pendingTimeouts.delete(t2);
+        playBeep(180);
+      }, 560);
+      pendingTimeouts.add(t1);
+      pendingTimeouts.add(t2);
     };
     tick();
-    id = window.setInterval(tick, 1400);
+    intervalId = window.setInterval(tick, 1400);
     stopRef.current = () => {
-      if (id !== null) window.clearInterval(id);
+      if (intervalId !== null) window.clearInterval(intervalId);
+      for (const t of pendingTimeouts) window.clearTimeout(t);
+      pendingTimeouts.clear();
     };
   }, [ensureCtx, playBeep]);
 
@@ -381,40 +394,81 @@ export function AlarmClock() {
 
       {/* Full-screen ringing overlay */}
       {ringing && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-8 bg-paper/95 backdrop-blur">
-          <div className="text-center">
-            <p className="t-label mb-3">Wecker</p>
-            <div className="font-mono text-7xl font-light tabular-nums text-ink-1 sm:text-8xl">
-              {clock.hh}
-              <span className="opacity-40">:</span>
-              {clock.mm}
-            </div>
-            <p className="mt-3 text-sm text-ink-3">{clock.date}</p>
-          </div>
-          <div className="flex w-full max-w-md flex-col items-center gap-3 px-6">
-            <button
-              type="button"
-              onClick={dismissAlarm}
-              className="w-full rounded-2xl border border-action bg-action px-6 py-5 text-base font-semibold text-paper transition hover:shadow-[0_0_0_4px_var(--action-ring)]"
-            >
-              Aus
-            </button>
-            <button
-              type="button"
-              onClick={snoozeAlarm}
-              className="w-full rounded-2xl border border-rule bg-paper px-6 py-4 text-sm font-medium text-ink-1 transition hover:border-action hover:text-action"
-            >
-              Snooze · {state.snoozeMin} min
-            </button>
-          </div>
-          <p
-            className="absolute inset-x-0 top-6 text-center text-xs text-ink-3 motion-safe:animate-pulse"
-            aria-live="polite"
-          >
-            🔔 ECHO weckt dich
-          </p>
-        </div>
+        <RingingOverlay
+          clock={clock}
+          snoozeMin={state.snoozeMin}
+          onDismiss={dismissAlarm}
+          onSnooze={snoozeAlarm}
+        />
       )}
+    </div>
+  );
+}
+
+// Modal overlay split out so we can give it focus management and
+// proper dialog semantics. Esc dismisses; the snooze button gets
+// initial focus so a keyboard user can reach for it without tabbing.
+function RingingOverlay({
+  clock,
+  snoozeMin,
+  onDismiss,
+  onSnooze,
+}: {
+  clock: { hh: string; mm: string; date: string };
+  snoozeMin: number;
+  onDismiss: () => void;
+  onSnooze: () => void;
+}) {
+  const dismissRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    dismissRef.current?.focus();
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onDismiss();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onDismiss]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Wecker klingelt"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-8 bg-paper/95 backdrop-blur"
+    >
+      <div className="text-center">
+        <p className="t-label mb-3">Wecker</p>
+        <div className="font-mono text-7xl font-light tabular-nums text-ink-1 sm:text-8xl">
+          {clock.hh}
+          <span className="opacity-40">:</span>
+          {clock.mm}
+        </div>
+        <p className="mt-3 text-sm text-ink-3">{clock.date}</p>
+      </div>
+      <div className="flex w-full max-w-md flex-col items-center gap-3 px-6">
+        <button
+          ref={dismissRef}
+          type="button"
+          onClick={onDismiss}
+          className="w-full rounded-2xl border border-action bg-action px-6 py-5 text-base font-semibold text-paper transition hover:shadow-[0_0_0_4px_var(--action-ring)]"
+        >
+          Aus
+        </button>
+        <button
+          type="button"
+          onClick={onSnooze}
+          className="w-full rounded-2xl border border-rule bg-paper px-6 py-4 text-sm font-medium text-ink-1 transition hover:border-action hover:text-action"
+        >
+          Snooze · {snoozeMin} min
+        </button>
+      </div>
+      <p
+        className="absolute inset-x-0 top-6 text-center text-xs text-ink-3 motion-safe:animate-pulse"
+        aria-live="polite"
+      >
+        🔔 ECHO weckt dich
+      </p>
     </div>
   );
 }

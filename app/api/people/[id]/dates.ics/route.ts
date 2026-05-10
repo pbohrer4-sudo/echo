@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import type { ImportantDate } from "@/lib/types";
 
@@ -66,8 +67,7 @@ function buildIcs(
     `X-WR-CALNAME:${name} — Wichtige Daten`,
   ];
 
-  for (let i = 0; i < dates.length; i++) {
-    const d = dates[i];
+  for (const d of dates) {
     const date = parseIsoDate(d.date);
     if (!date) continue;
     const startDate = formatLocalDate(date);
@@ -75,8 +75,16 @@ function buildIcs(
     nextDay.setDate(nextDay.getDate() + 1);
     const endDate = formatLocalDate(nextDay);
 
+    // Stable UID — hash of (label, date). If the user reorders or
+    // deletes other entries, this event keeps its identity for any
+    // subscriber that imported it earlier.
+    const uid = createHash("sha1")
+      .update(`${personId}|${d.label.toLowerCase()}|${d.date}`)
+      .digest("hex")
+      .slice(0, 16);
+
     lines.push("BEGIN:VEVENT");
-    lines.push(`UID:${personId}-${i}@echo.local`);
+    lines.push(`UID:${uid}@echo.local`);
     lines.push(`DTSTAMP:${now}`);
     lines.push(`DTSTART;VALUE=DATE:${startDate}`);
     lines.push(`DTEND;VALUE=DATE:${endDate}`);

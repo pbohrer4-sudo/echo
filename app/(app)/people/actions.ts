@@ -22,6 +22,12 @@ import {
   PRIORITY_LETTERS,
   RELATIONSHIP_DEPTHS,
 } from "@/lib/types";
+import {
+  parseAddresses as parseAddressesShared,
+  parseEmails as parseEmailsShared,
+  parsePhones as parsePhonesShared,
+  parseSocials as parseSocialsShared,
+} from "@/lib/parse-contact";
 
 const SCOPES: Scope[] = ["work", "personal", "both"];
 
@@ -426,70 +432,25 @@ function asString(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
 }
 
+// Form-data wrappers around the shared JSONB parsers in
+// lib/parse-contact.ts — single source of truth for label defaults
+// and "drop empty entry" rules across voice extract, business-card
+// scan, and form submit.
+
 function parsePhones(raw: FormDataEntryValue | null): PhoneEntry[] {
-  const data = safeJson(raw);
-  if (!Array.isArray(data)) return [];
-  return data
-    .map((e: unknown) => {
-      if (typeof e !== "object" || !e) return null;
-      const obj = e as Record<string, unknown>;
-      const value = asString(obj.value);
-      if (!value) return null;
-      return { label: asString(obj.label) || "mobile", value };
-    })
-    .filter((e): e is PhoneEntry => e !== null);
+  return parsePhonesShared(safeJson(raw));
 }
 
 function parseEmails(raw: FormDataEntryValue | null): EmailEntry[] {
-  const data = safeJson(raw);
-  if (!Array.isArray(data)) return [];
-  return data
-    .map((e: unknown) => {
-      if (typeof e !== "object" || !e) return null;
-      const obj = e as Record<string, unknown>;
-      const value = asString(obj.value);
-      if (!value) return null;
-      return { label: asString(obj.label) || "persönlich", value };
-    })
-    .filter((e): e is EmailEntry => e !== null);
+  return parseEmailsShared(safeJson(raw));
 }
 
 function parseAddresses(raw: FormDataEntryValue | null): AddressEntry[] {
-  const data = safeJson(raw);
-  if (!Array.isArray(data)) return [];
-  return data
-    .map((e: unknown) => {
-      if (typeof e !== "object" || !e) return null;
-      const obj = e as Record<string, unknown>;
-      const street = asString(obj.street);
-      const city = asString(obj.city);
-      if (!street && !city) return null;
-      return {
-        label: asString(obj.label) || "zuhause",
-        street: street || null,
-        city: city || null,
-        postal_code: asString(obj.postal_code) || null,
-        country: asString(obj.country) || null,
-      };
-    })
-    .filter((e): e is AddressEntry => e !== null);
+  return parseAddressesShared(safeJson(raw));
 }
 
 function parseSocials(raw: FormDataEntryValue | null): SocialEntry[] {
-  const data = safeJson(raw);
-  if (!Array.isArray(data)) return [];
-  return data
-    .map((e: unknown) => {
-      if (typeof e !== "object" || !e) return null;
-      const obj = e as Record<string, unknown>;
-      const handle = asString(obj.handle_or_url);
-      if (!handle) return null;
-      return {
-        platform: asString(obj.platform) || "andere",
-        handle_or_url: handle,
-      };
-    })
-    .filter((e): e is SocialEntry => e !== null);
+  return parseSocialsShared(safeJson(raw));
 }
 
 function parseDates(raw: FormDataEntryValue | null): ImportantDate[] {
