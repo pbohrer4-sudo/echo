@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { listCadenceRows, type CadenceBucket } from "@/lib/cadence";
+import { SmartRemindersPanel } from "@/components/smart-reminders-panel";
 
 const BUCKET_LABEL: Record<CadenceBucket, string> = {
   "on-rhythm": "Auf Rhythmus",
@@ -64,6 +65,8 @@ export default async function RhythmusPage() {
             </p>
           )}
         </header>
+
+        <SmartRemindersPanel />
 
         {buckets.map((bucket) => {
           const list = grouped.get(bucket)!;

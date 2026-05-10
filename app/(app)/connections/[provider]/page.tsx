@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { findProvider } from "@/lib/connections-catalog";
 import { getConnectionByProvider } from "@/lib/connections";
 import { disconnect, startConnect } from "../actions";
+import { SyncTriggerCard } from "@/components/sync-trigger-card";
+import { WhatsappConfigCard } from "@/components/whatsapp-config-card";
 
 const STATUS_LABEL: Record<string, string> = {
   connected: "Verbunden",
@@ -134,6 +136,22 @@ export default async function ConnectionDetailPage({
             {def.description}
           </p>
         </section>
+
+        {isLive && provider === "google_calendar" && (
+          <SyncTriggerCard
+            endpoint="/api/calendar/sync"
+            label="Kalender"
+            description="Holt Events aus den letzten 7 Tagen + nächsten 30 Tagen, matcht Teilnehmer auf bekannte Personen und legt vergangene Termine als Interaktionen an."
+          />
+        )}
+        {isLive && provider === "gmail" && (
+          <SyncTriggerCard
+            endpoint="/api/email/sync"
+            label="Gmail"
+            description="Pulled die letzten 30 Mails (ohne Promotions/Social), matcht Sender + Empfänger auf bekannte Personen und legt jede gematchte Mail als Email-Interaktion an."
+          />
+        )}
+        {provider === "whatsapp" && <WhatsappConfigCard />}
 
         <div className="grid gap-8 md:grid-cols-2">
           <section>

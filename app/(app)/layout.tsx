@@ -6,6 +6,8 @@ import { getOrCreateSelfPerson } from "@/lib/people";
 import { SignOutButton } from "./sign-out-button";
 import { NavLink } from "./nav-link";
 import { NotificationManager } from "@/components/notification-manager";
+import { SearchModal } from "@/components/search-modal";
+import { SearchTrigger } from "@/components/search-trigger";
 
 function initials(name: string): string {
   return name
@@ -42,6 +44,7 @@ export default async function AppLayout({
           >
             ECHO
           </Link>
+          <SearchTrigger />
           <nav className="flex flex-col gap-1 text-sm">
             <NavLink href="/">Voice</NavLink>
             <NavLink href="/debrief">Debrief</NavLink>
@@ -100,6 +103,7 @@ export default async function AppLayout({
       </aside>
       <main className="flex-1 overflow-x-hidden">{children}</main>
       <NotificationManager />
+      <SearchModal />
     </div>
   );
 }

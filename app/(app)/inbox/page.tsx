@@ -1,8 +1,13 @@
 import { listInbox, getPeopleMap } from "@/lib/inbox";
+import { listUnreadWhatsapp } from "@/lib/whatsapp-inbox";
 import { InboxRowItem } from "./inbox-row";
+import { WhatsappInboxStrip } from "@/components/whatsapp-inbox-strip";
 
 export default async function InboxPage() {
-  const rows = await listInbox();
+  const [rows, waRows] = await Promise.all([
+    listInbox(),
+    listUnreadWhatsapp(),
+  ]);
 
   const personIds = Array.from(
     new Set(rows.map((r) => r.person_id).filter((id): id is string => !!id)),
@@ -18,9 +23,12 @@ export default async function InboxPage() {
             Inbox
           </h1>
           <p className="text-sm text-ink-3">
-            Erinnerungen und Aufgaben — sortiert nach Fälligkeit.
+            Erinnerungen, Aufgaben und ungelesene WhatsApp-Nachrichten — alles
+            an einem Ort.
           </p>
         </header>
+
+        <WhatsappInboxStrip rows={waRows} />
 
         {rows.length === 0 ? (
           <div className="rounded border border-rule bg-paper px-6 py-16 text-center">
