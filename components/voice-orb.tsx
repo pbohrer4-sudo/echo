@@ -475,13 +475,12 @@ export function VoiceOrb() {
       return;
     }
     if (orbState === "listening") {
-      // Cancel — drop captured speech and go back to idle. Without
-      // the cancelledRef, processFinal would still submit whatever
-      // was recognized so far when recognition.onend fires.
-      cancelledRef.current = true;
-      setOrbState("idle");
+      // Stop + submit — Klick beim Sprechen heißt "fertig, los". Cancel
+      // ohne Submit gibt's via Esc-Hotkey unten (kein versehentlicher
+      // Daten-Verlust durch Doppel-Klick).
+      setOrbState("thinking");
       try {
-        recognitionRef.current?.abort();
+        recognitionRef.current?.stop();
       } catch {}
       return;
     }
@@ -528,18 +527,29 @@ export function VoiceOrb() {
   // has focus — power-user nudge toward the 80%-voice goal.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.code !== "Space") return;
       const target = e.target as HTMLElement | null;
-      if (
+      const inField =
         target &&
         (target.tagName === "INPUT" ||
           target.tagName === "TEXTAREA" ||
-          target.isContentEditable)
-      )
+          target.isContentEditable);
+
+      // Space = Mic toggle (idle → listening); Esc = Cancel beim
+      // Sprechen ohne Submit. Esc ist die explizite Geste damit ein
+      // Klick auf den Orb nicht versehentlich Aufnahmen wegwirft.
+      if (e.code === "Space" && !inField) {
+        if (orbState !== "idle" && orbState !== "error") return;
+        e.preventDefault();
+        startListening();
         return;
-      if (orbState !== "idle" && orbState !== "error") return;
-      e.preventDefault();
-      startListening();
+      }
+      if (e.code === "Escape" && orbState === "listening") {
+        cancelledRef.current = true;
+        setOrbState("idle");
+        try {
+          recognitionRef.current?.abort();
+        } catch {}
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
