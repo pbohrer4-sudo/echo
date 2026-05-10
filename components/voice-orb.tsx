@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import type { ToolCall } from "@/lib/tools";
+import type { BusinessCardData } from "@/lib/business-card";
 import { stripMarkdown } from "@/lib/text";
 import { ExtractionConfirmation } from "./extraction-confirmation";
 
@@ -213,6 +214,7 @@ export function VoiceOrb() {
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [composer, setComposer] = useState("");
+  const [scanning, setScanning] = useState(false);
 
   const recognitionRef = useRef<RecognitionInstance | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -220,6 +222,7 @@ export function VoiceOrb() {
   const silenceTimerRef = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const hydratedRef = useRef(false);
   // Set true when the user clicks the orb to cancel mid-listen.
   // Checked in processFinal so we don't submit an unintended snippet.
@@ -544,6 +547,77 @@ export function VoiceOrb() {
       audioRef.current = null;
       setOrbState(pendingToolCalls.length ? "confirming" : "idle");
       return;
+    }
+  }
+
+  // Visitenkarten-Scan: Bild → /api/scan-business-card (Claude Vision)
+  // → BusinessCardData → in einen create_person ToolCall umbauen → wie
+  // ein Voice-Extract behandeln (ExtractionConfirmation öffnet sich).
+  // Default-Scope ist "work" weil Visitenkarten meist Business sind.
+  async function handleScanFile(file: File) {
+    if (!file.type.startsWith("image/")) {
+      setError("Nur Bilder erlaubt");
+      setOrbState("error");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Bild zu groß (max. 5 MB)");
+      setOrbState("error");
+      return;
+    }
+    setScanning(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append("image", file);
+      const res = await fetch("/api/scan-business-card", {
+        method: "POST",
+        body: fd,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `Scan ${res.status}`);
+      }
+      const { data } = (await res.json()) as { data: BusinessCardData };
+      if (!data.name && !data.company && data.phones.length === 0) {
+        throw new Error("Konnte nichts auf der Karte erkennen");
+      }
+
+      const personInput: Record<string, unknown> = {
+        name: data.name ?? "",
+        scope: "work",
+      };
+      if (data.company) personInput.company = data.company;
+      if (data.role) personInput.role = data.role;
+      if (data.phones.length) personInput.phones = data.phones;
+      if (data.emails.length) personInput.emails = data.emails;
+      if (data.addresses.length) personInput.addresses = data.addresses;
+      if (data.socials.length) personInput.socials = data.socials;
+
+      const toolCall: ToolCall = {
+        name: "create_person",
+        input: personInput,
+      };
+
+      // Marker im Verlauf damit man später sieht dass eine Karte
+      // gescannt wurde — gleicher Flow wie Voice / Text.
+      setTranscript((prev) => [
+        ...prev,
+        {
+          kind: "user",
+          content: `📇 Visitenkarte gescannt${data.name ? `: ${data.name}` : ""}`,
+          via: "text",
+          ts: Date.now(),
+        },
+      ]);
+      setSuggestedReplies([]);
+      setPendingToolCalls([toolCall]);
+      setOrbState("confirming");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Scan fehlgeschlagen");
+      setOrbState("error");
+    } finally {
+      setScanning(false);
     }
   }
 
@@ -878,6 +952,53 @@ export function VoiceOrb() {
             onSubmit={handleComposerSubmit}
             className="flex w-full items-end gap-2 rounded-2xl border border-rule bg-paper px-3 py-2 transition focus-within:border-action focus-within:shadow-[0_0_0_3px_var(--action-ring)]"
           >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void handleScanFile(f);
+                // reset damit dasselbe File nochmal auswählbar ist
+                e.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={
+                scanning ||
+                orbState === "thinking" ||
+                orbState === "confirming"
+              }
+              title="Visitenkarte scannen"
+              aria-label="Visitenkarte scannen"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded text-ink-3 transition hover:bg-paper-2 hover:text-action disabled:opacity-40"
+            >
+              {scanning ? (
+                <span className="inline-flex gap-0.5" aria-hidden>
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-ink-3 [animation-delay:-0.3s]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-ink-3 [animation-delay:-0.15s]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-ink-3" />
+                </span>
+              ) : (
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-4 w-4"
+                  aria-hidden
+                >
+                  <rect x="3" y="6" width="18" height="13" rx="2" />
+                  <path d="M8 6V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v1" />
+                  <circle cx="12" cy="13" r="3" />
+                </svg>
+              )}
+            </button>
             <textarea
               ref={composerRef}
               value={composer}
