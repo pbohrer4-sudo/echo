@@ -109,8 +109,9 @@ export async function autocompleteOrganizations(
 }
 
 // Resolve a free-text company name to an organization_id, creating
-// a new row when there's no case-insensitive match. Idempotent.
-// Returns null when companyName is null/empty.
+// a new row when there's no case-insensitive match. Race-safe: relies
+// on the partial unique index on (user_id, lower(trim(name))) added
+// in migration 0012. Returns null when companyName is null/empty.
 export async function resolveOrCreateOrganization(
   companyName: string | null,
   userId: string,
@@ -123,6 +124,7 @@ export async function resolveOrCreateOrganization(
   const { data: matches, error } = await supabase
     .from("organizations")
     .select("id")
+    .eq("user_id", userId)
     .is("deleted_at", null)
     .ilike("name", trimmed)
     .limit(1);
@@ -137,6 +139,19 @@ export async function resolveOrCreateOrganization(
     .insert({ user_id: userId, name: trimmed })
     .select("id")
     .single();
+
+  // Concurrent insert lost the race against the unique index — re-read.
+  if (inserted.error && (inserted.error as { code?: string }).code === "23505") {
+    const { data: retry } = await supabase
+      .from("organizations")
+      .select("id")
+      .eq("user_id", userId)
+      .is("deleted_at", null)
+      .ilike("name", trimmed)
+      .limit(1)
+      .single();
+    if (retry) return (retry as { id: string }).id;
+  }
   if (inserted.error) throw inserted.error;
   return (inserted.data as { id: string }).id;
 }

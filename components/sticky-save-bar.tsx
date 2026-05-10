@@ -24,6 +24,11 @@ import type { RefObject } from "react";
 //     for tags / phones / addresses / etc.)
 //   - a 500ms safety poll (catches edge cases like programmatic
 //     state changes from auto-enrich or vCard scan)
+//
+// Submit-state tracking uses a ref keyed against the captured form
+// snapshot at submit time. Edits during an in-flight submit no longer
+// flip submitting back to false (which previously allowed a double
+// submit); only the snapshot matching the submitted state can clear it.
 export function StickySaveBar({
   formRef,
   cancelHref,
@@ -36,6 +41,7 @@ export function StickySaveBar({
   cancelLabel?: string;
 }) {
   const initialRef = useRef<string | null>(null);
+  const submittedSnapshotRef = useRef<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -63,6 +69,18 @@ export function StickySaveBar({
       initialRef.current = current;
       return;
     }
+    // If the form re-rendered to a state different from the one we
+    // submitted, treat that as the server action having returned and
+    // either succeeded (form re-mounted clean → not dirty anymore) or
+    // failed (form still dirty against initial). Either way, we can
+    // clear submitting safely without enabling a double-submit.
+    if (
+      submittedSnapshotRef.current !== null &&
+      current !== submittedSnapshotRef.current
+    ) {
+      submittedSnapshotRef.current = null;
+      setSubmitting(false);
+    }
     const next = current !== initialRef.current;
     setDirty((prev) => (prev === next ? prev : next));
   }
@@ -77,9 +95,6 @@ export function StickySaveBar({
       initialRef.current = readFormState(form);
     }
     const onChange = () => {
-      // Any new edit clears a stale "Speichere…" state — covers the
-      // case where a server action errored and the form re-rendered.
-      setSubmitting((prev) => (prev ? false : prev));
       check();
     };
     form.addEventListener("input", onChange);
@@ -106,10 +121,13 @@ export function StickySaveBar({
   }, []);
 
   // Track submit state so the bar's button echoes the bottom one.
+  // Snapshot the form contents at submit time so check() can detect
+  // when the post-action render differs and clear submitting cleanly.
   useEffect(() => {
     const form = formRef.current;
     if (!form) return;
     function onSubmit() {
+      if (form) submittedSnapshotRef.current = readFormState(form);
       setSubmitting(true);
     }
     form.addEventListener("submit", onSubmit);
@@ -119,16 +137,18 @@ export function StickySaveBar({
   if (!mounted || !dirty) return null;
 
   function handleSave() {
+    if (submitting) return;
     formRef.current?.requestSubmit();
   }
 
-  // Sidebar in (app)/layout.tsx is `w-56` = 14rem at every breakpoint,
-  // so the bar always sits to its right.
+  // Sidebar in (app)/layout.tsx is `w-56` on desktop but hidden on
+  // mobile — use a responsive offset so the bar doesn't sit off-screen
+  // on small widths.
   const bar = (
     <div
       role="region"
       aria-label="Ungespeicherte Änderungen"
-      className="fixed left-56 right-0 top-0 z-50 border-b border-rule bg-paper-2/95 shadow-[0_2px_12px_rgba(20,17,13,0.04)] backdrop-blur"
+      className="fixed left-0 right-0 top-0 z-50 border-b border-rule bg-paper-2/95 shadow-[0_2px_12px_rgba(20,17,13,0.04)] backdrop-blur md:left-56"
     >
       <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-2.5 sm:px-8">
         <p className="flex items-center gap-2 text-xs text-ink-3">
@@ -146,6 +166,7 @@ export function StickySaveBar({
             type="button"
             onClick={handleSave}
             disabled={submitting}
+            aria-busy={submitting}
             className="rounded border border-action bg-action px-3 py-1.5 text-xs font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)] disabled:opacity-60"
           >
             {submitting ? "Speichere…" : saveLabel}

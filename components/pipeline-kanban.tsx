@@ -179,16 +179,24 @@ function DealCard({
         </div>
       </Link>
       <select
-        value={stageId}
-        onChange={(e) => handleMove(e.target.value)}
+        aria-label={`Stage wechseln für ${deal.title}`}
+        value=""
+        onChange={(e) => {
+          if (e.target.value) handleMove(e.target.value);
+        }}
         disabled={pending}
         className="mt-2 h-6 w-full rounded border border-rule bg-paper-2 px-1.5 text-[11px] text-ink-2 hover:border-action"
       >
-        {stages.map((s) => (
-          <option key={s.id} value={s.id}>
-            → {s.name}
-          </option>
-        ))}
+        <option value="" disabled>
+          → wechseln zu …
+        </option>
+        {stages
+          .filter((s) => s.id !== stageId)
+          .map((s) => (
+            <option key={s.id} value={s.id}>
+              → {s.name}
+            </option>
+          ))}
       </select>
     </li>
   );

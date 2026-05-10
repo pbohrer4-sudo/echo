@@ -17,6 +17,11 @@ export async function startConnect(provider: string) {
 
 export async function disconnect(provider: string) {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
   const { error } = await supabase
     .from("service_connections")
     .update({
@@ -25,6 +30,7 @@ export async function disconnect(provider: string) {
       access_token: null,
       refresh_token: null,
     })
+    .eq("user_id", user.id)
     .eq("provider", provider);
   if (error) throw error;
   revalidatePath("/connections");

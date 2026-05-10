@@ -4,6 +4,8 @@ import {
   extractBusinessCard,
   type SupportedMediaType,
 } from "@/lib/business-card";
+import { LIMITS, rateLimit } from "@/lib/rate-limit";
+import { mapAnthropicError } from "@/lib/anthropic-error";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -16,10 +18,57 @@ const ACCEPTED: SupportedMediaType[] = [
   "image/gif",
 ];
 
+// Magic-byte signatures for the formats above. file.type comes from
+// the browser and is trivially spoofable; Anthropic would reject the
+// payload either way, but checking magic bytes here saves a round trip
+// and a billable token spend.
+function sniffMediaType(buf: Buffer): SupportedMediaType | null {
+  if (buf.length < 12) return null;
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
+  if (
+    buf[0] === 0x89 &&
+    buf[1] === 0x50 &&
+    buf[2] === 0x4e &&
+    buf[3] === 0x47
+  )
+    return "image/png";
+  if (
+    buf[0] === 0x47 &&
+    buf[1] === 0x49 &&
+    buf[2] === 0x46 &&
+    buf[3] === 0x38
+  )
+    return "image/gif";
+  if (
+    buf[0] === 0x52 &&
+    buf[1] === 0x49 &&
+    buf[2] === 0x46 &&
+    buf[3] === 0x46 &&
+    buf[8] === 0x57 &&
+    buf[9] === 0x45 &&
+    buf[10] === 0x42 &&
+    buf[11] === 0x50
+  )
+    return "image/webp";
+  return null;
+}
+
 export async function POST(request: Request) {
   const ctx = await getUserContext();
   if (!ctx) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  const rl = await rateLimit({
+    userId: ctx.user_id,
+    key: "ai_scan_card",
+    ...LIMITS.ai_scan_card,
+  });
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: "Zu viele Anfragen — kurz warten." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } },
+    );
   }
 
   let formData: FormData;
@@ -44,26 +93,26 @@ export async function POST(request: Request) {
     );
   }
 
-  const mediaType = file.type as SupportedMediaType;
-  if (!ACCEPTED.includes(mediaType)) {
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const sniffed = sniffMediaType(buffer);
+  if (!sniffed || !ACCEPTED.includes(sniffed)) {
     return NextResponse.json(
       { error: `Format nicht unterstützt: ${file.type}` },
       { status: 400 },
     );
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
   const imageBase64 = buffer.toString("base64");
 
   try {
     const data = await extractBusinessCard({
       imageBase64,
-      mediaType,
+      mediaType: sniffed,
       apiKey: ctx.claude_key,
     });
     return NextResponse.json({ data });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "scan failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const { status, message } = mapAnthropicError(err);
+    return NextResponse.json({ error: message }, { status });
   }
 }

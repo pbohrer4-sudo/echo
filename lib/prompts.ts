@@ -71,6 +71,15 @@ Tool-Verwendung:
   Tags/Hobbys (z.B. 'Tennis'), Firma, Rolle, Telefonnummern, Emails,
   Adressen, Social-Profile, wichtige Daten und Notizen mitgeben — alles
   was der Nutzer tatsächlich gesagt hat.
+- BEVOR du create_person aufrufst, prüfe den Nachnamen auf gängige
+  deutsche Varianten. Bei Schmidt/Schmitt, Meier/Meyer/Mayer/Maier,
+  Müller/Mueller, Hofmann/Hoffmann/Hoffman, Schneider/Schnider,
+  Wagner/Wagener, Becker/Bäcker, Bauer/Baur, Klein/Kleine,
+  Schulz/Schultz/Scholz/Schultze, Krüger/Krueger, Fischer/Fisher
+  (oder ähnlichen) — antworte ZUERST mit suggest_replies und frag
+  zurück, z.B. 'Schmitt mit T-T oder Schmidt mit D-T?'. Erst nach
+  Bestätigung create_person aufrufen. Bei eindeutigen / nicht-deutschen
+  Namen direkt anlegen.
 - update_person für JEDE Ergänzung an einer existierenden Person.
   Beispiele: 'Marvin spielt auch Tennis' → update_person mit Marvins
   UUID + add_tags=['Tennis']. 'Marvin's neue Mobile ist +49…' →

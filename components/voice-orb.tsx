@@ -166,6 +166,9 @@ export function VoiceOrb() {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const hydratedRef = useRef(false);
+  // Set true when the user clicks the orb to cancel mid-listen.
+  // Checked in processFinal so we don't submit an unintended snippet.
+  const cancelledRef = useRef(false);
 
   // Hydrate from localStorage on mount, persist on every change. Keeps
   // the transcript visible across reloads so Patrick can pick up where
@@ -341,12 +344,19 @@ export function VoiceOrb() {
     const text = finalRef.current.trim();
     finalRef.current = "";
     setInterim("");
+    // If the user clicked to cancel, drop whatever was captured. The
+    // orb-click handler set cancelledRef and moved us to idle already.
+    if (cancelledRef.current) {
+      cancelledRef.current = false;
+      return;
+    }
     await submitText(text, "voice");
   }, [submitText]);
 
   const startListening = useCallback(() => {
     setError(null);
     setPendingToolCalls([]);
+    cancelledRef.current = false;
 
     if (!recognitionRef.current) {
       const Ctor =
@@ -377,7 +387,15 @@ export function VoiceOrb() {
       };
       recognition.onerror = (event) => {
         if (event.error === "no-speech" || event.error === "aborted") return;
-        setError(`Spracherkennung: ${event.error}`);
+        // Map common error codes to localized strings instead of leaking
+        // the raw spec name to the user.
+        const friendly: Record<string, string> = {
+          "not-allowed": "Mikrofon-Berechtigung verweigert",
+          "audio-capture": "Mikrofon nicht verfügbar",
+          "service-not-allowed": "Spracherkennung blockiert",
+          network: "Netzwerkfehler beim Erkennen",
+        };
+        setError(friendly[event.error] ?? `Spracherkennung: ${event.error}`);
         setOrbState("error");
       };
       recognitionRef.current = recognition;
@@ -407,14 +425,20 @@ export function VoiceOrb() {
     }
   }, [processFinal]);
 
-  async function handleConfirm() {
-    if (!pendingToolCalls.length) return;
+  async function handleConfirm(editedCalls: ToolCall[]) {
+    // editedCalls comes from ExtractionConfirmation already filtered
+    // (unchecked items dropped, scalar fields edited). If the user
+    // unchecked everything, treat as cancel.
+    if (!editedCalls.length) {
+      handleCancel();
+      return;
+    }
     setCommitting(true);
     try {
       const res = await fetch("/api/extract/commit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ toolCalls: pendingToolCalls }),
+        body: JSON.stringify({ toolCalls: editedCalls }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -425,7 +449,7 @@ export function VoiceOrb() {
       // half of the LLM-style history.
       setTranscript((prev) => [
         ...prev,
-        { kind: "actions", calls: pendingToolCalls, ts: Date.now() },
+        { kind: "actions", calls: editedCalls, ts: Date.now() },
       ]);
       setPendingToolCalls([]);
       setOrbState("idle");
@@ -451,9 +475,13 @@ export function VoiceOrb() {
       return;
     }
     if (orbState === "listening") {
-      setOrbState("thinking");
+      // Cancel — drop captured speech and go back to idle. Without
+      // the cancelledRef, processFinal would still submit whatever
+      // was recognized so far when recognition.onend fires.
+      cancelledRef.current = true;
+      setOrbState("idle");
       try {
-        recognitionRef.current?.stop();
+        recognitionRef.current?.abort();
       } catch {}
       return;
     }
@@ -627,7 +655,7 @@ export function VoiceOrb() {
           })}
 
           {orbState === "listening" && interim && (
-            <div className="flex justify-end">
+            <div className="flex justify-end" aria-live="polite">
               <div className="max-w-[85%] rounded-2xl rounded-br-md border border-action/40 bg-action/5 px-4 py-2.5 text-sm italic text-ink-3">
                 <span className="t-label mr-2 inline align-middle">🎙</span>
                 {interim}…

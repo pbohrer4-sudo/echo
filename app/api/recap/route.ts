@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getUserContext } from "@/lib/user-context";
 import { generateRecap } from "@/lib/recap";
+import { LIMITS, rateLimit } from "@/lib/rate-limit";
+import { mapAnthropicError } from "@/lib/anthropic-error";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -18,6 +20,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  const rl = await rateLimit({
+    userId: ctx.user_id,
+    key: "recap",
+    ...LIMITS.recap,
+  });
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: "Zu viele Anfragen — kurz warten." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } },
+    );
+  }
+
   let body: RecapBody;
   try {
     body = await request.json();
@@ -25,24 +39,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
+  // Use UTC throughout — the deployed Vercel runtime is UTC; using
+  // local-time constructors would shift month boundaries by an hour
+  // (or more around DST flips) for users in DE.
   const now = new Date();
   let from: Date;
   let to: Date;
   let periodLabel: string;
 
   if (body.period === "year") {
-    const year = body.year ?? now.getFullYear();
-    from = new Date(year, 0, 1, 0, 0, 0);
-    to = new Date(year, 11, 31, 23, 59, 59);
+    const year = body.year ?? now.getUTCFullYear();
+    from = new Date(Date.UTC(year, 0, 1, 0, 0, 0));
+    to = new Date(Date.UTC(year, 11, 31, 23, 59, 59));
     periodLabel = `Jahr ${year}`;
   } else {
-    const year = body.year ?? now.getFullYear();
-    const month = body.month ?? now.getMonth() + 1;
-    from = new Date(year, month - 1, 1, 0, 0, 0);
-    to = new Date(year, month, 0, 23, 59, 59);
+    const year = body.year ?? now.getUTCFullYear();
+    const month = body.month ?? now.getUTCMonth() + 1;
+    from = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0));
+    to = new Date(Date.UTC(year, month, 0, 23, 59, 59));
     periodLabel = from.toLocaleDateString("de-DE", {
       month: "long",
       year: "numeric",
+      timeZone: "UTC",
     });
   }
 
@@ -50,7 +68,7 @@ export async function POST(request: Request) {
     const result = await generateRecap({ ctx, from, to, periodLabel });
     return NextResponse.json(result);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "recap failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const { status, message } = mapAnthropicError(err);
+    return NextResponse.json({ error: message }, { status });
   }
 }

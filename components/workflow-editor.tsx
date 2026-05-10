@@ -471,12 +471,28 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
   const [edges, setEdges, onEdgesChange] = useEdgesState<FlowEdge>(initial.edges);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mock, setMock] = useState<MockResult[] | null>(null);
-  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [savedSnapshot, setSavedSnapshot] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [vibePrompt, setVibePrompt] = useState("");
   const [vibing, setVibing] = useState(false);
   const [vibeError, setVibeError] = useState<string | null>(null);
   const [vibeSummary, setVibeSummary] = useState<string | null>(null);
   const dropRef = useRef<HTMLDivElement | null>(null);
+
+  // "Gespeichert" badge derived from a snapshot of what was last
+  // committed — auto-clears on the next user edit without needing an
+  // effect, so React doesn't see a setState-in-effect cascade.
+  const currentSnapshot = useMemo(
+    () =>
+      JSON.stringify({
+        n: serialize(nodes, edges),
+        name,
+        status,
+        prefs: defaultModelPrefs,
+      }),
+    [nodes, edges, name, status, defaultModelPrefs],
+  );
+  const justSaved = savedSnapshot !== null && savedSnapshot === currentSnapshot;
 
   async function runVibe() {
     if (!vibePrompt.trim()) return;
@@ -613,6 +629,8 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
 
   function save() {
     const payload = serialize(nodes, edges);
+    setSaveError(null);
+    const snapshot = currentSnapshot;
     start(async () => {
       try {
         await saveWorkflowGraph({
@@ -623,9 +641,11 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
           edges: payload.edges,
           default_model_preferences: defaultModelPrefs,
         });
-        setSavedAt(new Date());
+        setSavedSnapshot(snapshot);
       } catch (err) {
-        console.error(err);
+        setSaveError(
+          err instanceof Error ? err.message : "Speichern fehlgeschlagen",
+        );
       }
     });
   }
@@ -635,12 +655,14 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
   }
 
   async function destroy() {
-    if (!confirm(`Workflow „${name}" wirklich löschen?`)) return;
+    if (!confirm(`Workflow ${name} wirklich löschen?`)) return;
     start(async () => {
       try {
         await deleteWorkflow(workflow.id);
       } catch (err) {
-        console.error(err);
+        setSaveError(
+          err instanceof Error ? err.message : "Löschen fehlgeschlagen",
+        );
       }
     });
   }
@@ -689,7 +711,7 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
           disabled={pending}
           className="rounded border border-action bg-action px-3 py-1.5 text-xs font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)] disabled:opacity-50"
         >
-          {pending ? "Speichere…" : savedAt ? "Gespeichert" : "Speichern"}
+          {pending ? "Speichere…" : justSaved ? "Gespeichert" : "Speichern"}
         </button>
         <button
           type="button"
@@ -699,6 +721,15 @@ function EditorInner({ workflow }: { workflow: Workflow }) {
           Löschen
         </button>
       </div>
+
+      {saveError && (
+        <div
+          role="alert"
+          className="border-b border-bad/40 bg-bad/5 px-4 py-2 text-xs text-bad"
+        >
+          {saveError}
+        </div>
+      )}
 
       {/* Vibe-Integrate bar */}
       <div className="border-b border-rule bg-action-soft px-4 py-2.5">

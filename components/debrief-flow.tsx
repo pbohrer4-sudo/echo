@@ -111,45 +111,45 @@ export function DebriefFlow({
   const finalRef = useRef("");
   const silenceTimerRef = useRef<number | null>(null);
   const startedAtRef = useRef<number>(0);
+  const hardCapTimerRef = useRef<number | null>(null);
+  const abortedRef = useRef(false);
+  // submitText recurses on chip replies — closure-captured `messages`
+  // would be one turn behind. We mirror state into a ref so the
+  // recursion sees the latest history.
+  const messagesRef = useRef<ChatMessage[]>([]);
 
   const stopAudio = useCallback(() => {
     audioRef.current?.pause();
     audioRef.current = null;
   }, []);
 
-  const playTTS = useCallback(
-    (text: string): Promise<void> =>
-      new Promise(async (resolve, reject) => {
-        try {
-          const res = await fetch("/api/voice/synthesize", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text }),
-          });
-          if (!res.ok) {
-            const data = await res.json().catch(() => ({}));
-            throw new Error(data.error ?? `TTS ${res.status}`);
-          }
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-          const audio = new Audio(url);
-          audioRef.current = audio;
-          audio.onended = () => {
-            URL.revokeObjectURL(url);
-            if (audioRef.current === audio) audioRef.current = null;
-            resolve();
-          };
-          audio.onerror = () => {
-            URL.revokeObjectURL(url);
-            reject(new Error("Audio-Wiedergabe fehlgeschlagen"));
-          };
-          await audio.play();
-        } catch (err) {
-          reject(err);
-        }
-      }),
-    [],
-  );
+  const playTTS = useCallback(async (text: string): Promise<void> => {
+    const res = await fetch("/api/voice/synthesize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error ?? `TTS ${res.status}`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audioRef.current = audio;
+    return new Promise<void>((resolve, reject) => {
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        if (audioRef.current === audio) audioRef.current = null;
+        resolve();
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error("Audio-Wiedergabe fehlgeschlagen"));
+      };
+      audio.play().catch(reject);
+    });
+  }, []);
 
   const ensureRecognition = useCallback((): RecognitionInstance | null => {
     if (recognitionRef.current) return recognitionRef.current;
@@ -228,7 +228,11 @@ export function DebriefFlow({
 
   const speak = useCallback(
     async (text: string) => {
-      setMessages((prev) => [...prev, { role: "assistant", content: text }]);
+      setMessages((prev) => {
+        const next = [...prev, { role: "assistant" as const, content: text }];
+        messagesRef.current = next;
+        return next;
+      });
       try {
         await playTTS(text);
       } catch (err) {
@@ -245,6 +249,15 @@ export function DebriefFlow({
     if (hasStartedRef.current) return;
     hasStartedRef.current = true;
     startedAtRef.current = Date.now();
+
+    // Real watchdog — if the flow hasn't completed within HARD_CAP_MS,
+    // force a finalize. The previous Date.now() check at the top of
+    // startTurn/askNext only fired between turns; a long monologue or
+    // a stuck recognition call would never trigger it.
+    hardCapTimerRef.current = window.setTimeout(() => {
+      if (abortedRef.current) return;
+      void finalize();
+    }, HARD_CAP_MS);
 
     (async () => {
       const interactionsLine =
@@ -264,10 +277,19 @@ export function DebriefFlow({
     })();
 
     return () => {
+      abortedRef.current = true;
       try {
         recognitionRef.current?.abort();
       } catch {}
       stopAudio();
+      if (silenceTimerRef.current) {
+        window.clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+      if (hardCapTimerRef.current) {
+        window.clearTimeout(hardCapTimerRef.current);
+        hardCapTimerRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -281,15 +303,22 @@ export function DebriefFlow({
   }
 
   async function submitText(transcript: string) {
+    if (abortedRef.current) return;
     setSuggestedReplies([]);
-    setMessages((prev) => [...prev, { role: "user", content: transcript }]);
+    // Mirror into messagesRef so any re-entrant submitText (chip-reply
+    // chains) sees the up-to-date history instead of a stale closure.
+    setMessages((prev) => {
+      const next = [...prev, { role: "user" as const, content: transcript }];
+      messagesRef.current = next;
+      return next;
+    });
     setPhase("extracting");
 
     try {
       const res = await fetch("/api/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript, history: messages }),
+        body: JSON.stringify({ transcript, history: messagesRef.current }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -346,6 +375,7 @@ export function DebriefFlow({
   }
 
   async function startTurn() {
+    if (abortedRef.current) return;
     if (Date.now() - startedAtRef.current > HARD_CAP_MS) {
       await finalize();
       return;
@@ -374,6 +404,7 @@ export function DebriefFlow({
   }
 
   async function askNext() {
+    if (abortedRef.current) return;
     if (Date.now() - startedAtRef.current > HARD_CAP_MS) {
       await finalize();
       return;
@@ -383,14 +414,23 @@ export function DebriefFlow({
     setPhase("next-decide");
   }
 
-  async function handleConfirm() {
-    if (!pendingToolCalls.length) return;
+  // Track confirm-in-flight to disable the button so the user can't
+  // double-commit the same set of tool calls.
+  const [confirming, setConfirming] = useState(false);
+
+  async function handleConfirm(editedCalls: ToolCall[]) {
+    if (!editedCalls.length) {
+      await handleCancel();
+      return;
+    }
+    if (confirming) return;
+    setConfirming(true);
     setPhase("extracting");
     try {
       const res = await fetch("/api/extract/commit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ toolCalls: pendingToolCalls }),
+        body: JSON.stringify({ toolCalls: editedCalls }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -409,6 +449,8 @@ export function DebriefFlow({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Speichern fehlgeschlagen");
       setPhase("confirming");
+    } finally {
+      setConfirming(false);
     }
   }
 
@@ -418,6 +460,10 @@ export function DebriefFlow({
   }
 
   async function finalize() {
+    if (hardCapTimerRef.current) {
+      window.clearTimeout(hardCapTimerRef.current);
+      hardCapTimerRef.current = null;
+    }
     setPhase("finalizing");
     const durationSec = Math.floor((Date.now() - startedAtRef.current) / 1000);
     const summaryText = messages
@@ -574,7 +620,7 @@ export function DebriefFlow({
             toolCalls={pendingToolCalls}
             onConfirm={handleConfirm}
             onCancel={handleCancel}
-            pending={false}
+            pending={confirming}
           />
         )}
 

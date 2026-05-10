@@ -13,6 +13,10 @@ interface DueReminder {
 
 const POLL_INTERVAL_MS = 30_000;
 const STORAGE_KEY = "echo:notification-permission-asked";
+// Cap on the in-memory "already fired" set so a long-lived tab doesn't
+// leak memory. The lookback window in the API is 600s, so anything
+// older than ~30 minutes can be safely forgotten.
+const FIRED_TTL_MS = 30 * 60 * 1000;
 
 // Fires browser notifications when reminders come due. Polls
 // /api/reminders/due every 30s; only works while at least one ECHO tab
@@ -22,11 +26,17 @@ export function NotificationManager() {
   const [permission, setPermission] = useState<NotificationPermission | null>(
     null,
   );
-  const firedRef = useRef<Set<string>>(new Set());
+  // Use a Map<id, firedAt> so old entries can be evicted by age.
+  const firedRef = useRef<Map<string, number>>(new Map());
+  // localStorage check has to happen in an effect, not during render —
+  // window is undefined during SSR and the value also affects hooks
+  // ordering otherwise.
+  const [askedDismissed, setAskedDismissed] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("Notification" in window)) return;
     setPermission(Notification.permission);
+    setAskedDismissed(window.localStorage.getItem(STORAGE_KEY) === "1");
   }, []);
 
   useEffect(() => {
@@ -43,9 +53,16 @@ export function NotificationManager() {
         if (!res.ok) return;
         const { reminders } = (await res.json()) as { reminders: DueReminder[] };
 
+        const now = Date.now();
+        // Evict anything older than the TTL — bounds the set even if
+        // the user keeps the tab open for days.
+        for (const [id, firedAt] of firedRef.current) {
+          if (now - firedAt > FIRED_TTL_MS) firedRef.current.delete(id);
+        }
+
         for (const r of reminders) {
           if (firedRef.current.has(r.id)) continue;
-          firedRef.current.add(r.id);
+          firedRef.current.set(r.id, now);
           new Notification("ECHO", {
             body: r.text,
             tag: r.id,
@@ -70,26 +87,21 @@ export function NotificationManager() {
   }, [permission]);
 
   // Render a soft prompt when permission hasn't been asked yet.
-  if (typeof window === "undefined") return null;
-  if (!("Notification" in window)) return null;
   if (permission === null) return null;
   if (permission === "granted" || permission === "denied") return null;
-
-  const alreadyAsked =
-    typeof window !== "undefined" &&
-    window.localStorage.getItem(STORAGE_KEY) === "1";
-  if (alreadyAsked) return null;
+  if (askedDismissed) return null;
 
   async function handleAsk() {
     if (typeof Notification === "undefined") return;
     window.localStorage.setItem(STORAGE_KEY, "1");
+    setAskedDismissed(true);
     const result = await Notification.requestPermission();
     setPermission(result);
   }
 
   function handleDismiss() {
     window.localStorage.setItem(STORAGE_KEY, "1");
-    setPermission(null);
+    setAskedDismissed(true);
   }
 
   return (

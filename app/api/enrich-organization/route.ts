@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "@/lib/claude";
 import { getUserContext } from "@/lib/user-context";
+import { LIMITS, rateLimit } from "@/lib/rate-limit";
+import { mapAnthropicError } from "@/lib/anthropic-error";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -82,8 +84,10 @@ const TOOL: Anthropic.Tool = {
 let sharedClient: Anthropic | null = null;
 function getClient(apiKey?: string | null): Anthropic {
   if (apiKey) return new Anthropic({ apiKey });
+  const envKey = process.env.ANTHROPIC_API_KEY;
+  if (!envKey) throw new Error("Kein Anthropic-Key konfiguriert");
   if (!sharedClient) {
-    sharedClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+    sharedClient = new Anthropic({ apiKey: envKey });
   }
   return sharedClient;
 }
@@ -92,6 +96,18 @@ export async function POST(request: Request) {
   const ctx = await getUserContext();
   if (!ctx) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  const rl = await rateLimit({
+    userId: ctx.user_id,
+    key: "ai_enrich",
+    ...LIMITS.ai_enrich,
+  });
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: "Zu viele Anfragen — kurz warten." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } },
+    );
   }
 
   let body: EnrichRequest;
@@ -148,8 +164,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ data: result });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "enrichment failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const { status, message } = mapAnthropicError(err);
+    return NextResponse.json({ error: message }, { status });
   }
 }
 
