@@ -35,7 +35,7 @@ export default async function AppLayout({
   const self = await getOrCreateSelfPerson();
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen">
       <aside className="sticky top-0 flex h-screen w-56 shrink-0 flex-col overflow-y-auto border-r border-rule bg-paper px-5 py-6">
         <div className="space-y-8">
           <Link
@@ -62,7 +62,7 @@ export default async function AppLayout({
           </nav>
         </div>
       </aside>
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex h-screen min-w-0 flex-1 flex-col">
         {/* Sticky topbar — Profil + Account oben rechts, scrollt mit
             content nicht weg. Avatar führt zur Profil-Seite, Email dient
             als Account-Anzeige, Logout direkt erreichbar. */}
@@ -99,7 +99,9 @@ export default async function AppLayout({
           </Link>
           <SignOutButton />
         </header>
-        <main className="flex-1 overflow-x-hidden">{children}</main>
+        <main className="flex-1 overflow-y-auto overflow-x-hidden">
+          {children}
+        </main>
       </div>
       <NotificationManager />
       <SearchModal />
