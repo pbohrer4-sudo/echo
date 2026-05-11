@@ -338,19 +338,29 @@ Aber: das Achsen-Modell ist ein **harter Bruch** im DB-Schema und in vielen UI-S
 
 ---
 
-## 14. Offene Fragen für Patrick (vor Migration Plan Approval)
+## 14. Decisions (resolved 11. Mai 2026)
 
-1. **Pipelines + Deals**: REMOVE oder hidden behalten? Hast du echte Deals drin oder war es ein Demo-Build?
-2. **Workflows / Voice Vibe Integrations**: REMOVE oder hidden? Nutzt du es aktiv?
-3. **Multi-Model-Catalog `/models`**: TRIM auf Anthropic + ElevenLabs OK? Falls ja: BYO-Keys-Felder im Profile bleiben (Anthropic + ElevenLabs) oder dazu noch OpenAI/Google für künftige Erweiterung?
-4. **Gamification (Streaks/XP)**: KEEP (Phase 4 Polish) oder REMOVE jetzt?
-5. **Quick-Add-Form**: Auf Briefing-4-Felder reduzieren ODER aktuelle 30+ Felder behalten als "Advanced"-Toggle?
-6. **`/` Route**: Voice-Console als Heute-Dashboard umbauen (Briefing) ODER Voice auf `/voice` verschieben + neue `/today`-Page?
-7. **`scope`-Spalte**: Aktuelles work/personal/both → wegfallen (durch `purpose` abgedeckt) ODER beibehalten als ortogonale Achse?
-8. **stakeholder_types → purpose Mapping**: Vorschlag automatisch ausführen oder als Suggestion pro Person (User klickt Akzeptieren)?
-9. **EU-Region für Supabase**: Aktueller Status? Falls US-Region: Re-Provisioning + Datenexport in Migration einplanen?
-10. **archived vs deleted_at**: Briefing fordert `archived bool`, Echo hat `deleted_at`. Welcher Pattern soll bestand haben?
+Alle 10 Fragen sind beantwortet. Decision-Log:
+
+1. **Pipelines + Deals**: HIDDEN behalten. Sidebar entlinken, `/pipelines/*` Route auf `notFound()` für neue User. Code+Tabellen bleiben (kein Datenverlust).
+2. **Workflows / Voice Vibe Integrations**: KEEP for now. Kein Removal, kein Hidden. Bleibt funktional.
+3. **Multi-Model-Catalog `/models`**: BEHALTEN. Alle 14 Catalog-Einträge bleiben, `/models` bleibt, BYO-Keys für alle Provider möglich. Kein TRIM.
+4. **Gamification (Streaks/XP/Level)**: KEEP für jetzt. Streaks-Tab bleibt sichtbar.
+5. **Quick-Add-Form**: 4-Felder primary + Advanced-Toggle mit 7 ausgewählten Feldern (company, role, phone, email, tags-mit-Cluster-Hint, met_date, met_location).
+6. **`/` Route**: Voice-Console bleibt auf `/`. Heute-Dashboard kommt auf neue Route `/heute` (oder `/today`).
+7. **`scope`-Spalte**: LÖSCHEN. Wird durch `purpose` (5 Werte) abgelöst. Drop in Phase F nach Verifikation.
+8. **stakeholder_types → purpose Mapping**: Suggestion-Flow (kein Auto-Write). Migration-Skript schreibt eine `suggestions`-Row pro bestehender Person, User bestätigt auf der Person-Detail-Page.
+9. **Supabase EU-Region**: ✓ ist EU. Keine Action.
+10. **`deleted_at` vs `archived`**: `deleted_at timestamptz` behalten (Echo-Konvention). CLAUDE.md-Korrektur in Phase 0: Database-Conventions-Sektion klarstellen.
 
 ---
 
-Ende Gap-Analyse. Nächster Schritt: Migration Plan basierend auf den Antworten auf 1–10.
+## Nächste Schritte
+
+1. **MIGRATION_PLAN.md** im Repo-Root enthält den finalen Plan basierend auf diesen Decisions (7 Phasen, 15-17 d gesamt).
+2. **Approval-Trigger:** „Migration Plan freigegeben - start Phase 0"
+3. Bis Approval: keine Code-Änderungen.
+
+---
+
+Ende Gap-Analyse. Status: **ALL OPEN QUESTIONS RESOLVED** — bereit für Migration-Plan-Approval.

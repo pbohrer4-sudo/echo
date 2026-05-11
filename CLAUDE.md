@@ -131,7 +131,7 @@ const CADENCE_DEFAULTS = {
 - Use timestamptz for all timestamps
 - Use snake_case for column names
 - All tables have created_at, updated_at (auto-updated via trigger)
-- Soft-delete via archived boolean, never hard-delete person records
+- Soft-delete via `deleted_at timestamptz` (Echo convention; not the briefing's `archived bool`, see ECHO_GAP_ANALYSIS.md Q10). Never hard-delete person records.
 - Row-Level-Security enabled on all tables, filtered by user_id
 
 ## AI Integration Rules
