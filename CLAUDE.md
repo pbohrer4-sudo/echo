@@ -1,63 +1,166 @@
-# CLAUDE.md
+# CLAUDE.md - Echo Personal CRM
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working on the Echo Personal CRM project.
 
-@AGENTS.md
+## Project Context
 
-## What this is
+Echo is Patrick Bohrer's Personal CRM. There is existing code in this repo that will be refactored / replaced based on a new architectural direction.
 
-ECHO — a personal relationship-intelligence layer / personal CRM for Patrick (Head of Growth & Sales at Valoon, native German speaker). Voice-first capture (Web Speech API → Claude tool-use → Supabase), extended over time into a full CRM with people + organizations + sales pipelines + workflow designer. UI is German throughout.
+Two reference documents in the project root drive all decisions:
+- `PERSONAL_CRM_BUILD_BRIEFING.md` - the canonical product specification
+- `SPRINT_PLAN.md` - the ticket-by-ticket execution plan
 
-The original 5-week brief lives at `~/Documents/Personal CRM/echo_kickoff_brief.md`. Implementation has gone substantially beyond that scope — see "Architecture" below for what's actually in the codebase.
+Before making any changes, Claude Code must first complete the Discovery Phase (see below).
 
-## Commands
+## Owner & Communication Style
 
-```bash
-npm run dev          # next dev --webpack (NOT Turbopack — see Gotchas)
-npm run build        # next build (Turbopack OK here)
-npm run lint         # eslint
-node --env-file=.env.local scripts/inspect-schema.mjs   # dump live Supabase schema via PostgREST
+- Owner: Patrick Bohrer (Head of Growth & Sales at Valoon GmbH)
+- Language for UI/UX copy: German
+- Language for code, comments, commits: English
+- Code style: clean, readable, no over-engineering
+- No long em-dashes in user-facing copy (use - or rephrase)
+- Always correct German umlauts (ä, ö, ü, ß) in user-facing copy
+
+## Discovery Phase (DO THIS FIRST)
+
+Before writing or changing any code, Claude Code must:
+
+1. Inventory the existing codebase
+   - List all top-level folders and their purpose
+   - Identify the framework (Next.js? Vite? Other?)
+   - Identify the database (Supabase? Postgres? Prisma? Other?)
+   - List installed dependencies (package.json)
+   - Identify the current data model (DB schema files, migrations, ORM models)
+   - Identify the current UI structure (which routes/pages exist)
+   - Identify AI integrations (which providers, where called)
+
+2. Produce an Inventory Report in `ECHO_INVENTORY.md` covering:
+   - Current architecture summary
+   - Current data model (entities and their fields)
+   - Current routes and what they do
+   - Existing features that work
+   - Existing features that are incomplete or broken
+   - Code patterns currently used (Server Actions? API routes? Client-side fetches?)
+
+3. Produce a Gap Analysis in `ECHO_GAP_ANALYSIS.md` covering:
+   - What from the briefing already exists (keep)
+   - What exists but needs to change (refactor)
+   - What exists but contradicts the new direction (replace)
+   - What is missing entirely (build new)
+   - Risk assessment per change (what could break)
+
+4. Present a Migration Plan for Patrick's approval before any code change
+
+Do not start TICKET-001 of the Sprint Plan blindly. The Sprint Plan assumes greenfield. For Echo, we need a Migration Plan first that adapts those tickets to the existing reality.
+
+## Target Architecture
+
+- Frontend: Next.js 14 (App Router) + TypeScript + Tailwind + shadcn/ui
+- Backend: Supabase (Postgres + Auth + Storage + Edge Functions)
+- AI: Anthropic Claude API (Sonnet 4.5 for extraction, Haiku for tag suggestions)
+- Enrichment: People Data Labs (LinkedIn data)
+- Voice: Deepgram or OpenAI Whisper
+- Hosting: Vercel (frontend) + Supabase Cloud (EU region for GDPR)
+
+## Architecture Principles
+
+1. Server Components by default - only use Client Components when state/interactivity required
+2. Server Actions for mutations - no separate API routes unless needed for webhooks
+3. Type-safe end-to-end - use Supabase generated types + Zod validation
+4. Async AI processing - Edge Functions for enrichment jobs, never block UI
+5. Optimistic UI updates for AI suggestions (accept/reject feels instant)
+
+## Key Domain Rules
+
+### 3-Achsen-Klassifizierung
+
+Three orthogonal axes - never mix them:
+- depth: how close (auto-calculated from interaction frequency, manual override possible)
+- purpose: why connected (always manual, 5 options)
+- mode: current state (auto-calculated from cadence + AI signals)
+
+If existing code has a different classification logic (e.g. single "stakeholder_type" field mixing depth and purpose), this must be migrated to the 3-axis model, not preserved.
+
+### Tags
+
+- Max 7 per person (enforce in UI and DB)
+- Flat, not hierarchical
+- 4 clusters: context, topic, value, trigger
+- Auto-deduplication suggestions when similar tags exist
+
+### Cadence Defaults (in days)
+
+```typescript
+const CADENCE_DEFAULTS = {
+  inner_5: 14,
+  trusted_15: 30,
+  active_50: 90,
+  network_150: 180,
+  periphery_500: 365,
+};
 ```
 
-There's no test suite. Verification is `npm run build` (TypeScript + route compile) plus manual smoke testing in the browser.
+### Mode Auto-Transitions
 
-## Database migrations
+- active -> dormant when last_contact > 2x expected_cadence
+- dormant -> reconnect when AI detects trigger (job change, birthday, news)
+- Never auto-transition to archive (always manual)
 
-SQL files in `supabase/migrations/` are **not auto-applied**. Patrick runs them manually in the Supabase SQL Editor. All migrations are idempotent (`if not exists`, `on conflict do nothing`, `drop policy if exists`). When adding schema changes:
+## Migration Strategy Rules
 
-- Number sequentially (`0008_*.sql`).
-- Always include matching RLS policies — every user-scoped table has `user_id = auth.uid()` SELECT/INSERT/UPDATE/DELETE.
-- Soft-delete via `deleted_at timestamptz` is the project convention; queries filter `is("deleted_at", null)`.
-- After writing, paste the SQL into the response so Patrick can copy-execute. Don't assume he'll find the file.
+1. Preserve existing data at all costs
+   - Never run destructive migrations without a backup script
+   - Every schema change needs a forward migration AND a data migration
+   - Old fields stay in DB until new fields are populated and verified
 
-## Architecture
+2. Migrate in slices, not in one big bang
+   - One axis at a time (start with purpose, then depth, then mode)
+   - Old UI keeps working until new UI is in place
 
-The product is a single Next.js 16 App Router app on Supabase, with five conceptual surfaces:
+3. Always provide a rollback path
+   - Each migration is paired with a down migration
+   - Document rollback steps in the migration file
 
-**1. Voice loop (`/`)** — `components/voice-orb.tsx` runs Web Speech API in `de-DE`, posts the transcript to `/api/extract`, which calls Claude Sonnet 4.6 with a tool-use schema (`lib/tools.ts`). The user sees an `ExtractionConfirmation` card and clicks Bestätigen, which posts to `/api/extract/commit` for the actual DB writes. Tools include `create_person`, `update_person`, `log_interaction`, `create_note`, `create_reminder`, `create_todo`, plus `suggest_replies` for clickable quick-reply chips. The commit endpoint does a two-pass write: `create_person` first to build a name → uuid map, then dependent tools resolve `person_name` references against that map.
+4. Test on a branch first
+   - Never push migrations directly to main
+   - Always test schema changes locally with `supabase db reset` first
 
-**2. Debrief flow (`/debrief`)** — `components/debrief-flow.tsx` is a multi-turn state machine (greeting → ready-decide → prompt → listening → extracting → summary → confirming → next-decide → finalize). 5-minute hard timeout. Reuses the same extract/commit endpoints.
+## Database Conventions
 
-**3. CRM (`/people`, `/organizations`, `/pipelines`)** — extensive multi-value JSONB fields on `people` (phones, emails, addresses, socials, important_dates, relationships) plus a foreign-key linked `organizations` table. `lib/organizations.ts` has `resolveOrCreateOrganization` which the person form calls on save to auto-link or auto-create the matching org row. The self-person is `people.is_self = true` (one per user, partial unique index); shown via `/profile` route which redirects to its detail page. Pipelines store stages and field_definitions as JSONB for runtime configurability without migrations.
+- Use uuid for all primary keys (generated server-side)
+- Use timestamptz for all timestamps
+- Use snake_case for column names
+- All tables have created_at, updated_at (auto-updated via trigger)
+- Soft-delete via archived boolean, never hard-delete person records
+- Row-Level-Security enabled on all tables, filtered by user_id
 
-**4. Workflow designer (`/integrations/workflows`)** — `components/workflow-editor.tsx` wraps `@xyflow/react`. The catalog (`lib/workflow-catalog.ts`) holds typed node templates with a `live: boolean` flag (green stripe = ECHO-native, red stripe = needs V2 runtime). `/api/workflows/generate` powers the "Vibe-Integrate" text-to-workflow input — Claude is given the full catalog as system prompt context and forced to call a `compose_workflow` tool that returns `{ nodes: [{ subtype, label, config }], edges: [{ from_index, to_index }] }`; the server validates subtypes, generates IDs, and BFS-layouts nodes by depth. **Runtime is not implemented** — workflows save and visualize, the generate endpoint composes graphs, and the editor's Test-mit-Sample runs a mock walk, but no triggers fire and no actions execute. Adding the runtime is the V2 milestone.
+## AI Integration Rules
 
-**5. AI auxiliaries** — `/api/scan-business-card` (Claude Vision → BusinessCardData), `/api/enrich-organization` (Claude knowledge → industry/website/HQ), `/api/sunday-pulse` (weekly digest), `/api/recap` (monthly/yearly retrospective). All flow through `lib/user-context.getUserContext()` which resolves the per-user BYO API key (Anthropic + ElevenLabs from the profile) — falls back to env defaults when null.
+1. Never auto-apply AI output - always create a Suggestion row for user confirmation
+2. Always include reasoning in suggestions - transparency for the user
+3. Cache enrichment results for 30 days
+4. Rate-limit AI calls per user (max 100 Claude calls/day in MVP)
+5. Graceful degradation - if AI fails, save the person without enrichment, retry in background
 
-## Key conventions
+## Things to NEVER do
 
-- **Multi-tenancy contract**: every user-scoped query relies on RLS. Never pass `user_id` from the client. Server actions read `user_id` from `auth.uid()` via the Supabase server client (`lib/supabase/server.ts`). When inserting, set `user_id: user.id` server-side.
-- **TTS-safe assistant text**: Claude system prompts forbid markdown (no `**`, no `*`, no bullet lists). `lib/text.stripMarkdown` strips it client-side as defense-in-depth before display + TTS.
-- **One question per turn**: the voice-extraction system prompt enforces this. Use the `suggest_replies` tool when posing a closed question — the client renders chips, click = next user input.
-- **Live vs V2 nodes**: workflow nodes carry `live: true` only when ECHO-native data + logic is enough (i.e. they'd run as soon as a runtime exists). Anything needing OAuth, webhook receiver, mail provider, Vercel Cron, etc. is `live: false` (red stripe).
-- **Design tokens**: light-mode "Ledger × Geist" — `--paper`, `--paper-2`, `--paper-3`, `--ink-1` through `--ink-5`, `--rule`, `--rule-soft`, `--action`, `--action-soft`, `--signal`, `--signal-soft`, `--good`, `--bad`. CSS classes like `.t-label`, `.tag`, `.kv`, `.timeline`, `.section-head`, `.meter-bars` live in `app/globals.css` because they recur dense enough that copying them as utilities was worse.
-- **Middleware**: Next 16 renamed to `proxy.ts` (we use that). The matcher excludes static assets; the handler delegates to `lib/supabase/middleware.updateSession` which refreshes the session cookie and redirects unauth'd users away from non-public paths.
+- Don't delete existing data without a backup script and explicit Patrick approval
+- Don't refactor multiple unrelated areas in one PR
+- Don't add fields not specified in the briefing without asking Patrick first
+- Don't use ORMs that abstract Supabase (use the official client directly)
+- Don't introduce shadcn alternatives (stick with shadcn for consistency)
+- Don't auto-categorize people without showing it as a suggestion
+- Don't store sensitive data (phone, email) in plaintext logs
+- Don't make sync API calls to AI providers from the request path
+- Don't build pipeline/deal management features (that's HubSpot's job)
+- Don't proceed past Discovery Phase without Patrick's explicit migration plan approval
 
-## Gotchas
+## Things to ALWAYS do
 
-- **Webpack, not Turbopack** in dev. `package.json` has `"dev": "next dev --webpack"` because Turbopack 16.2.4 hits `ENOENT routes-manifest.json` and a `pages/_app/build-manifest.json` lookup against our App-Router-only project. Build (`next build`) is fine on Turbopack. After switching between dev and build, `rm -rf .next` to avoid mixed manifests.
-- **German "smart quotes" inside double-quoted JS strings break the parser**. `„Auto-Enrich"` inside `"..."` looks fine but the Unicode quotes confuse Turbopack's Rust parser. Avoid them in string literals — write the descriptive text without inner quotes, or use a template literal.
-- **Multiple lockfiles warning**: there's a stray `~/package-lock.json` (87 bytes, not ours). `next.config.ts` pins `outputFileTracingRoot` to `__dirname` to silence Next's "wrong workspace root" inference.
-- **Migrations are manual + numbered**: when adding one, paste the full SQL into the response. Don't link to the file path alone — Patrick runs it via copy-paste into the SQL Editor.
-- **Secrets never in chat**: API keys, service-role keys, DB passwords. Patrick adds them directly to `.env.local` or Settings → BYO. If you need a value, instruct him to set it and say "done"; read it from the file or via `node --env-file=.env.local …`. Don't ask him to paste secrets in the conversation — the transit through Anthropic's API and the conversation history are unnecessary risk.
-- **Patrick's git config has hostname-based email** (`paddy550@MacBook-…fritz.box`). Don't run `git config --global …` to fix it without explicit permission — every commit prints a hint, ignore it.
+- Always check PERSONAL_CRM_BUILD_BRIEFING.md for canonical spec
+- Always check ECHO_INVENTORY.md before touching existing code
+- Always preserve umlauts in German strings (no ae/oe/ue/ss substitutions)
+- Always use environment variables for API keys (never hardcode)
+- Always validate user input with Zod before DB writes
+- Always set up Row-Level-Security on new tables
+- Always git-commit before destructive operations
