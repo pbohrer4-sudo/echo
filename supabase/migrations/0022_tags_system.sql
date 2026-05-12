@@ -30,9 +30,18 @@ create table if not exists public.tags (
     'ai_suggested',   -- AI hat vorgeschlagen, User akzeptiert
     'ai_extracted'    -- AI hat aus how_we_met/notes extrahiert
   )),
-  constraint tags_name_not_empty check (length(trim(name)) > 0),
-  unique (user_id, lower(name))
+  constraint tags_name_not_empty check (length(trim(name)) > 0)
 );
+
+-- Case-insensitive unique constraint via expression index. Inline
+-- `unique (user_id, lower(name))` in CREATE TABLE wird von Postgres
+-- abgelehnt — table-level constraints nehmen nur Spaltennamen, keine
+-- Funktionsaufrufe. Expression-Indizes müssen separat angelegt werden.
+-- lib/tags.ts normalisiert names eh auf lower(trim()) vor dem Insert,
+-- der Index dient als Defense-in-Depth gegen direkten Insert ohne
+-- Library.
+create unique index if not exists idx_tags_user_lower_name
+  on public.tags (user_id, lower(name));
 
 -- Junction-Tabelle. Composite-PK verhindert Duplikat-Zuweisungen.
 create table if not exists public.person_tags (
