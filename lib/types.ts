@@ -546,3 +546,82 @@ export const TAG_CLUSTER_LABELS: Record<TagCluster, string> = {
   value: "Wert",
   trigger: "Trigger",
 };
+
+// — 3-Achsen-Klassifizierung (Phase A3-A8, Briefing 4.1-4.3) ————
+
+export type Depth =
+  | "inner_5"
+  | "trusted_15"
+  | "active_50"
+  | "network_150"
+  | "periphery_500";
+
+export type DepthSource = "auto" | "manual_override";
+
+export type Purpose =
+  | "personal"
+  | "family"
+  | "business_active"
+  | "business_latent"
+  | "aspirational";
+
+export type Mode = "active" | "nurture" | "dormant" | "reconnect" | "archive";
+
+export type InteractionDirection = "inbound" | "outbound" | "mutual";
+
+// UI-Helper — Labels (deutsch) für die drei Achsen.
+
+export const DEPTH_LABELS: Record<Depth, string> = {
+  inner_5: "Innerer Kreis",
+  trusted_15: "Vertrauter Kreis",
+  active_50: "Aktiver Kreis",
+  network_150: "Netzwerk",
+  periphery_500: "Peripherie",
+};
+
+export const PURPOSE_LABELS: Record<Purpose, string> = {
+  personal: "Privat",
+  family: "Familie",
+  business_active: "Business aktiv",
+  business_latent: "Business latent",
+  aspirational: "Aspirational",
+};
+
+export const MODE_LABELS: Record<Mode, string> = {
+  active: "Aktiv",
+  nurture: "Pflege",
+  dormant: "Ruhend",
+  reconnect: "Reconnect",
+  archive: "Archiviert",
+};
+
+// Neue Felder für Person. Bewusst SEPARAT vom bestehenden Person-
+// Interface — der bestehende Type wird in Phase C erweitert, wenn die
+// UI auf die neuen Felder umgestellt wird. Bis dahin können Lib-Funktionen
+// die neuen Felder über diesen Wrapper-Type typed lesen.
+export interface PersonNewFields {
+  first_name: string | null;
+  last_name: string | null;
+  how_we_met: string | null;
+  met_date: string | null;
+  met_location: string | null;
+  met_event: string | null;
+  depth: Depth | null;
+  depth_source: DepthSource;
+  purpose: Purpose | null;
+  mode: Mode;
+  next_nudge_at: string | null;
+  last_contact_at: string | null;
+  cadence_days: number | null;
+  linkedin_url: string | null;
+  photo_url: string | null;
+  current_location: string | null;
+  home_location: string | null;
+}
+
+// Interactions-Erweiterung (Briefing 8.x)
+export interface InteractionNewFields {
+  direction: InteractionDirection | null;
+  duration_minutes: number | null;
+  ai_extracted_facts: Record<string, unknown> | null;
+}
