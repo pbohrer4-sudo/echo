@@ -11,6 +11,7 @@ import {
 } from "@/lib/inbox";
 import { getProfileDepth } from "@/lib/profile-depth";
 import { StrengthMeter } from "@/components/strength-meter";
+import { AxisBadges } from "@/components/axis-badges";
 import { GamificationDashboard } from "./gamification-dashboard";
 import { relationshipSnapshot, WARMTH_TONE } from "@/lib/relationship";
 import type { Scope } from "@/lib/types";
@@ -380,6 +381,15 @@ export default async function PersonDetailPage({
               )}
               {!person.is_self && (person.strength_score ?? 0) > 0 && (
                 <StrengthMeter value={person.strength_score ?? 0} />
+              )}
+              {!person.is_self && (
+                <AxisBadges
+                  personId={person.id}
+                  depth={person.depth}
+                  depthSource={person.depth_source}
+                  purpose={person.purpose}
+                  mode={person.mode}
+                />
               )}
               {!person.is_self && (
                 <RelationshipBadges

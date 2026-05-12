@@ -394,6 +394,26 @@ export interface Person {
   priority_set_at: string | null;
   interests: string[];
   depth_override: RelationshipDepth | null;
+  // Phase A3-A8 (3-Axis + Briefing 3.1/5.1) — alle nullable außer
+  // mode/depth_source die DB-Defaults haben. Legacy-Code ignoriert
+  // diese Felder; UI Phase C nutzt sie zunehmend.
+  first_name: string | null;
+  last_name: string | null;
+  how_we_met: string | null;
+  met_date: string | null;
+  met_location: string | null;
+  met_event: string | null;
+  depth: Depth | null;
+  depth_source: DepthSource;
+  purpose: Purpose | null;
+  mode: Mode;
+  next_nudge_at: string | null;
+  last_contact_at: string | null;
+  cadence_days: number | null;
+  linkedin_url: string | null;
+  photo_url: string | null;
+  current_location: string | null;
+  home_location: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
