@@ -1,7 +1,9 @@
-import { listAllTags, listPeople } from "@/lib/people";
-import { listOrganizations } from "@/lib/organizations";
-import { createPerson } from "../actions";
-import { PersonForm } from "../person-form";
+import { QuickAddForm } from "./quick-add-form";
+
+// Quick-Add Person — 4 Pflicht-Felder (Name, how_we_met, purpose, depth)
+// + Advanced-Toggle mit 7 Zusatz-Feldern (Briefing 5.1, Phase C2).
+// Die alte 30-Felder-Form (lib PersonForm) bleibt für die Edit-Page,
+// hier kommt das Minimal-Quick-Add zum Einsatz.
 
 export default async function NewPersonPage({
   searchParams,
@@ -9,13 +11,6 @@ export default async function NewPersonPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
-  const [people, existingTags, orgs] = await Promise.all([
-    listPeople(),
-    listAllTags(),
-    listOrganizations(),
-  ]);
-  const peopleOptions = people.map((p) => ({ id: p.id, name: p.name }));
-  const existingOrgs = orgs.map((o) => o.name);
 
   return (
     <div className="px-8 py-10">
@@ -26,17 +21,11 @@ export default async function NewPersonPage({
             Person anlegen
           </h1>
           <p className="text-sm text-ink-3">
-            Füll aus was du weißt — den Rest sammelt ECHO über die Zeit.
+            Vier Felder. Den Rest entdeckt ECHO über die Zeit — oder du
+            füllst nach auf der Detail-Seite.
           </p>
         </header>
-        <PersonForm
-          action={createPerson}
-          cancelHref="/people"
-          peopleOptions={peopleOptions}
-          existingTags={existingTags}
-          existingOrgs={existingOrgs}
-          error={error ? decodeURIComponent(error) : undefined}
-        />
+        <QuickAddForm error={error ? decodeURIComponent(error) : undefined} />
       </div>
     </div>
   );
