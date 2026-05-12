@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { chat } from "@/lib/claude";
+import { chat, CLAUDE_MODEL, type AnthropicUsage } from "@/lib/claude";
 import type { Interaction } from "@/lib/types";
 import type { UserContext } from "@/lib/user-context";
 
@@ -29,7 +29,12 @@ export async function generateRecap({
   from: Date;
   to: Date;
   periodLabel: string;
-}): Promise<{ text: string; stats: RecapStats }> {
+}): Promise<{
+  text: string;
+  stats: RecapStats;
+  usage: AnthropicUsage;
+  model: string;
+}> {
   const supabase = await createClient();
   const fromIso = from.toISOString();
   const toIso = to.toISOString();
@@ -132,14 +137,14 @@ export async function generateRecap({
   };
 
   const prompt = buildRecapPrompt(ctx.display_name, stats);
-  const text = await chat({
+  const { text, usage } = await chat({
     messages: [{ role: "user", content: prompt }],
     system: SYSTEM_PROMPT,
     apiKey: ctx.claude_key,
     maxTokens: 800,
   });
 
-  return { text: text.trim(), stats };
+  return { text: text.trim(), stats, usage, model: CLAUDE_MODEL };
 }
 
 const SYSTEM_PROMPT = `Du bist ECHO, der persönliche Beziehungs-Assistent.

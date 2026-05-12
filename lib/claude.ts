@@ -9,6 +9,13 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface AnthropicUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+}
+
 let sharedClient: Anthropic | null = null;
 
 function getClient(apiKey?: string | null): Anthropic {
@@ -19,6 +26,17 @@ function getClient(apiKey?: string | null): Anthropic {
     sharedClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
   }
   return sharedClient;
+}
+
+function extractUsage(response: Anthropic.Message): AnthropicUsage {
+  return {
+    input_tokens: response.usage?.input_tokens ?? 0,
+    output_tokens: response.usage?.output_tokens ?? 0,
+    cache_creation_input_tokens:
+      response.usage?.cache_creation_input_tokens ?? undefined,
+    cache_read_input_tokens:
+      response.usage?.cache_read_input_tokens ?? undefined,
+  };
 }
 
 // Single-shot, non-streaming chat. The system prompt is marked cacheable so
@@ -33,7 +51,7 @@ export async function chat({
   system: string;
   maxTokens?: number;
   apiKey?: string | null;
-}): Promise<string> {
+}): Promise<{ text: string; usage: AnthropicUsage }> {
   const response = await getClient(apiKey).messages.create({
     model: CLAUDE_MODEL,
     max_tokens: maxTokens,
@@ -52,12 +70,11 @@ export async function chat({
     .map((b) => b.text)
     .join("");
 
-  return text;
+  return { text, usage: extractUsage(response) };
 }
 
-// Chat with tools. Returns both the assistant's text reply and any
-// tool_use blocks Claude emitted. Tool calls are validated against
-// our known tool names — unknown names are dropped.
+// Chat with tools. Returns the assistant's text reply, tool_use blocks
+// Claude emitted, and token usage for spend-tracking.
 export async function chatWithTools({
   messages,
   system,
@@ -70,7 +87,11 @@ export async function chatWithTools({
   tools: Anthropic.Tool[];
   maxTokens?: number;
   apiKey?: string | null;
-}): Promise<{ text: string; toolCalls: ToolCall[] }> {
+}): Promise<{
+  text: string;
+  toolCalls: ToolCall[];
+  usage: AnthropicUsage;
+}> {
   const response = await getClient(apiKey).messages.create({
     model: CLAUDE_MODEL,
     max_tokens: maxTokens,
@@ -100,5 +121,5 @@ export async function chatWithTools({
       input: (b.input ?? {}) as Record<string, unknown>,
     }));
 
-  return { text, toolCalls };
+  return { text, toolCalls, usage: extractUsage(response) };
 }

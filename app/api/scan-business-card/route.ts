@@ -4,8 +4,10 @@ import {
   extractBusinessCard,
   type SupportedMediaType,
 } from "@/lib/business-card";
+import { createClient } from "@/lib/supabase/server";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { mapAnthropicError } from "@/lib/anthropic-error";
+import { logAnthropic } from "@/lib/llm-usage";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -103,15 +105,33 @@ export async function POST(request: Request) {
   }
 
   const imageBase64 = buffer.toString("base64");
-
+  const supabase = await createClient();
+  const startMs = Date.now();
   try {
-    const data = await extractBusinessCard({
+    const { data, usage, model } = await extractBusinessCard({
       imageBase64,
       mediaType: sniffed,
       apiKey: ctx.claude_key,
     });
+    void logAnthropic({
+      supabase,
+      userId: ctx.user_id,
+      endpoint: "/api/scan-business-card",
+      model,
+      usage,
+      latencyMs: Date.now() - startMs,
+    });
     return NextResponse.json({ data });
   } catch (err) {
+    void logAnthropic({
+      supabase,
+      userId: ctx.user_id,
+      endpoint: "/api/scan-business-card",
+      model: "claude-sonnet-4-6",
+      usage: null,
+      latencyMs: Date.now() - startMs,
+      status: "error",
+    });
     const { status, message } = mapAnthropicError(err);
     return NextResponse.json({ error: message }, { status });
   }

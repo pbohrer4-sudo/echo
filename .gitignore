@@ -49,3 +49,5 @@ backup-*.sql
 
 # supabase CLI local state (pooler URL, project ref cache)
 supabase/.temp/
+
+.claude/worktrees/

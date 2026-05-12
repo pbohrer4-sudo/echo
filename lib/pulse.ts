@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { chat } from "@/lib/claude";
+import { chat, CLAUDE_MODEL, type AnthropicUsage } from "@/lib/claude";
 import type {
   Interaction,
   Person,
@@ -17,7 +17,11 @@ interface PulseInputs {
   upcomingBirthdays: { name: string; date: string; days_until: number }[];
 }
 
-export async function generatePulse(ctx: UserContext): Promise<string> {
+export async function generatePulse(ctx: UserContext): Promise<{
+  text: string;
+  usage: AnthropicUsage;
+  model: string;
+}> {
   const supabase = await createClient();
   const now = new Date();
   const sevenDaysAgo = new Date(now);
@@ -104,14 +108,14 @@ export async function generatePulse(ctx: UserContext): Promise<string> {
   );
 
   const prompt = buildPulsePrompt(ctx.display_name, inputs, peopleNamesById);
-  const text = await chat({
+  const { text, usage } = await chat({
     messages: [{ role: "user", content: prompt }],
     system: SYSTEM_PROMPT,
     apiKey: ctx.claude_key,
     maxTokens: 700,
   });
 
-  return text.trim();
+  return { text: text.trim(), usage, model: CLAUDE_MODEL };
 }
 
 const SYSTEM_PROMPT = `Du bist ECHO, der persönliche Beziehungs-Assistent.

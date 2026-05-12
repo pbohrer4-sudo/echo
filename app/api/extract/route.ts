@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { chatWithTools, type ChatMessage } from "@/lib/claude";
+import { CLAUDE_MODEL, chatWithTools, type ChatMessage } from "@/lib/claude";
 import { buildExtractionSystemPrompt } from "@/lib/prompts";
 import { EXTRACTION_TOOLS } from "@/lib/tools";
 import { getUserContext } from "@/lib/user-context";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { mapAnthropicError } from "@/lib/anthropic-error";
+import { logAnthropic } from "@/lib/llm-usage";
 
 export const runtime = "nodejs";
 
@@ -77,12 +78,21 @@ export async function POST(request: Request) {
     { role: "user", content: transcript },
   ];
 
+  const startMs = Date.now();
   try {
-    const { text, toolCalls } = await chatWithTools({
+    const { text, toolCalls, usage } = await chatWithTools({
       messages,
       system,
       tools: EXTRACTION_TOOLS,
       apiKey: ctx.claude_key,
+    });
+    void logAnthropic({
+      supabase,
+      userId: ctx.user_id,
+      endpoint: "/api/extract",
+      model: CLAUDE_MODEL,
+      usage,
+      latencyMs: Date.now() - startMs,
     });
 
     const peopleMap = new Map<string, string>(
@@ -102,6 +112,15 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ text, toolCalls: enrichedCalls });
   } catch (err) {
+    void logAnthropic({
+      supabase,
+      userId: ctx.user_id,
+      endpoint: "/api/extract",
+      model: CLAUDE_MODEL,
+      usage: null,
+      latencyMs: Date.now() - startMs,
+      status: "error",
+    });
     const { status, message } = mapAnthropicError(err);
     return NextResponse.json({ error: message }, { status });
   }

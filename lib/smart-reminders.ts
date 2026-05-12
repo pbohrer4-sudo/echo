@@ -105,7 +105,7 @@ Antworte ausschließlich mit JSON nach diesem Schema:
 
   let parsed: AiReply | null = null;
   try {
-    const raw = await chatForTask({
+    const { text: raw } = await chatForTask({
       ctx,
       task: "extract", // reuses the user's preferred extraction model
       messages: [{ role: "user", content: user }],
