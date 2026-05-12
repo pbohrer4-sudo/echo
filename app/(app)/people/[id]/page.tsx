@@ -12,6 +12,7 @@ import {
 import { getProfileDepth } from "@/lib/profile-depth";
 import { StrengthMeter } from "@/components/strength-meter";
 import { AxisBadges } from "@/components/axis-badges";
+import { SuggestionStack } from "./suggestion-stack";
 import { GamificationDashboard } from "./gamification-dashboard";
 import { relationshipSnapshot, WARMTH_TONE } from "@/lib/relationship";
 import type { Scope } from "@/lib/types";
@@ -502,6 +503,8 @@ export default async function PersonDetailPage({
             <TabStatusOverview status={tabStatus} />
           </div>
         )}
+
+        {!person.is_self && <SuggestionStack personId={person.id} />}
 
         {showProfileBody && (
           <div className="animate-in fade-in slide-in-from-top-2 duration-300 grid gap-10 md:grid-cols-2">
