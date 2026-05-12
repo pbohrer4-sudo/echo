@@ -508,3 +508,41 @@ export interface SuggestionRow {
   created_at: string;
   resolved_at: string | null;
 }
+
+// — Tags-System (Phase A2, Briefing 5.x) ————————————————————
+
+export type TagCluster = "context" | "topic" | "value" | "trigger";
+
+export type TagCreatedBy = "user" | "ai_suggested" | "ai_extracted";
+
+export interface TagRow {
+  id: string;
+  user_id: string;
+  name: string;
+  cluster: TagCluster;
+  created_by: TagCreatedBy;
+  usage_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PersonTagRow {
+  person_id: string;
+  tag_id: string;
+  created_at: string;
+}
+
+// UI-Helper — Cluster-Farben für Tag-Chips (Direction B Tokens).
+export const TAG_CLUSTER_COLORS: Record<TagCluster, { bg: string; fg: string; border: string }> = {
+  context: { bg: "oklch(94% 0.03 220)", fg: "oklch(34% 0.06 220)", border: "oklch(58% 0.10 220)" },
+  topic:   { bg: "oklch(95% 0.03 145)", fg: "oklch(34% 0.06 145)", border: "oklch(58% 0.10 145)" },
+  value:   { bg: "oklch(95% 0.04 60)",  fg: "oklch(34% 0.08 60)",  border: "oklch(58% 0.10 60)"  },
+  trigger: { bg: "oklch(94% 0.03 25)",  fg: "oklch(34% 0.06 25)",  border: "oklch(58% 0.10 25)"  },
+};
+
+export const TAG_CLUSTER_LABELS: Record<TagCluster, string> = {
+  context: "Kontext",
+  topic: "Thema",
+  value: "Wert",
+  trigger: "Trigger",
+};
