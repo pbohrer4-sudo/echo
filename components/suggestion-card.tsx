@@ -69,7 +69,7 @@ export function SuggestionCard({ suggestion, personId }: Props) {
         const result = await fn(suggestion.id, personId);
         if (!result.ok) {
           setResolved(false);
-          setError("Konnte nicht gespeichert werden");
+          setError(result.error ?? "Konnte nicht gespeichert werden");
         }
       } catch (err) {
         setResolved(false);
