@@ -471,3 +471,40 @@ export interface Connection {
   strength: number | null;
   created_at: string;
 }
+
+// — Suggestions (Phase A1, Briefing 3.4) ————————————————————
+
+export type SuggestionType =
+  | "tag"
+  | "cadence"
+  | "cta"
+  | "connection"
+  | "reconnect"
+  | "depth_change"
+  | "mode_change"
+  | "merge_duplicate"
+  | "purpose_mapping"
+  | "how_we_met_extract"
+  | "field_enrichment";
+
+export type SuggestionStatus =
+  | "pending"
+  | "accepted"
+  | "rejected"
+  | "dismissed";
+
+// `payload` ist absichtlich `Record<string, unknown>` und nicht stark
+// typisiert — der Inhalt variiert pro suggestion_type (tag-Suggestion
+// hat ein anderes Schema als merge_duplicate). Die akzeptierende Logik
+// in lib/suggestion-apply.ts (Phase B) macht Type-Narrowing pro Typ.
+export interface SuggestionRow {
+  id: string;
+  user_id: string;
+  person_id: string;
+  suggestion_type: SuggestionType;
+  payload: Record<string, unknown>;
+  reasoning: string | null;
+  status: SuggestionStatus;
+  created_at: string;
+  resolved_at: string | null;
+}
