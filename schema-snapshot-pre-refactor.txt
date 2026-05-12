@@ -1,0 +1,221 @@
+Tables in public schema: 14
+============================================================
+
+debriefs  (9 cols)
+  * id                           uuid
+  * user_id                      uuid
+  * date                         date
+    summary                      text
+    interaction_ids              uuid[]
+    action_ids                   uuid[]
+    duration_sec                 integer
+    audio_url                    text
+    created_at                   timestamp with time zone
+
+rate_limits  (5 cols)
+  * user_id                      uuid
+  * key                          text
+  * window_start                 timestamp with time zone
+  * count                        integer
+  * updated_at                   timestamp with time zone
+
+profiles  (20 cols)
+  * id                           uuid
+    display_name                 text
+    timezone                     text
+    language                     text
+    voice_id                     text
+    debrief_time                 time without time zone
+    claude_key_byo               text
+    elevenlabs_key_byo           text
+    created_at                   timestamp with time zone
+    updated_at                   timestamp with time zone
+  * model_preferences            jsonb
+  * byo_api_keys                 jsonb
+  * subscription_tier            text
+  * subscription_status          text
+    stripe_customer_id           text
+    stripe_subscription_id       text
+    subscription_current_period_end timestamp with time zone
+    subscription_cancel_at       timestamp with time zone
+    subscription_started_at      timestamp with time zone
+  * onboarding_progress          jsonb
+
+pipelines  (11 cols)
+  * id                           uuid
+  * user_id                      uuid
+  * name                         text
+    description                  text
+  * entity_type                  text
+  * stages                       jsonb
+  * field_definitions            jsonb
+  * default_currency             text
+  * created_at                   timestamp with time zone
+  * updated_at                   timestamp with time zone
+    deleted_at                   timestamp with time zone
+
+connections  (7 cols)
+  * id                           uuid
+  * user_id                      uuid
+  * from_person_id               uuid
+  * to_person_id                 uuid
+    relationship_type            text
+    strength                     integer
+    created_at                   timestamp with time zone
+
+workflows  (11 cols)
+  * id                           uuid
+  * user_id                      uuid
+  * name                         text
+    description                  text
+  * status                       text
+  * nodes                        jsonb
+  * edges                        jsonb
+  * created_at                   timestamp with time zone
+  * updated_at                   timestamp with time zone
+    deleted_at                   timestamp with time zone
+  * default_model_preferences    jsonb
+
+reminders  (10 cols)
+  * id                           uuid
+  * user_id                      uuid
+    person_id                    uuid
+  * text                         text
+  * remind_at                    timestamp with time zone
+  * recurrence                   text
+  * type                         text
+  * status                       text
+  * source                       text
+    created_at                   timestamp with time zone
+
+deals  (18 cols)
+  * id                           uuid
+  * user_id                      uuid
+  * pipeline_id                  uuid
+  * stage_id                     text
+  * title                        text
+    person_id                    uuid
+    organization_id              uuid
+    value                        numeric
+    currency                     text
+    expected_close_date          date
+    probability                  integer
+  * status                       text
+  * field_values                 jsonb
+    notes                        text
+  * position                     integer
+  * created_at                   timestamp with time zone
+  * updated_at                   timestamp with time zone
+    deleted_at                   timestamp with time zone
+
+service_connections  (16 cols)
+  * id                           uuid
+  * user_id                      uuid
+  * provider                     text
+  * status                       text
+    account_label                text
+    access_token                 text
+    refresh_token                text
+    token_expires_at             timestamp with time zone
+  * scopes                       text[]
+  * config                       jsonb
+    last_error                   text
+    connected_at                 timestamp with time zone
+    last_used_at                 timestamp with time zone
+  * created_at                   timestamp with time zone
+  * updated_at                   timestamp with time zone
+    deleted_at                   timestamp with time zone
+
+organizations  (15 cols)
+  * id                           uuid
+  * user_id                      uuid
+  * name                         text
+    domain                       text
+    website                      text
+    industry                     text
+    size                         text
+    hq                           text
+    description                  text
+    notes                        text
+  * tags                         text[]
+    enriched_at                  timestamp with time zone
+  * created_at                   timestamp with time zone
+  * updated_at                   timestamp with time zone
+    deleted_at                   timestamp with time zone
+
+notes  (9 cols)
+  * id                           uuid
+  * user_id                      uuid
+    person_id                    uuid
+    title                        text
+    body                         text
+    tags                         text[]
+  * source                       text
+    created_at                   timestamp with time zone
+    updated_at                   timestamp with time zone
+
+todos  (9 cols)
+  * id                           uuid
+  * user_id                      uuid
+    person_id                    uuid
+  * text                         text
+    due_date                     date
+  * priority                     text
+  * status                       text
+    source_debrief_id            uuid
+    created_at                   timestamp with time zone
+
+interactions  (11 cols)
+  * id                           uuid
+  * user_id                      uuid
+    person_ids                   uuid[]
+  * type                         text
+  * source                       text
+    summary                      text
+    transcript                   text
+    sentiment                    text
+    topics                       text[]
+  * occurred_at                  timestamp with time zone
+    created_at                   timestamp with time zone
+
+people  (40 cols)
+  * id                           uuid
+  * user_id                      uuid
+  * name                         text
+    company                      text
+    role                         text
+  * scope                        text
+    tags                         text[]
+    expected_cadence_days        integer
+    strength_score               integer
+    last_interaction_at          timestamp with time zone
+    next_best_action             text
+    birthday                     date
+    phone                        text
+    email                        text
+    notes_summary                text
+    created_at                   timestamp with time zone
+    updated_at                   timestamp with time zone
+    deleted_at                   timestamp with time zone
+  * phones                       jsonb
+  * emails                       jsonb
+  * addresses                    jsonb
+  * socials                      jsonb
+  * important_dates              jsonb
+  * relationships                jsonb
+    avatar_url                   text
+    notes                        text
+  * is_self                      boolean
+    organization_id              uuid
+  * stakeholder_types            text[]
+  * stakeholder_sub_types        jsonb
+  * geographies                  jsonb
+    industry                     text
+    job_function                 text
+    cta                          text
+    cta_expires_at               timestamp with time zone
+    priority                     text
+    priority_bucket              text
+    priority_set_at              timestamp with time zone
+  * interests                    text[]
+    depth_override               text

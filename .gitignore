@@ -40,3 +40,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# refactor-Sicherheitskopien (enthalten PII — niemals committen)
+backup-vor-refactor.json
+backup-vor-refactor.sql
+backup-*.json
+backup-*.sql
+
+# supabase CLI local state (pooler URL, project ref cache)
+supabase/.temp/
