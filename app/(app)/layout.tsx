@@ -51,6 +51,7 @@ export default async function AppLayout({
           </Link>
           <SearchTrigger />
           <nav className="flex flex-col gap-1 text-sm">
+            <NavLink href="/heute">Heute</NavLink>
             <NavLink href="/">Voice</NavLink>
             <NavLink href="/debrief">Wecker</NavLink>
             <NavLink href="/people">Personen</NavLink>

@@ -80,6 +80,66 @@ export async function findSimilarPeople(
   return [];
 }
 
+// Listet alle Personen mit den Tag-Clustern und Circles in denen sie
+// stecken — angereichert via Joins. Wird vom People-Liste-Filter
+// gebraucht (filter nach Cluster oder Circle).
+export interface PersonWithContext {
+  person: Person;
+  clusters: Set<string>; // welche der 4 Tag-Cluster diese Person hat
+  circleIds: Set<string>;
+}
+
+export async function listPeopleWithContext(): Promise<PersonWithContext[]> {
+  const supabase = await createClient();
+  const [peopleRes, ptRes, pcRes] = await Promise.all([
+    supabase
+      .from("people")
+      .select("*")
+      .is("deleted_at", null)
+      .eq("is_self", false)
+      .order("name", { ascending: true }),
+    supabase
+      .from("person_tags")
+      .select("person_id, tags(cluster)"),
+    supabase.from("person_circles").select("person_id, circle_id"),
+  ]);
+
+  if (peopleRes.error) throw peopleRes.error;
+
+  // Index person_id → clusters set
+  const clusterMap = new Map<string, Set<string>>();
+  const ptRows = (ptRes.data ?? []) as unknown as {
+    person_id: string;
+    tags: { cluster: string } | null;
+  }[];
+  for (const row of ptRows) {
+    if (!row.tags?.cluster) continue;
+    if (!clusterMap.has(row.person_id)) {
+      clusterMap.set(row.person_id, new Set());
+    }
+    clusterMap.get(row.person_id)!.add(row.tags.cluster);
+  }
+
+  // Index person_id → circleIds set
+  const circleMap = new Map<string, Set<string>>();
+  const pcRows = (pcRes.data ?? []) as {
+    person_id: string;
+    circle_id: string;
+  }[];
+  for (const row of pcRows) {
+    if (!circleMap.has(row.person_id)) {
+      circleMap.set(row.person_id, new Set());
+    }
+    circleMap.get(row.person_id)!.add(row.circle_id);
+  }
+
+  return ((peopleRes.data ?? []) as Person[]).map((p) => ({
+    person: p,
+    clusters: clusterMap.get(p.id) ?? new Set(),
+    circleIds: circleMap.get(p.id) ?? new Set(),
+  }));
+}
+
 // Returns the person, or null if not found / soft-deleted / not owned.
 export async function getPersonById(id: string): Promise<Person | null> {
   const supabase = await createClient();

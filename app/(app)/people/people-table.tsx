@@ -1,23 +1,41 @@
 "use client";
 
-// People-Tabelle nach 0025-Legacy-Cleanup (Phase F vorgezogen).
-//
-// Vorgänger-Version (688 Zeilen) hatte 11 togglebare Spalten + 3 Filter
-// auf Legacy-Feldern (scope, stakeholder, priority). Mit den Drops aus
-// 0025 sind diese Felder weg — Tabelle hier ist auf das verkleinerte
-// Modell zugeschnitten. Spalten-Toggling, Cluster-Filter etc. kommen
-// in Phase c (Tag-Cluster v3) und Phase C5 (People-Liste-Filter)
-// strukturiert zurück.
+// People-Tabelle (Phase C5 v3): Cluster-Filter + Circle-Filter +
+// Inline-Actions pro Row (Anrufen/WhatsApp/Mehr).
+// Vorgänger-Version war Briefing-v3-naive — diese matched den
+// Briefing-Style.
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import type { Person, Mode, Purpose } from "@/lib/types";
-import { MODE_LABELS, PURPOSE_LABELS } from "@/lib/types";
+import {
+  MODE_LABELS,
+  PURPOSE_LABELS,
+  TAG_CLUSTER_COLORS,
+  TAG_CLUSTER_LABELS,
+  type CircleRow,
+  type Mode,
+  type Person,
+  type Purpose,
+  type TagCluster,
+} from "@/lib/types";
 
 type SortKey = "name" | "company" | "last_contact_at";
 type SortDir = "asc" | "desc";
 type ModeFilter = "all" | Mode;
 type PurposeFilter = "all" | Purpose;
+type ClusterFilter = "all" | TagCluster;
+
+interface Row {
+  person: Person;
+  clusters: string[];
+  circleIds: string[];
+}
+
+interface Props {
+  rows: Row[];
+  circles: CircleRow[];
+  totalCount?: number;
+}
 
 function initials(name: string): string {
   return name
@@ -49,28 +67,52 @@ function compareNullable(
   return dir === "asc" ? cmp : -cmp;
 }
 
-export function PeopleTable({
-  people,
-  activeTag = null,
-  totalCount,
-}: {
-  people: Person[];
-  activeTag?: string | null;
-  totalCount?: number;
-}) {
+function normalizeForWaMe(raw: string | null | undefined): string {
+  if (!raw) return "";
+  return raw.replace(/[^\d]/g, "");
+}
+
+function primaryPhone(person: Person): string | null {
+  const mobile = person.phones?.find(
+    (p) =>
+      p.label?.toLowerCase().includes("mobile") ||
+      p.label?.toLowerCase().includes("iphone"),
+  );
+  const first = mobile ?? person.phones?.[0];
+  return first?.value ?? null;
+}
+
+function primaryEmail(person: Person): string | null {
+  return person.emails?.[0]?.value ?? null;
+}
+
+const CLUSTER_ORDER: TagCluster[] = [
+  "reminders",
+  "interests",
+  "potential",
+  "origin",
+];
+
+export function PeopleTable({ rows, circles, totalCount }: Props) {
   const [search, setSearch] = useState("");
   const [modeFilter, setModeFilter] = useState<ModeFilter>("all");
   const [purposeFilter, setPurposeFilter] = useState<PurposeFilter>("all");
+  const [clusterFilter, setClusterFilter] = useState<ClusterFilter>("all");
+  const [circleFilter, setCircleFilter] = useState<string>("all");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return people.filter((p) => {
+    return rows.filter((r) => {
+      const p = r.person;
       if (modeFilter !== "all" && p.mode !== modeFilter) return false;
       if (purposeFilter !== "all" && p.purpose !== purposeFilter) return false;
+      if (clusterFilter !== "all" && !r.clusters.includes(clusterFilter))
+        return false;
+      if (circleFilter !== "all" && !r.circleIds.includes(circleFilter))
+        return false;
       if (!q) return true;
-      // Schmale Haystack auf Felder die garantiert da sind nach 0025.
       const haystack = [
         p.name,
         p.company,
@@ -86,21 +128,23 @@ export function PeopleTable({
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [people, search, modeFilter, purposeFilter]);
+  }, [rows, search, modeFilter, purposeFilter, clusterFilter, circleFilter]);
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
     copy.sort((a, b) => {
+      const pa = a.person;
+      const pb = b.person;
       if (sortKey === "name") {
         return sortDir === "asc"
-          ? a.name.localeCompare(b.name)
-          : b.name.localeCompare(a.name);
+          ? pa.name.localeCompare(pb.name)
+          : pb.name.localeCompare(pa.name);
       }
       if (sortKey === "company") {
-        return compareNullable(a.company, b.company, sortDir);
+        return compareNullable(pa.company, pb.company, sortDir);
       }
       if (sortKey === "last_contact_at") {
-        return compareNullable(a.last_contact_at, b.last_contact_at, sortDir);
+        return compareNullable(pa.last_contact_at, pb.last_contact_at, sortDir);
       }
       return 0;
     });
@@ -118,7 +162,7 @@ export function PeopleTable({
 
   return (
     <div className="space-y-4">
-      {/* Search + Filter Bar */}
+      {/* Search + Filters row 1 */}
       <div className="flex flex-wrap items-center gap-3">
         <input
           type="text"
@@ -127,64 +171,6 @@ export function PeopleTable({
           placeholder="Name, Firma, Ort, Notiz …"
           className="h-9 w-full max-w-xs rounded border border-rule bg-paper px-3 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20"
         />
-
-        {/* Mode-Filter */}
-        <div className="flex items-center rounded border border-rule bg-paper p-0.5 text-xs">
-          <button
-            type="button"
-            onClick={() => setModeFilter("all")}
-            className={`rounded px-3 py-1 transition ${
-              modeFilter === "all"
-                ? "bg-paper-2 text-ink-1"
-                : "text-ink-3 hover:text-ink-1"
-            }`}
-          >
-            Modus alle
-          </button>
-          {(Object.keys(MODE_LABELS) as Mode[]).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setModeFilter(m)}
-              className={`rounded px-3 py-1 transition ${
-                modeFilter === m
-                  ? "bg-paper-2 text-ink-1"
-                  : "text-ink-3 hover:text-ink-1"
-              }`}
-            >
-              {MODE_LABELS[m]}
-            </button>
-          ))}
-        </div>
-
-        {/* Purpose-Filter */}
-        <div className="flex items-center rounded border border-rule bg-paper p-0.5 text-xs">
-          <button
-            type="button"
-            onClick={() => setPurposeFilter("all")}
-            className={`rounded px-3 py-1 transition ${
-              purposeFilter === "all"
-                ? "bg-paper-2 text-ink-1"
-                : "text-ink-3 hover:text-ink-1"
-            }`}
-          >
-            Zweck alle
-          </button>
-          {(Object.keys(PURPOSE_LABELS) as Purpose[]).map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPurposeFilter(p)}
-              className={`rounded px-3 py-1 transition ${
-                purposeFilter === p
-                  ? "bg-paper-2 text-ink-1"
-                  : "text-ink-3 hover:text-ink-1"
-              }`}
-            >
-              {PURPOSE_LABELS[p]}
-            </button>
-          ))}
-        </div>
 
         <div className="ml-auto flex items-center gap-2">
           <Link
@@ -202,19 +188,98 @@ export function PeopleTable({
         </div>
       </div>
 
-      {activeTag && (
-        <div className="rounded border border-rule bg-paper-2 px-3 py-2 text-xs text-ink-3">
-          Tag-Filter „{activeTag}" — Legacy-Filter weg in 0025, kommt mit
-          Phase c als Cluster-Filter zurück.{" "}
-          <Link href="/people" className="text-action hover:underline">
-            Reset
-          </Link>
+      {/* Filter row 2: Mode + Purpose */}
+      <div className="flex flex-wrap items-center gap-3 text-xs">
+        <span className="t-label">Modus</span>
+        <FilterPill
+          active={modeFilter === "all"}
+          onClick={() => setModeFilter("all")}
+        >
+          Alle
+        </FilterPill>
+        {(Object.keys(MODE_LABELS) as Mode[]).map((m) => (
+          <FilterPill
+            key={m}
+            active={modeFilter === m}
+            onClick={() => setModeFilter(m)}
+          >
+            {MODE_LABELS[m]}
+          </FilterPill>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 text-xs">
+        <span className="t-label">Zweck</span>
+        <FilterPill
+          active={purposeFilter === "all"}
+          onClick={() => setPurposeFilter("all")}
+        >
+          Alle
+        </FilterPill>
+        {(Object.keys(PURPOSE_LABELS) as Purpose[]).map((p) => (
+          <FilterPill
+            key={p}
+            active={purposeFilter === p}
+            onClick={() => setPurposeFilter(p)}
+          >
+            {PURPOSE_LABELS[p]}
+          </FilterPill>
+        ))}
+      </div>
+
+      {/* Filter row 3: Tag-Cluster (Briefing v3 #19) */}
+      <div className="flex flex-wrap items-center gap-3 text-xs">
+        <span className="t-label">Tag-Cluster</span>
+        <FilterPill
+          active={clusterFilter === "all"}
+          onClick={() => setClusterFilter("all")}
+        >
+          Alle
+        </FilterPill>
+        {CLUSTER_ORDER.map((c) => (
+          <FilterPill
+            key={c}
+            active={clusterFilter === c}
+            onClick={() => setClusterFilter(c)}
+            style={
+              clusterFilter === c
+                ? {
+                    background: TAG_CLUSTER_COLORS[c].bg,
+                    color: TAG_CLUSTER_COLORS[c].fg,
+                  }
+                : undefined
+            }
+          >
+            {TAG_CLUSTER_LABELS[c]}
+          </FilterPill>
+        ))}
+      </div>
+
+      {/* Filter row 4: Circles — nur wenn welche existieren */}
+      {circles.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <span className="t-label">Circle</span>
+          <FilterPill
+            active={circleFilter === "all"}
+            onClick={() => setCircleFilter("all")}
+          >
+            Alle
+          </FilterPill>
+          {circles.map((c) => (
+            <FilterPill
+              key={c.id}
+              active={circleFilter === c.id}
+              onClick={() => setCircleFilter(c.id)}
+            >
+              {c.name}
+            </FilterPill>
+          ))}
         </div>
       )}
 
-      {/* Table */}
+      {/* Header */}
       <div className="overflow-hidden rounded border border-rule bg-paper">
-        <div className="grid grid-cols-[40px_minmax(180px,1.4fr)_minmax(160px,1fr)_120px_120px_120px] gap-3 border-b border-rule bg-paper-2 px-4 py-2.5 text-xs">
+        <div className="grid grid-cols-[40px_minmax(180px,1.6fr)_minmax(140px,1fr)_100px_100px_110px_auto] gap-3 border-b border-rule bg-paper-2 px-4 py-2.5 text-xs">
           <span className="t-label" />
           <button
             type="button"
@@ -228,7 +293,7 @@ export function PeopleTable({
             onClick={() => toggleSort("company")}
             className="t-label text-left transition hover:text-ink-1"
           >
-            Firma · Rolle{" "}
+            Firma{" "}
             {sortKey === "company" && (sortDir === "asc" ? "↑" : "↓")}
           </button>
           <span className="t-label">Zweck</span>
@@ -236,11 +301,12 @@ export function PeopleTable({
           <button
             type="button"
             onClick={() => toggleSort("last_contact_at")}
-            className="t-label text-right transition hover:text-ink-1"
+            className="t-label text-left transition hover:text-ink-1"
           >
             Letzter Kontakt{" "}
             {sortKey === "last_contact_at" && (sortDir === "asc" ? "↑" : "↓")}
           </button>
+          <span className="t-label text-right">Aktionen</span>
         </div>
 
         {sorted.length === 0 ? (
@@ -250,41 +316,188 @@ export function PeopleTable({
               : "Keine Treffer für diese Filter."}
           </div>
         ) : (
-          sorted.map((p) => (
-            <Link
-              key={p.id}
-              href={`/people/${p.id}`}
-              className="grid grid-cols-[40px_minmax(180px,1.4fr)_minmax(160px,1fr)_120px_120px_120px] items-center gap-3 border-b border-rule-soft px-4 py-3 transition last:border-0 hover:bg-paper-2"
-            >
-              <span className="avatar" aria-hidden>
-                {initials(p.name)}
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-medium text-ink-1">
-                  {p.name}
-                </span>
-                {p.how_we_met && (
-                  <span className="block truncate text-[11px] italic text-ink-4">
-                    {p.how_we_met}
-                  </span>
-                )}
-              </span>
-              <span className="truncate text-xs text-ink-3">
-                {[p.company, p.role].filter(Boolean).join(" · ") || "—"}
-              </span>
-              <span className="text-xs text-ink-2">
-                {p.purpose ? PURPOSE_LABELS[p.purpose] : "—"}
-              </span>
-              <span className="text-xs text-ink-2">
-                {MODE_LABELS[p.mode]}
-              </span>
-              <span className="text-right font-mono text-[11px] text-ink-3">
-                {formatDate(p.last_contact_at)}
-              </span>
-            </Link>
-          ))
+          sorted.map((r) => <PersonTableRow key={r.person.id} person={r.person} />)
         )}
       </div>
     </div>
+  );
+}
+
+function FilterPill({
+  active,
+  onClick,
+  children,
+  style,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full border px-3 py-1 transition ${
+        active
+          ? "border-action bg-action-soft text-ink-1"
+          : "border-rule bg-paper text-ink-3 hover:border-ink-3 hover:text-ink-1"
+      }`}
+      style={active && style ? style : undefined}
+    >
+      {children}
+    </button>
+  );
+}
+
+// Eine Zeile in der Personen-Tabelle. Inline-Actions am Ende
+// (Anrufen/WhatsApp/Detail). Tabbed-fokussiert ist die ganze Zeile
+// klickbar via Detail-Link.
+function PersonTableRow({ person }: { person: Person }) {
+  const phone = primaryPhone(person);
+  const email = primaryEmail(person);
+  const phoneDigits = phone ? normalizeForWaMe(phone) : "";
+  const hasUsablePhone = phoneDigits.length >= 7;
+
+  return (
+    <div className="grid grid-cols-[40px_minmax(180px,1.6fr)_minmax(140px,1fr)_100px_100px_110px_auto] items-center gap-3 border-b border-rule-soft px-4 py-3 transition last:border-0 hover:bg-paper-2">
+      <Link
+        href={`/people/${person.id}`}
+        className="flex items-center justify-center"
+      >
+        <span className="avatar" aria-hidden>
+          {initials(person.name)}
+        </span>
+      </Link>
+      <Link href={`/people/${person.id}`} className="min-w-0">
+        <span className="block truncate text-sm font-medium text-ink-1">
+          {person.name}
+        </span>
+        {person.how_we_met && (
+          <span className="block truncate text-[11px] italic text-ink-4">
+            {person.how_we_met}
+          </span>
+        )}
+      </Link>
+      <Link href={`/people/${person.id}`} className="min-w-0">
+        <span className="block truncate text-xs text-ink-3">
+          {[person.company, person.role].filter(Boolean).join(" · ") || "—"}
+        </span>
+      </Link>
+      <span className="text-xs text-ink-2">
+        {person.purpose ? PURPOSE_LABELS[person.purpose] : "—"}
+      </span>
+      <span className="text-xs text-ink-2">{MODE_LABELS[person.mode]}</span>
+      <span className="font-mono text-[11px] text-ink-3">
+        {formatDate(person.last_contact_at)}
+      </span>
+      <div className="flex items-center gap-1">
+        <ActionIcon
+          href={hasUsablePhone ? `tel:${phone}` : undefined}
+          title="Anrufen"
+          icon={
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z" />
+            </svg>
+          }
+        />
+        <ActionIcon
+          href={hasUsablePhone ? `https://wa.me/${phoneDigits}` : undefined}
+          title="WhatsApp"
+          variant="wa"
+          icon={
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              aria-hidden
+            >
+              <path d="M20.52 3.48A11.94 11.94 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.11.55 4.17 1.6 5.99L0 24l6.18-1.62A11.94 11.94 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.2-1.25-6.21-3.48-8.52z" />
+            </svg>
+          }
+        />
+        <ActionIcon
+          href={email ? `mailto:${email}` : undefined}
+          title="Email"
+          icon={
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <path d="m3 7 9 6 9-6" />
+            </svg>
+          }
+        />
+      </div>
+    </div>
+  );
+}
+
+function ActionIcon({
+  href,
+  title,
+  icon,
+  variant,
+}: {
+  href: string | undefined;
+  title: string;
+  icon: React.ReactNode;
+  variant?: "wa";
+}) {
+  const base =
+    "inline-flex h-8 w-8 items-center justify-center rounded transition";
+  if (!href) {
+    return (
+      <span
+        title={`${title} · nicht hinterlegt`}
+        className={`${base} cursor-not-allowed text-ink-4 opacity-40`}
+        aria-hidden
+      >
+        {icon}
+      </span>
+    );
+  }
+  if (variant === "wa") {
+    return (
+      <a
+        href={href}
+        title={title}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`${base} text-ink-3 hover:bg-[#25D366]/15 hover:text-[#25D366]`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {icon}
+      </a>
+    );
+  }
+  return (
+    <a
+      href={href}
+      title={title}
+      className={`${base} text-ink-3 hover:bg-paper-2 hover:text-action`}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {icon}
+    </a>
   );
 }

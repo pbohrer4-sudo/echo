@@ -1,24 +1,25 @@
-import { listPeople } from "@/lib/people";
+import { listPeopleWithContext } from "@/lib/people";
 import { listPeopleDuplicates } from "@/lib/duplicates";
+import { listAllCircles } from "@/lib/circles";
 import { PeopleTable } from "./people-table";
 import { DuplicateBanner } from "@/components/duplicate-banner";
 
-export default async function PeoplePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ tag?: string }>;
-}) {
-  const { tag } = await searchParams;
-  const [all, dupes] = await Promise.all([
-    listPeople(),
+export default async function PeoplePage() {
+  const [contextRows, dupes, circles] = await Promise.all([
+    listPeopleWithContext(),
     listPeopleDuplicates(),
+    listAllCircles(),
   ]);
 
-  const activeTag = tag?.trim() || null;
-  // Legacy text-tags weg in 0025 — Filter via tags-Tabelle kommt mit Phase c.
-  const filtered = all;
-
   const highCount = dupes.filter((d) => d.confidence === "high").length;
+
+  // Auf serializable shape mappen — Sets gehen nicht durch
+  // Server→Client-Boundary in Next.js, also als string[].
+  const rows = contextRows.map((r) => ({
+    person: r.person,
+    clusters: Array.from(r.clusters),
+    circleIds: Array.from(r.circleIds),
+  }));
 
   return (
     <div className="px-8 py-10">
@@ -38,11 +39,7 @@ export default async function PeoplePage({
           href="/people/duplicates"
           entity="Personen"
         />
-        <PeopleTable
-          people={filtered}
-          activeTag={activeTag}
-          totalCount={all.length}
-        />
+        <PeopleTable rows={rows} circles={circles} totalCount={rows.length} />
       </div>
     </div>
   );
