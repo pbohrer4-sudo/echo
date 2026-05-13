@@ -203,6 +203,79 @@ export async function createPersonQuick(formData: FormData) {
     );
   }
 
+  // V3-Tabellen parallel füttern (0030 Phase 3). Failures hier blocken
+  // den Person-Create nicht — JSONB-Felder oben sind in der
+  // Transition noch der Fallback.
+  if (phoneValue) {
+    await supabase.from("person_contacts").insert({
+      user_id: user.id,
+      person_id: newPerson.id,
+      channel: "phone",
+      subtype: "mobile",
+      value: phoneValue,
+      is_primary: true,
+      source: "manual",
+    });
+  }
+  if (emailValue) {
+    await supabase.from("person_contacts").insert({
+      user_id: user.id,
+      person_id: newPerson.id,
+      channel: "email",
+      subtype: "persönlich",
+      value: emailValue,
+      is_primary: true,
+      source: "manual",
+    });
+  }
+  // Locations → person_geographies (residence/origin/met_location).
+  // Strukturierte Daten wenn geo gesetzt, sonst nur display_name.
+  type GeoInsert = {
+    geo_type: "residence" | "origin" | "met_location";
+    display_name: string;
+    latitude: number | null;
+    longitude: number | null;
+    place_id: string | null;
+  };
+  const geoInserts: GeoInsert[] = [];
+  if (currentLocation) {
+    geoInserts.push({
+      geo_type: "residence",
+      display_name: currentLocationGeo?.display_name ?? currentLocation,
+      latitude: currentLocationGeo?.lat ?? null,
+      longitude: currentLocationGeo?.lng ?? null,
+      place_id: currentLocationGeo?.place_id ?? null,
+    });
+  }
+  if (homeLocation) {
+    geoInserts.push({
+      geo_type: "origin",
+      display_name: homeLocationGeo?.display_name ?? homeLocation,
+      latitude: homeLocationGeo?.lat ?? null,
+      longitude: homeLocationGeo?.lng ?? null,
+      place_id: homeLocationGeo?.place_id ?? null,
+    });
+  }
+  if (metLocation) {
+    geoInserts.push({
+      geo_type: "met_location",
+      display_name: metLocationGeo?.display_name ?? metLocation,
+      latitude: metLocationGeo?.lat ?? null,
+      longitude: metLocationGeo?.lng ?? null,
+      place_id: metLocationGeo?.place_id ?? null,
+    });
+  }
+  if (geoInserts.length > 0) {
+    await supabase.from("person_geographies").insert(
+      geoInserts.map((g) => ({
+        user_id: user.id,
+        person_id: newPerson.id,
+        is_active: true,
+        ...g,
+      })),
+    );
+  }
+
   // Tags anlegen + verknüpfen (idempotent via getOrCreateTag).
   // Nicht inline mit dem Insert, weil supabase-js keine atomare
   // Cross-Tabelle-Transaktion bietet. Failure hier blockt den Person-

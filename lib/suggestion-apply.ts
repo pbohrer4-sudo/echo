@@ -195,6 +195,10 @@ async function applyHowWeMet(s: SuggestionRow): Promise<ApplyResult> {
     .update(update)
     .eq("id", s.person_id);
   if (error) return dbError(error.message);
+  // V3-Sync (0030): met_location auch als Geo-Eintrag.
+  if (metLocation) {
+    await syncLocationToV3(s.person_id, "met_location", metLocation);
+  }
   return { ok: true };
 }
 
@@ -231,7 +235,47 @@ async function applyFieldEnrichment(s: SuggestionRow): Promise<ApplyResult> {
     .update({ [field]: value })
     .eq("id", s.person_id);
   if (error) return dbError(error.message);
+  // V3-Sync (0030): wenn das Feld eine Location ist, auch als Geo
+  // einlegen. linkedin_url könnte analog in person_contacts gehen —
+  // aber das macht der commit-Pfad bereits beim Update_person.
+  if (
+    typeof value === "string" &&
+    value.trim() &&
+    (field === "current_location" ||
+      field === "home_location" ||
+      field === "met_location")
+  ) {
+    const geoType =
+      field === "current_location"
+        ? "residence"
+        : field === "home_location"
+          ? "origin"
+          : "met_location";
+    await syncLocationToV3(s.person_id, geoType, value);
+  }
   return { ok: true };
+}
+
+// Helper: einen Freitext-Location-Wert in person_geographies einlegen
+// (ohne lat/lng — kommt erst wenn der UI-Pfad OSM-Autocomplete nutzt).
+async function syncLocationToV3(
+  personId: string,
+  geoType: "residence" | "origin" | "met_location",
+  displayName: string,
+): Promise<void> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+  const { error } = await supabase.from("person_geographies").insert({
+    user_id: user.id,
+    person_id: personId,
+    geo_type: geoType,
+    is_active: true,
+    display_name: displayName.trim(),
+  });
+  if (error) {
+    console.error("[suggestion-apply] syncLocationToV3 failed", error.message);
+  }
 }
 
 // ----------------------------------------------------------------------
