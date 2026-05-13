@@ -9,6 +9,10 @@ import {
   listTodosForPerson,
   getPeopleMap,
 } from "@/lib/inbox";
+import { listContactsForPerson } from "@/lib/person-contacts";
+import { listGeographiesForPerson } from "@/lib/person-geographies";
+import { listRelationshipsForPerson } from "@/lib/person-relationships";
+import { GeographiesList } from "@/components/geographies-list";
 import { getProfileDepth } from "@/lib/profile-depth";
 import { AxisBadges } from "@/components/axis-badges";
 import { ActionBar } from "@/components/action-bar";
@@ -100,9 +104,16 @@ export default async function PersonDetailPage({
     ? parseSelfTab(tab)
     : "profile";
 
-  const relatedIds = (person.relationships ?? []).map(
-    (r) => r.related_person_id,
-  );
+  // V3-Migration (0030): Reads laufen auf den strukturierten Tabellen.
+  // Erst Beziehungen holen damit wir die related_person_ids haben für
+  // den peopleMap-Lookup.
+  const [contacts, geographies, relationships] = await Promise.all([
+    listContactsForPerson(id),
+    listGeographiesForPerson(id, { includeInactive: true }),
+    listRelationshipsForPerson(id),
+  ]);
+  const relatedIds = relationships.map((r) => r.related_person_id);
+
   const [interactions, notes, reminders, todos, peopleMap, similar] =
     await Promise.all([
       listInteractionsForPerson(id),
@@ -110,7 +121,6 @@ export default async function PersonDetailPage({
       listRemindersForPerson(id),
       listTodosForPerson(id),
       getPeopleMap(relatedIds),
-      // Legacy text-tags weg in 0025 — Similar-by-Tag kommt mit Phase c (tags-Tabelle joined)
       findSimilarPeople(id, []),
     ]);
 
@@ -296,35 +306,23 @@ export default async function PersonDetailPage({
           </div>
         )}
 
-        {!person.is_self && (
-          <ActionBar
-            phones={person.phones ?? []}
-            emails={person.emails ?? []}
-          />
-        )}
+        {!person.is_self && <ActionBar contacts={contacts} />}
 
         {!person.is_self && <SuggestionStack personId={person.id} />}
 
         {!person.is_self && <ClusterBlock personId={person.id} />}
 
-        {!person.is_self && (
-          <ChannelsList
-            phones={person.phones ?? []}
-            emails={person.emails ?? []}
-            socials={person.socials ?? []}
-          />
-        )}
-
-        {/* Telefon/Email/Social-Sektionen entfernt — ChannelsList oben
-            ersetzt sie mit Briefing-v3-Style Action-Pattern. */}
+        {!person.is_self && <ChannelsList contacts={contacts} />}
 
         {!person.is_self && (
           <DraftGenerator
             personId={person.id}
             personName={person.name}
-            phones={person.phones ?? []}
+            contacts={contacts}
           />
         )}
+
+        {!person.is_self && <GeographiesList geographies={geographies} />}
 
         {!person.is_self && <LifeEventsBlock personId={person.id} />}
 
@@ -357,7 +355,7 @@ export default async function PersonDetailPage({
                 <span className="rule" />
               </div>
               <RelationshipList
-                relationships={person.relationships ?? []}
+                relationships={relationships}
                 peopleMap={peopleMap}
               />
             </section>

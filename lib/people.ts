@@ -95,21 +95,34 @@ export interface PersonWithContext {
   passionNotes: Record<string, string>; // 0028 — lower-cased Name → Note
   circleIds: Set<string>;
   circleNotes: Record<string, string>;  // 0028 — circle_id → Note
+  // 0030 — V3-Schema. cityList = alle aktiven Geo-Cities (lower) für
+  // Location-Filter; contactChannels = Set der vorhandenen Channels
+  // für Kanal-Filter.
+  cityList: Set<string>;
+  contactChannels: Set<string>;
 }
 
 export async function listPeopleWithContext(): Promise<PersonWithContext[]> {
   const supabase = await createClient();
-  const [peopleRes, ptRes, pasRes, pcRes] = await Promise.all([
-    supabase
-      .from("people")
-      .select("*")
-      .is("deleted_at", null)
-      .eq("is_self", false)
-      .order("name", { ascending: true }),
-    supabase.from("person_tags").select("person_id, note, tags(cluster, name)"),
-    supabase.from("passions").select("person_id, name, note"),
-    supabase.from("person_circles").select("person_id, circle_id, note"),
-  ]);
+  // V3-Migration (0030): jetzt auch person_contacts + person_geographies
+  // mit-fetchen für Channel-/Location-Filter ohne JSONB-Abhängigkeit.
+  const [peopleRes, ptRes, pasRes, pcRes, contactsRes, geoRes] =
+    await Promise.all([
+      supabase
+        .from("people")
+        .select("*")
+        .is("deleted_at", null)
+        .eq("is_self", false)
+        .order("name", { ascending: true }),
+      supabase.from("person_tags").select("person_id, note, tags(cluster, name)"),
+      supabase.from("passions").select("person_id, name, note"),
+      supabase.from("person_circles").select("person_id, circle_id, note"),
+      supabase.from("person_contacts").select("person_id, channel"),
+      supabase
+        .from("person_geographies")
+        .select("person_id, city, display_name, country_code")
+        .eq("is_active", true),
+    ]);
 
   if (peopleRes.error) throw peopleRes.error;
 
@@ -172,6 +185,31 @@ export async function listPeopleWithContext(): Promise<PersonWithContext[]> {
     }
   }
 
+  // 0030 — Channels pro Person + Cities pro Person aggregieren
+  const channelMap = new Map<string, Set<string>>();
+  for (const row of (contactsRes.data ?? []) as {
+    person_id: string;
+    channel: string;
+  }[]) {
+    if (!channelMap.has(row.person_id)) channelMap.set(row.person_id, new Set());
+    channelMap.get(row.person_id)!.add(row.channel);
+  }
+
+  const cityMap = new Map<string, Set<string>>();
+  for (const row of (geoRes.data ?? []) as {
+    person_id: string;
+    city: string | null;
+    display_name: string;
+    country_code: string | null;
+  }[]) {
+    if (!cityMap.has(row.person_id)) cityMap.set(row.person_id, new Set());
+    const s = cityMap.get(row.person_id)!;
+    // Mehrere matchbare Werte: city + display_name (für Voice-Filter)
+    if (row.city) s.add(row.city.toLowerCase());
+    if (row.display_name) s.add(row.display_name.toLowerCase());
+    if (row.country_code) s.add(row.country_code.toLowerCase());
+  }
+
   return ((peopleRes.data ?? []) as Person[]).map((p) => {
     const cm = tagMap.get(p.id);
     const tagsByCluster: Record<string, string[]> = {};
@@ -190,6 +228,8 @@ export async function listPeopleWithContext(): Promise<PersonWithContext[]> {
       passionNotes: Object.fromEntries(passionNoteMap.get(p.id) ?? []),
       circleIds: circleMap.get(p.id) ?? new Set(),
       circleNotes: Object.fromEntries(circleNoteMap.get(p.id) ?? []),
+      cityList: cityMap.get(p.id) ?? new Set(),
+      contactChannels: channelMap.get(p.id) ?? new Set(),
     };
   });
 }

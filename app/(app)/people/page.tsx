@@ -32,6 +32,8 @@ export default async function PeoplePage({
     tagNotes: r.tagNotes,        // 0028 — pro Tag-Name → Note
     passionNotes: r.passionNotes, // pro lower-case Passion-Name → Note
     circleNotes: r.circleNotes,   // pro circle_id → Note
+    cityList: Array.from(r.cityList),         // 0030 — alle aktiven Geos lower
+    contactChannels: Array.from(r.contactChannels), // 0030 — Set<ContactChannel>
   }));
 
   // Distinct Passions für Filter-Dropdown.
@@ -41,10 +43,25 @@ export default async function PeoplePage({
     a.localeCompare(b),
   );
 
-  // Distinct Locations für Ort-Filter (current_location, home_location,
-  // met_location aggregiert, case-insensitive dedupliziert).
-  const locationMap = new Map<string, string>(); // lower → original
+  // Distinct Locations für Ort-Filter. V3 (0030) zieht primär aus
+  // person_geographies (über cityList), während die JSONB-Felder als
+  // Transition-Fallback mitgenommen werden bis Phase 3 die Writes
+  // komplett auf die Tabelle umgestellt hat.
+  const locationMap = new Map<string, string>(); // lower → display
   for (const r of rows) {
+    // Neue strukturierte Quelle
+    for (const lower of r.cityList) {
+      if (!lower) continue;
+      if (!locationMap.has(lower)) {
+        // Display = Title-case Variante
+        const display = lower
+          .split(/\s+/)
+          .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+          .join(" ");
+        locationMap.set(lower, display);
+      }
+    }
+    // Legacy-Freitext als Fallback während der Migration
     for (const loc of [
       r.person.current_location,
       r.person.home_location,

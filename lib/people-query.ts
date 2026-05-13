@@ -57,18 +57,36 @@ export async function executeQueryPeople(
       if (!r.circleIds.has(circleIdFilter)) return false;
     }
     if (locationLower) {
-      const cands = [
+      // V3 person_geographies (indexed) + Legacy-Fallback
+      const v3 = Array.from(r.cityList).some((c) =>
+        c.includes(locationLower),
+      );
+      const legacy = [
         p.current_location?.toLowerCase(),
         p.home_location?.toLowerCase(),
         p.met_location?.toLowerCase(),
-      ].filter((x): x is string => Boolean(x));
-      if (!cands.some((c) => c.includes(locationLower))) return false;
+      ]
+        .filter((x): x is string => Boolean(x))
+        .some((c) => c.includes(locationLower));
+      if (!v3 && !legacy) return false;
     }
-    if (spec.channel === "has_phone" && (p.phones?.length ?? 0) === 0)
-      return false;
-    if (spec.channel === "has_email" && (p.emails?.length ?? 0) === 0)
-      return false;
-    if (spec.channel === "has_linkedin" && !p.linkedin_url) return false;
+    if (spec.channel === "has_phone") {
+      const v3 = Array.from(r.contactChannels).some(
+        (c) => c === "phone" || c === "whatsapp",
+      );
+      const legacy = (p.phones?.length ?? 0) > 0;
+      if (!v3 && !legacy) return false;
+    }
+    if (spec.channel === "has_email") {
+      const v3 = r.contactChannels.has("email");
+      const legacy = (p.emails?.length ?? 0) > 0;
+      if (!v3 && !legacy) return false;
+    }
+    if (spec.channel === "has_linkedin") {
+      const v3 = r.contactChannels.has("linkedin");
+      const legacy = Boolean(p.linkedin_url);
+      if (!v3 && !legacy) return false;
+    }
 
     if (q) {
       const tagNames = Object.values(r.tagsByCluster).flat();

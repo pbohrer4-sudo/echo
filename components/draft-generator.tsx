@@ -10,7 +10,7 @@
 // (regenerate), "Senden" (öffnet wa.me mit Text vorausgefüllt).
 
 import { useState } from "react";
-import type { PhoneEntry } from "@/lib/types";
+import type { PersonContact } from "@/lib/types";
 import {
   DRAFT_USE_CASE_DESCRIPTIONS,
   DRAFT_USE_CASE_LABELS,
@@ -39,12 +39,16 @@ function normalizeForWaMe(raw: string): string {
 export function DraftGenerator({
   personId,
   personName,
-  phones,
+  contacts,
 }: {
   personId: string;
   personName: string;
-  phones: PhoneEntry[];
+  contacts: PersonContact[];
 }) {
+  // V3-Migration: phones/whatsapp aus person_contacts ableiten.
+  const waContacts = contacts.filter(
+    (c) => c.channel === "whatsapp" || c.channel === "phone",
+  );
   const [active, setActive] = useState<DraftUseCase | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [loading, setLoading] = useState(false);
@@ -78,24 +82,22 @@ export function DraftGenerator({
   }
 
   function sendWhatsApp() {
-    const phone =
-      phones.find(
-        (p) =>
-          p.label?.toLowerCase().includes("mobile") ||
-          p.label?.toLowerCase().includes("iphone"),
-      ) ?? phones[0];
-    if (!phone) {
+    // WhatsApp-Channel bevorzugen (V3 macht's explizit), sonst die
+    // primary phone — sonst irgendeine phone.
+    const target =
+      waContacts.find((c) => c.is_primary) ?? waContacts[0];
+    if (!target) {
       setError("Keine Telefonnummer hinterlegt");
       return;
     }
-    const digits = normalizeForWaMe(phone.value);
+    const digits = normalizeForWaMe(target.value);
     const text = editing ? editText : (draft?.text ?? "");
     if (!text.trim()) return;
     const url = `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
-  const hasPhone = phones.length > 0;
+  const hasPhone = waContacts.length > 0;
 
   return (
     <section className="space-y-4">

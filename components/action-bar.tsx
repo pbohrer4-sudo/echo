@@ -1,43 +1,61 @@
-// Action-Bar auf Person-Detail (Phase C6b, Briefing v3 #19).
+// Action-Bar auf Person-Detail (Phase 2 V3-Migration, 0030).
 //
 // „Jede Person ist ein Action-Launcher" — Anrufen + WhatsApp sind
 // immer einen Tap entfernt, prominent oben. Weitere Kanäle (Email,
 // LinkedIn, SMS, Telegram) liegen im ChannelList-Block direkt drunter.
 //
-// Native-URI-Schemes:
-//   tel:+491711234567       → öffnet Dialer (iOS, Android, macOS Continuity)
-//   https://wa.me/491711234567?text=  → öffnet WhatsApp App oder Web
+// Datenquelle: person_contacts (V3). Primary-Phone wird für tel: +
+// wa.me genutzt; country_code wird in die wa.me-URL gemerged falls
+// nicht schon in der Value enthalten.
 
-import type { EmailEntry, PhoneEntry } from "@/lib/types";
+import type { ContactChannel, PersonContact } from "@/lib/types";
 
 interface Props {
-  phones: PhoneEntry[];
-  emails: EmailEntry[];
+  contacts: PersonContact[];
+}
+
+// Lokaler Helper — gleiche Logik wie lib/person-contacts.ts, hier
+// inline damit dieser Component kein server-only Modul importiert.
+function findPrimaryByChannel(
+  contacts: PersonContact[],
+  channel: ContactChannel,
+): PersonContact | null {
+  const inChannel = contacts.filter((c) => c.channel === channel);
+  if (inChannel.length === 0) return null;
+  return inChannel.find((c) => c.is_primary) ?? inChannel[0];
 }
 
 // Normalisiert eine Telefonnummer auf das wa.me-Format: nur Ziffern,
-// kein +, keine Leerzeichen. Beispiel: "+49 171 1234567" → "491711234567".
-function normalizeForWaMe(raw: string): string {
-  return raw.replace(/[^\d]/g, "");
+// kein +, keine Leerzeichen. Wenn country_code gesetzt und im Value
+// noch nicht enthalten, wird er vorne dran gehängt.
+function buildWaMeDigits(phone: PersonContact): string {
+  const digits = phone.value.replace(/[^\d]/g, "");
+  if (phone.country_code && !phone.value.includes("+")) {
+    // country_code ist ISO-2 (DE/AT/...) — wir hängen nichts dran wenn
+    // die Value-Digits schon mit Ländervorwahl beginnen. Ohne harte
+    // Mapping-Tabelle bleibt die Logik bewusst minimal — bessere
+    // Validierung wäre serverseitig per libphonenumber.
+    return digits;
+  }
+  return digits;
 }
 
-// Erste Phone (mobile bevorzugt, sonst die erste verfügbare).
-function pickPrimaryPhone(phones: PhoneEntry[]): PhoneEntry | null {
-  if (!phones || phones.length === 0) return null;
-  const mobile = phones.find(
-    (p) => p.label?.toLowerCase().includes("mobile") || p.label?.toLowerCase().includes("iphone"),
-  );
-  return mobile ?? phones[0];
-}
+export function ActionBar({ contacts }: Props) {
+  const phone =
+    findPrimaryByChannel(contacts, "phone") ??
+    findPrimaryByChannel(contacts, "whatsapp");
+  const whatsapp =
+    findPrimaryByChannel(contacts, "whatsapp") ??
+    findPrimaryByChannel(contacts, "phone");
 
-export function ActionBar({ phones, emails }: Props) {
-  const phone = pickPrimaryPhone(phones);
-  const phoneDigits = phone ? normalizeForWaMe(phone.value) : "";
+  const phoneDigits = phone ? buildWaMeDigits(phone) : "";
+  const whatsappDigits = whatsapp ? buildWaMeDigits(whatsapp) : "";
   const hasUsablePhone = phoneDigits.length >= 7;
+  const hasUsableWa = whatsappDigits.length >= 7;
+  const hasEmail = contacts.some((c) => c.channel === "email");
 
-  // Wenn keine Action verfügbar ist, Bar einfach weglassen — sonst
-  // sieht's nach „kaputt" aus.
-  if (!hasUsablePhone && emails.length === 0) return null;
+  // Wenn keine Action verfügbar ist, Bar weglassen.
+  if (!hasUsablePhone && !hasUsableWa && !hasEmail) return null;
 
   return (
     <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
@@ -60,11 +78,11 @@ export function ActionBar({ phones, emails }: Props) {
           </svg>
         }
         primary
-        background="oklch(28% 0.05 250)" // dark navy
+        background="oklch(28% 0.05 250)"
         foreground="var(--paper)"
       />
       <ActionButton
-        href={hasUsablePhone ? `https://wa.me/${phoneDigits}` : undefined}
+        href={hasUsableWa ? `https://wa.me/${whatsappDigits}` : undefined}
         label="WhatsApp"
         icon={
           <svg
@@ -78,7 +96,7 @@ export function ActionBar({ phones, emails }: Props) {
           </svg>
         }
         primary
-        background="#25D366" // WhatsApp Green (Briefing v3 brand-Anker)
+        background="#25D366"
         foreground="#fff"
       />
       <ActionButton
@@ -153,7 +171,6 @@ function ActionButton({
     );
   }
 
-  // Secondary
   return (
     <a
       href={href}

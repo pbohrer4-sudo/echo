@@ -51,6 +51,9 @@ interface Row {
   tagNotes: Record<string, string>;
   passionNotes: Record<string, string>;
   circleNotes: Record<string, string>;
+  // 0030 — V3 strukturierte Aggregation (parallel zu JSONB-Feldern bis Phase 3)
+  cityList: string[];          // lower-case Cities + display_names aus person_geographies
+  contactChannels: string[];   // distinct channels aus person_contacts
 }
 
 interface LocationOption {
@@ -316,22 +319,36 @@ export function PeopleTable({
       if (circleFilter !== "all" && !r.circleIds.includes(circleFilter))
         return false;
 
-      // Location-Filter — match gegen current/home/met_location case-insensitive
+      // Location-Filter — V3 schaut auf person_geographies cityList
+      // PLUS Legacy-Freitext-Felder. „all" deaktiviert den Filter.
       if (locationFilter !== "all") {
-        const cands = [
+        const v3 = r.cityList.includes(locationFilter);
+        const legacy = [
           p.current_location?.toLowerCase(),
           p.home_location?.toLowerCase(),
           p.met_location?.toLowerCase(),
-        ].filter((x): x is string => Boolean(x));
-        if (!cands.includes(locationFilter)) return false;
+        ].some((x) => x === locationFilter);
+        if (!v3 && !legacy) return false;
       }
 
-      // Channel-Filter
-      if (channelFilter === "has_phone" && (p.phones?.length ?? 0) === 0)
-        return false;
-      if (channelFilter === "has_email" && (p.emails?.length ?? 0) === 0)
-        return false;
-      if (channelFilter === "has_linkedin" && !p.linkedin_url) return false;
+      // Channel-Filter — V3 person_contacts ODER JSONB-Fallback.
+      if (channelFilter === "has_phone") {
+        const v3 = r.contactChannels.some(
+          (c) => c === "phone" || c === "whatsapp",
+        );
+        const legacy = (p.phones?.length ?? 0) > 0;
+        if (!v3 && !legacy) return false;
+      }
+      if (channelFilter === "has_email") {
+        const v3 = r.contactChannels.includes("email");
+        const legacy = (p.emails?.length ?? 0) > 0;
+        if (!v3 && !legacy) return false;
+      }
+      if (channelFilter === "has_linkedin") {
+        const v3 = r.contactChannels.includes("linkedin");
+        const legacy = Boolean(p.linkedin_url);
+        if (!v3 && !legacy) return false;
+      }
 
       if (!q) return true;
       // Haystack umfasst Person-Felder + alle Tag-Namen aller Cluster
