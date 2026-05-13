@@ -16,6 +16,7 @@ import { ChannelsList } from "@/components/channels-list";
 import { DraftGenerator } from "@/components/draft-generator";
 import { SuggestionStack } from "./suggestion-stack";
 import { ClusterBlock } from "./cluster-block";
+import { LifeEventsBlock } from "./life-events-block";
 import { GamificationDashboard } from "./gamification-dashboard";
 import { APP_CONFIG } from "@/lib/config";
 import { DeleteButton } from "./delete-button";
@@ -324,6 +325,8 @@ export default async function PersonDetailPage({
             phones={person.phones ?? []}
           />
         )}
+
+        {!person.is_self && <LifeEventsBlock personId={person.id} />}
 
         {showProfileBody && (person.addresses?.length ?? 0) > 0 && (
           <section>

@@ -1,0 +1,73 @@
+"use server";
+
+// Server Actions für Life Events auf Person-Detail (Phase D2,
+// Briefing v3 §11).
+
+import { revalidatePath } from "next/cache";
+import {
+  createLifeEvent,
+  deleteLifeEvent as deleteLifeEventRaw,
+} from "@/lib/life-events";
+import type { LifeEventType } from "@/lib/types";
+
+export async function createLifeEventForPerson(formData: FormData): Promise<{
+  ok: boolean;
+  error?: string;
+  id?: string;
+}> {
+  const personId = String(formData.get("person_id") ?? "");
+  const title = String(formData.get("title") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const eventType = String(formData.get("event_type") ?? "note") as LifeEventType;
+  const occurredAtRaw = String(formData.get("occurred_at") ?? "").trim();
+  const locationName = String(formData.get("location_name") ?? "").trim();
+  const filePath = String(formData.get("file_path") ?? "").trim() || null;
+  const fileSizeBytes =
+    parseInt(String(formData.get("file_size_bytes") ?? "0"), 10) || null;
+  const mimeType = String(formData.get("mime_type") ?? "").trim() || null;
+
+  if (!personId) return { ok: false, error: "person_id fehlt" };
+  if (!title) return { ok: false, error: "Titel fehlt" };
+  if (!occurredAtRaw) return { ok: false, error: "Datum fehlt" };
+
+  const VALID: LifeEventType[] = [
+    "photo",
+    "document",
+    "voice_note",
+    "milestone",
+    "note",
+  ];
+  if (!VALID.includes(eventType)) {
+    return { ok: false, error: "Ungültiger event_type" };
+  }
+
+  const event = await createLifeEvent({
+    title,
+    description: description || null,
+    event_type: eventType,
+    occurred_at: new Date(occurredAtRaw).toISOString(),
+    location_name: locationName || null,
+    file_path: filePath,
+    file_size_bytes: fileSizeBytes,
+    mime_type: mimeType,
+    person_ids: [personId],
+  });
+
+  if (!event) return { ok: false, error: "Konnte nicht angelegt werden" };
+
+  revalidatePath(`/people/${personId}`);
+  revalidatePath("/lifeline");
+  return { ok: true, id: event.id };
+}
+
+export async function deleteLifeEventAction(
+  eventId: string,
+  personId: string,
+): Promise<{ ok: boolean }> {
+  const ok = await deleteLifeEventRaw(eventId);
+  if (ok) {
+    revalidatePath(`/people/${personId}`);
+    revalidatePath("/lifeline");
+  }
+  return { ok };
+}

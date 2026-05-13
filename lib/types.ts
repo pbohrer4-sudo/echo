@@ -660,3 +660,46 @@ export interface InteractionNewFields {
   duration_minutes: number | null;
   ai_extracted_facts: Record<string, unknown> | null;
 }
+
+// — Life Events (Phase D2, Briefing v3 Section 11) ————————————
+
+export type LifeEventType =
+  | "photo"
+  | "document"
+  | "voice_note"
+  | "milestone"
+  | "note";
+
+export const LIFE_EVENT_LABELS: Record<LifeEventType, string> = {
+  photo: "Foto",
+  document: "Dokument",
+  voice_note: "Voice-Note",
+  milestone: "Meilenstein",
+  note: "Notiz",
+};
+
+export interface LifeEventRow {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  event_type: LifeEventType;
+  occurred_at: string;
+  file_path: string | null;
+  file_size_bytes: number | null;
+  mime_type: string | null;
+  thumbnail_path: string | null;
+  location_name: string | null;
+  google_place_id: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface PersonLifeEventRow {
+  person_id: string;
+  life_event_id: string;
+  added_at: string;
+}

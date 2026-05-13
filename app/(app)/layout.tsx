@@ -63,6 +63,7 @@ export default async function AppLayout({
               Reminders
             </NavLink>
             <NavLink href="/rhythmus">Rhythmus</NavLink>
+            <NavLink href="/lifeline">Lifeline</NavLink>
             <NavLink href="/pulse">Sonntags-Puls</NavLink>
             <NavLink href="/recap">Rückblick</NavLink>
             <NavLink href="/integrations">Voice Vibe Integrations</NavLink>
