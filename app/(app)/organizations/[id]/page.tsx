@@ -178,9 +178,9 @@ export default async function OrganizationDetailPage({
                         </p>
                       )}
                     </div>
-                    {p.last_interaction_at && (
+                    {p.last_contact_at && (
                       <span className="font-mono text-[11px] text-ink-3">
-                        {fmtDate(p.last_interaction_at)}
+                        {fmtDate(p.last_contact_at)}
                       </span>
                     )}
                   </Link>

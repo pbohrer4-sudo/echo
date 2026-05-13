@@ -40,7 +40,7 @@ export async function getGamificationStats(): Promise<GamificationStats> {
       .select("id", { count: "exact", head: true }),
     supabase
       .from("people")
-      .select("id, last_interaction_at, expected_cadence_days", { count: "exact" })
+      .select("id, last_contact_at, cadence_days", { count: "exact" })
       .is("deleted_at", null)
       .eq("is_self", false),
     supabase
@@ -56,25 +56,25 @@ export async function getGamificationStats(): Promise<GamificationStats> {
       .eq("status", "done"),
     supabase
       .from("people")
-      .select("last_interaction_at, expected_cadence_days")
+      .select("last_contact_at, cadence_days")
       .is("deleted_at", null)
       .eq("is_self", false),
   ]);
 
-  // Compute on-rhythm percentage out of people with cadence + last_interaction_at.
+  // Compute on-rhythm percentage out of people with cadence + last_contact_at.
   const now = Date.now();
   let rated = 0;
   let onRhythm = 0;
   for (const p of (cadencePeopleRes.data ?? []) as Array<{
-    last_interaction_at: string | null;
-    expected_cadence_days: number | null;
+    last_contact_at: string | null;
+    cadence_days: number | null;
   }>) {
-    if (p.expected_cadence_days == null || !p.last_interaction_at) continue;
+    if (p.cadence_days == null || !p.last_contact_at) continue;
     rated += 1;
     const days =
-      (now - new Date(p.last_interaction_at).getTime()) /
+      (now - new Date(p.last_contact_at).getTime()) /
       (1000 * 60 * 60 * 24);
-    if (days <= p.expected_cadence_days) onRhythm += 1;
+    if (days <= p.cadence_days) onRhythm += 1;
   }
 
   return {

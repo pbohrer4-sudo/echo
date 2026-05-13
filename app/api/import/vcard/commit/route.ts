@@ -77,8 +77,6 @@ export async function POST(request: Request) {
       name,
       company: c.company,
       role: c.role,
-      scope: "personal", // sensible default for iPhone Contacts; user can flip per-row later
-      tags: [],
       phones: c.phones,
       emails: c.emails,
       addresses: c.addresses,
@@ -86,13 +84,9 @@ export async function POST(request: Request) {
       important_dates,
       relationships: [],
       notes: c.notes,
-      avatar_url: null,
       organization_id,
-      // Mirror legacy single-value columns for backwards compat with
-      // voice-extraction queries.
-      phone: c.phones[0]?.value ?? null,
-      email: c.emails[0]?.value ?? null,
-      birthday: c.birthday,
+      // Briefing v3: iPhone-Contacts werden als persönlich klassifiziert.
+      purpose: "personal" as const,
     });
 
     if (error) {

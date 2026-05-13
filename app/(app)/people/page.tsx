@@ -15,13 +15,8 @@ export default async function PeoplePage({
   ]);
 
   const activeTag = tag?.trim() || null;
-  const filtered = activeTag
-    ? all.filter((p) =>
-        (p.tags ?? []).some(
-          (t) => t.toLowerCase() === activeTag.toLowerCase(),
-        ),
-      )
-    : all;
+  // Legacy text-tags weg in 0025 — Filter via tags-Tabelle kommt mit Phase c.
+  const filtered = all;
 
   const highCount = dupes.filter((d) => d.confidence === "high").length;
 

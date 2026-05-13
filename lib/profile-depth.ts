@@ -14,7 +14,6 @@ export function getProfileDepth(person: Person): {
   let filled = 0;
   if (person.company) filled += 1;
   if (person.role) filled += 1;
-  if ((person.tags ?? []).length > 0) filled += 1;
   if ((person.phones ?? []).length > 0) filled += 1;
   if ((person.emails ?? []).length > 0) filled += 1;
   if ((person.addresses ?? []).length > 0) filled += 1;
@@ -22,7 +21,8 @@ export function getProfileDepth(person: Person): {
   if ((person.important_dates ?? []).length > 0) filled += 1;
   if ((person.relationships ?? []).length > 0) filled += 1;
   if (person.notes) filled += 1;
-  if (person.expected_cadence_days != null) filled += 1;
-  if (person.avatar_url) filled += 1;
+  if (person.cadence_days != null) filled += 1;
+  if (person.photo_url) filled += 1;
+  if (person.how_we_met) filled += 1;
   return { filled, total: FIELDS, percent: Math.round((filled / FIELDS) * 100) };
 }

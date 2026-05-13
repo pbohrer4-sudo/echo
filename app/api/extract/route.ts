@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     .select("id, name, company")
     .is("deleted_at", null)
     .eq("is_self", false)
-    .order("last_interaction_at", { ascending: false, nullsFirst: false })
+    .order("last_contact_at", { ascending: false, nullsFirst: false })
     .limit(PEOPLE_PROMPT_LIMIT);
 
   if (peopleError) {

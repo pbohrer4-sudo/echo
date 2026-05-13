@@ -145,16 +145,14 @@ export async function listPeopleDuplicates(): Promise<PeopleDuplicateRow[]> {
     name: normalize(p.name),
     company: normalize(p.company),
     phones: new Set(
-      [
-        ...((p.phones ?? []) as PhoneEntry[]).map((x) => normalizePhone(x.value)),
-        normalizePhone(p.phone),
-      ].filter((x) => x && x.length >= 5),
+      ((p.phones ?? []) as PhoneEntry[])
+        .map((x) => normalizePhone(x.value))
+        .filter((x) => x && x.length >= 5),
     ),
     emails: new Set(
-      [
-        ...((p.emails ?? []) as EmailEntry[]).map((x) => normalizeEmail(x.value)),
-        normalizeEmail(p.email),
-      ].filter((x) => x.length > 3),
+      ((p.emails ?? []) as EmailEntry[])
+        .map((x) => normalizeEmail(x.value))
+        .filter((x) => x.length > 3),
     ),
   }));
 
@@ -218,12 +216,12 @@ export async function listPeopleDuplicates(): Promise<PeopleDuplicateRow[]> {
         primary_name: primary.name,
         primary_company: primary.company,
         primary_role: primary.role,
-        primary_avatar_url: primary.avatar_url,
+        primary_avatar_url: primary.photo_url,
         secondary_id: secondary.id,
         secondary_name: secondary.name,
         secondary_company: secondary.company,
         secondary_role: secondary.role,
-        secondary_avatar_url: secondary.avatar_url,
+        secondary_avatar_url: secondary.photo_url,
         score,
         confidence: bandFor(score),
         reasons,

@@ -46,7 +46,7 @@ export async function generatePulse(ctx: UserContext): Promise<{
     supabase
       .from("people")
       .select(
-        "id, name, last_interaction_at, expected_cadence_days, important_dates",
+        "id, name, last_contact_at, cadence_days, important_dates",
       )
       .is("deleted_at", null)
       .eq("is_self", false),
@@ -59,17 +59,17 @@ export async function generatePulse(ctx: UserContext): Promise<{
 
   const stalePeople = (peopleRes.data ?? [])
     .filter(
-      (p) => p.expected_cadence_days != null && p.last_interaction_at != null,
+      (p) => p.cadence_days != null && p.last_contact_at != null,
     )
     .map((p) => {
-      const last = new Date(p.last_interaction_at as string);
+      const last = new Date(p.last_contact_at as string);
       const daysSince = Math.floor(
         (now.getTime() - last.getTime()) / (1000 * 60 * 60 * 24),
       );
       return {
         name: p.name as string,
         days_since: daysSince,
-        cadence: p.expected_cadence_days as number,
+        cadence: p.cadence_days as number,
       };
     })
     .filter((p) => p.days_since > Math.floor((p.cadence ?? 30) * 1.5))

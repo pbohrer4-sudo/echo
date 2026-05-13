@@ -88,9 +88,9 @@ export default async function AppLayout({
             href="/profile"
             className="flex items-center gap-2.5 rounded border border-rule bg-paper-2 px-2 py-1 transition hover:border-action hover:bg-action-soft"
           >
-            {self.avatar_url ? (
+            {self.photo_url ? (
               <Image
-                src={self.avatar_url}
+                src={self.photo_url}
                 alt={self.name}
                 width={28}
                 height={28}

@@ -10,13 +10,10 @@ import {
   getPeopleMap,
 } from "@/lib/inbox";
 import { getProfileDepth } from "@/lib/profile-depth";
-import { StrengthMeter } from "@/components/strength-meter";
 import { AxisBadges } from "@/components/axis-badges";
 import { SuggestionStack } from "./suggestion-stack";
 import { GamificationDashboard } from "./gamification-dashboard";
-import { relationshipSnapshot, WARMTH_TONE } from "@/lib/relationship";
 import { APP_CONFIG } from "@/lib/config";
-import type { Scope } from "@/lib/types";
 import { DeleteButton } from "./delete-button";
 import { PersonTimeline } from "./timeline";
 import { PersonReminders, PersonTodos } from "./person-tasks";
@@ -45,111 +42,11 @@ import {
   type TabStatus,
 } from "@/lib/tab-status";
 
-const SCOPE_LABEL: Record<Scope, string> = {
-  work: "Beruflich",
-  personal: "Privat",
-  both: "Beides",
-};
-
-type PersonRecord = import("@/lib/types").Person;
-
-function hasStakeholderInfo(person: PersonRecord): boolean {
-  return (
-    (person.stakeholder_types?.length ?? 0) > 0 ||
-    Object.values(person.stakeholder_sub_types ?? {}).some(
-      (arr) => arr.length > 0,
-    )
-  );
-}
-
-function StakeholderView({ person }: { person: PersonRecord }) {
-  const types = person.stakeholder_types ?? [];
-  const subs = person.stakeholder_sub_types ?? {};
-  if (types.length === 0) {
-    return <p className="text-sm italic text-ink-3">Keine Stakeholder-Typen.</p>;
-  }
-  return (
-    <ul className="space-y-2">
-      {types.map((e1) => {
-        const subList = subs[e1] ?? [];
-        return (
-          <li
-            key={e1}
-            className="flex flex-wrap items-baseline gap-2 border-b border-rule-soft pb-2 last:border-0"
-          >
-            <span className="t-label w-32 shrink-0">{e1}</span>
-            <div className="flex flex-1 flex-wrap gap-1.5">
-              {subList.length === 0 ? (
-                <span className="text-xs italic text-ink-4">
-                  keine Sub-Typen
-                </span>
-              ) : (
-                subList.map((s) => (
-                  <span key={s} className="tag">
-                    <span className="dot" />
-                    {s}
-                  </span>
-                ))
-              )}
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-function ClassificationView({ person }: { person: PersonRecord }) {
-  const fmtMonth = (s: string | null | undefined) => {
-    if (!s) return "—";
-    const [y, m] = s.split("-");
-    if (!y || !m) return s;
-    return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString(
-      "de-DE",
-      { month: "short", year: "numeric" },
-    );
-  };
-
-  return (
-    <div className="space-y-4">
-      {(person.industry || person.job_function) && (
-        <dl className="kv">
-          {person.industry && (
-            <>
-              <dt>Industrie</dt>
-              <dd>{person.industry}</dd>
-            </>
-          )}
-          {person.job_function && (
-            <>
-              <dt>Funktion</dt>
-              <dd>{person.job_function}</dd>
-            </>
-          )}
-        </dl>
-      )}
-      {(person.geographies?.length ?? 0) > 0 && (
-        <ul className="space-y-1.5 text-sm">
-          {person.geographies!.map((g, i) => (
-            <li
-              key={`${g.kind}-${g.place}-${i}`}
-              className="flex flex-wrap items-baseline gap-2"
-            >
-              <span className="t-label w-24 shrink-0">{g.kind}</span>
-              <span className="text-ink-1">{g.place}</span>
-              {(g.since || g.until) && (
-                <span className="font-mono text-[10px] uppercase tracking-wider text-ink-4">
-                  {fmtMonth(g.since)}
-                  {g.until ? ` – ${fmtMonth(g.until)}` : g.since ? " – heute" : ""}
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
+// StakeholderView, ClassificationView, hasStakeholderInfo, SCOPE_LABEL und
+// RelationshipBadges wurden in 0025 entfernt — die zugehörigen Person-
+// Felder (scope, stakeholder_*, industry, job_function, geographies,
+// depth_override, priority, cta, strength_score) sind weg.
+// Ersatz: AxisBadges (purpose/depth/mode) + suggestions + tags (Cluster).
 
 function ProfileDepthBar({ person }: { person: import("@/lib/types").Person }) {
   const depth = getProfileDepth(person);
@@ -168,107 +65,9 @@ function ProfileDepthBar({ person }: { person: import("@/lib/types").Person }) {
   );
 }
 
-function RelationshipBadges({
-  person,
-  interactionCount,
-}: {
-  person: import("@/lib/types").Person;
-  interactionCount: number;
-}) {
-  const snap = relationshipSnapshot(person, interactionCount);
-  const tone = WARMTH_TONE[snap.warmth];
-
-  const PRIORITY_LABEL: Record<string, string> = {
-    "this-week": "Diese Woche",
-    "next-week": "Nächste Woche",
-    later: "Später",
-  };
-
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {/* Wärme */}
-      <span
-        className="tag"
-        style={{
-          background: tone.chipBg,
-          borderColor: tone.chipBorder,
-          color: tone.text,
-        }}
-      >
-        <span className="dot" style={{ background: tone.dot }} />
-        {snap.warmth}
-      </span>
-
-      {/* Tiefe — manual override gets a different visual marker */}
-      <span
-        className="tag"
-        title={
-          person.depth_override
-            ? `Manuell gesetzt — Auto wäre ${snap.depth}`
-            : "Aus Interaktionen berechnet"
-        }
-      >
-        <span className="dot" />
-        {snap.depth}
-        {person.depth_override && (
-          <span className="ml-1 font-mono text-[8px] uppercase tracking-wider text-ink-4">
-            manual
-          </span>
-        )}
-      </span>
-
-      {/* Priorität */}
-      {snap.priority && (
-        <span
-          className="tag"
-          style={{
-            borderColor: "var(--action)",
-            color: "var(--action)",
-          }}
-        >
-          <span className="dot" style={{ background: "var(--action)" }} />
-          Priorität {snap.priority}
-        </span>
-      )}
-      {snap.priorityBucket && (
-        <span
-          className="tag"
-          title={
-            snap.priorityDecayed
-              ? "Auto-Decay: Bucket ist aus dem Set-Datum vorgerückt"
-              : undefined
-          }
-        >
-          <span className="dot" />
-          {PRIORITY_LABEL[snap.priorityBucket]}
-          {snap.priorityDecayed && (
-            <span className="ml-1 font-mono text-[8px] uppercase tracking-wider text-ink-4">
-              decayed
-            </span>
-          )}
-        </span>
-      )}
-
-      {/* CTA */}
-      {snap.ctaActive && person.cta && (
-        <span
-          className="tag"
-          style={{
-            background: "oklch(96% 0.04 80)",
-            borderColor: "oklch(72% 0.13 75)",
-            color: "oklch(40% 0.10 75)",
-          }}
-        >
-          <span
-            className="dot"
-            style={{ background: "oklch(72% 0.13 75)" }}
-          />
-          CTA: {person.cta}
-        </span>
-      )}
-    </div>
-  );
-}
+// RelationshipBadges entfernt in 0025 — die Logik (warmth/depth/priority/
+// cta) basierte komplett auf gedroppten Legacy-Feldern. Ersatz: AxisBadges
+// für depth/purpose/mode + suggestions-Stack für CTAs.
 
 function initials(name: string): string {
   return name
@@ -308,7 +107,8 @@ export default async function PersonDetailPage({
       listRemindersForPerson(id),
       listTodosForPerson(id),
       getPeopleMap(relatedIds),
-      findSimilarPeople(id, person.tags ?? []),
+      // Legacy text-tags weg in 0025 — Similar-by-Tag kommt mit Phase c (tags-Tabelle joined)
+      findSimilarPeople(id, []),
     ]);
 
   // Sub-flags so the JSX stays readable. For non-self people, every
@@ -344,9 +144,9 @@ export default async function PersonDetailPage({
 
         <div className="flex items-start justify-between gap-6">
           <div className="flex items-start gap-5">
-            {person.avatar_url ? (
+            {person.photo_url ? (
               <Image
-                src={person.avatar_url}
+                src={person.photo_url}
                 alt={person.name}
                 width={64}
                 height={64}
@@ -381,9 +181,6 @@ export default async function PersonDetailPage({
                     ))}
                 </p>
               )}
-              {!person.is_self && (person.strength_score ?? 0) > 0 && (
-                <StrengthMeter value={person.strength_score ?? 0} />
-              )}
               {!person.is_self && (
                 <AxisBadges
                   personId={person.id}
@@ -391,12 +188,6 @@ export default async function PersonDetailPage({
                   depthSource={person.depth_source}
                   purpose={person.purpose}
                   mode={person.mode}
-                />
-              )}
-              {!person.is_self && (
-                <RelationshipBadges
-                  person={person}
-                  interactionCount={interactions.length}
                 />
               )}
               <div className="flex flex-wrap items-center gap-1.5">
@@ -411,11 +202,8 @@ export default async function PersonDetailPage({
                     Mein Profil
                   </span>
                 )}
-                <span className="tag">
-                  <span className="dot" />
-                  {SCOPE_LABEL[person.scope]}
-                </span>
-                {(person.tags ?? []).map((t) => (
+                {/* Legacy text-tags entfernt — tags-Tabelle (Phase A2) liefert die neuen */}
+                {([] as string[]).map((t) => (
                   <Link
                     key={t}
                     href={`/people?tag=${encodeURIComponent(t)}`}
@@ -577,74 +365,30 @@ export default async function PersonDetailPage({
           </div>
         )}
 
-        {!person.is_self && hasStakeholderInfo(person) && (
-          <section>
-            <div className="section-head">
-              <span className="t-label">Stakeholder</span>
-              <span className="rule" />
-            </div>
-            <StakeholderView person={person} />
-          </section>
-        )}
+        {/* Stakeholder/Klassifizierung/Interessen-Sektionen entfernt in 0025
+            — die zugehörigen Person-Felder sind weg. Cluster-Funktionalität
+            kommt mit Phase c (Tag-Cluster v3) zurück. */}
 
-        {!person.is_self &&
-          ((person.geographies?.length ?? 0) > 0 ||
-            person.industry ||
-            person.job_function) && (
-            <section>
-              <div className="section-head">
-                <span className="t-label">Klassifizierung & Orte</span>
-                <span className="rule" />
-              </div>
-              <ClassificationView person={person} />
-            </section>
-          )}
-
-        {!person.is_self && (person.interests?.length ?? 0) > 0 && (
-          <section>
-            <div className="section-head">
-              <span className="t-label">Interessen & Synergien</span>
-              <span className="rule" />
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {person.interests!.map((t) => (
-                <span key={t} className="tag">
-                  <span className="dot" />
-                  {t}
-                </span>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {showProfileBody && (person.notes || person.notes_summary) && (
+        {showProfileBody && person.notes && (
           <section>
             <div className="section-head">
               <span className="t-label">Notizen</span>
               <span className="rule" />
             </div>
-            {person.notes && (
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-1">
-                {person.notes}
-              </p>
-            )}
-            {person.notes_summary && (
-              <div className="mt-4 rounded border border-rule-soft bg-paper-2 p-4">
-                <p className="t-label mb-2">{APP_CONFIG.PUBLIC_NAME}-Zusammenfassung</p>
-                <p className="text-sm text-ink-2">{person.notes_summary}</p>
-              </div>
-            )}
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-1">
+              {person.notes}
+            </p>
           </section>
         )}
 
-        {showProfileBody && person.expected_cadence_days && (
+        {showProfileBody && person.cadence_days && (
           <section>
             <div className="section-head">
               <span className="t-label">Cadence</span>
               <span className="rule" />
             </div>
             <p className="text-sm text-ink-1">
-              alle {person.expected_cadence_days} Tage
+              alle {person.cadence_days} Tage
             </p>
           </section>
         )}

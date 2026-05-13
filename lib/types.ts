@@ -354,6 +354,16 @@ export interface Organization {
   deleted_at: string | null;
 }
 
+// Person-Modell nach Briefing v3 + Phase A3-A8 + 0024/0025-Cleanup.
+//
+// Was es einmal gab (Echo Legacy) und 0025 gedroppt hat:
+//   scope, stakeholder_types, stakeholder_sub_types, strength_score,
+//   depth_override, priority, priority_bucket, priority_set_at, cta,
+//   cta_expires_at, interests, tags (text-array), phone (single),
+//   email (single), birthday, last_contact_at,
+//   cadence_days, next_best_action, notes_summary,
+//   geographies, avatar_url, industry, job_function.
+// Ersatz: siehe Header in supabase/migrations/0025_legacy_drops.sql.
 export interface Person {
   id: string;
   user_id: string;
@@ -361,45 +371,20 @@ export interface Person {
   company: string | null;
   organization_id: string | null;
   role: string | null;
-  scope: Scope;
-  tags: string[];
-  expected_cadence_days: number | null;
-  strength_score: number | null;
-  last_interaction_at: string | null;
-  next_best_action: string | null;
-  birthday: string | null;
-  phone: string | null;
-  email: string | null;
-  notes_summary: string | null;
-  // iPhone-Contacts-style fields (week 4+)
+  // Multi-value Kontakt-Channels (JSONB, Echo-Pattern beibehalten).
   phones: PhoneEntry[];
   emails: EmailEntry[];
   addresses: AddressEntry[];
   socials: SocialEntry[];
   important_dates: ImportantDate[];
   relationships: RelationshipEntry[];
-  avatar_url: string | null;
   notes: string | null;
   is_self: boolean;
-  // Phase 1+2 stakeholder model
-  stakeholder_types: string[];
-  stakeholder_sub_types: Record<string, string[]>;
-  geographies: GeographyEntry[];
-  industry: string | null;
-  job_function: string | null;
-  cta: string | null;
-  cta_expires_at: string | null;
-  priority: PriorityLetter | null;
-  priority_bucket: PriorityBucket | null;
-  priority_set_at: string | null;
-  interests: string[];
-  depth_override: RelationshipDepth | null;
-  // Phase A3-A8 (3-Axis + Briefing 3.1/5.1) + 0024 (v3-Quickwin-Drops).
-  // first_name/last_name/met_event gibt's NICHT mehr — gedroppt in 0024
-  // per Patrick-Decision (Briefing v3 will sie nicht).
+  // Goldfeld + Met-Kontext (Briefing 5.1).
   how_we_met: string | null;
   met_date: string | null;
   met_location: string | null;
+  // 3-Achsen (Briefing 4.1-4.3).
   depth: Depth | null;
   depth_source: DepthSource;
   purpose: Purpose | null;
@@ -407,6 +392,7 @@ export interface Person {
   next_nudge_at: string | null;
   last_contact_at: string | null;
   cadence_days: number | null;
+  // Profile.
   linkedin_url: string | null;
   photo_url: string | null;
   current_location: string | null;

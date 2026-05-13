@@ -135,7 +135,6 @@ export async function createPersonQuick(formData: FormData) {
       name,
       company,
       role,
-      scope: "both", // Legacy — fliegt in Phase F
       organization_id,
       phones,
       emails,
@@ -143,12 +142,7 @@ export async function createPersonQuick(formData: FormData) {
       socials: [],
       important_dates: [] as ImportantDate[],
       relationships: [],
-      tags: [], // Legacy text[]-array, leer; neue Tags via person_tags
-      stakeholder_types: [], // Legacy
-      stakeholder_sub_types: {}, // Legacy
-      geographies: [], // Legacy
-      interests: [], // Legacy
-      // — Neue Spalten —
+      // Briefing-v3-Schema (Legacy-Spalten weg seit 0025).
       how_we_met: howWeMet,
       met_date: metDate,
       met_location: metLocation,

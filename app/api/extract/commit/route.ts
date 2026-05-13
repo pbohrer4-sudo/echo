@@ -98,18 +98,12 @@ export async function POST(request: Request) {
         company: companyText,
         organization_id,
         role: stringOrNull(input.role),
-        scope: scopeOr(input.scope, "both"),
-        tags: stringArray(input.tags),
         notes: stringOrNull(input.notes),
         phones,
         emails,
         addresses: parseAddresses(input.addresses),
         socials: parseSocials(input.socials),
         important_dates: parseImportantDates(input.important_dates),
-        // Mirror primary phone/email so legacy code paths still work.
-        phone: phones[0]?.value ?? null,
-        email: emails[0]?.value ?? null,
-        birthday: findBirthday(input.important_dates),
       })
       .select("id, name")
       .single();
@@ -337,18 +331,18 @@ export async function POST(request: Request) {
       }
       commits.interactions += 1;
 
-      // Bump last_interaction_at on the involved people. Filter by
+      // Bump last_contact_at on the involved people. Filter by
       // user_id and deleted_at so a forged or tombstoned id can't be
       // touched, even if RLS weren't there.
       if (personIds.length) {
         const { error: bumpError } = await supabase
           .from("people")
-          .update({ last_interaction_at: new Date().toISOString() })
+          .update({ last_contact_at: new Date().toISOString() })
           .in("id", personIds)
           .eq("user_id", user.id)
           .is("deleted_at", null);
         if (bumpError) {
-          console.error("last_interaction_at bump failed", bumpError);
+          console.error("last_contact_at bump failed", bumpError);
         }
       }
       continue;
