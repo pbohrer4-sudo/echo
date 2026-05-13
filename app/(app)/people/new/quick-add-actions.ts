@@ -181,7 +181,7 @@ export async function createPersonQuick(formData: FormData) {
           .insert({
             user_id: user.id,
             name: tagName,
-            cluster: "topic",
+            cluster: "interests",
             created_by: "user",
           })
           .select("id")

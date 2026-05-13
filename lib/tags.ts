@@ -46,7 +46,7 @@ export async function getOrCreateTag(input: {
     .insert({
       user_id: user.id,
       name: normalized,
-      cluster: input.cluster ?? "topic",
+      cluster: input.cluster ?? "interests",
       created_by: input.createdBy ?? "user",
     })
     .select("*")

@@ -49,7 +49,7 @@ const PURPOSE_VALUES: Purpose[] = [
   "business_latent",
   "aspirational",
 ];
-const CLUSTER_VALUES: TagCluster[] = ["context", "topic", "value", "trigger"];
+const CLUSTER_VALUES: TagCluster[] = ["reminders", "interests", "potential", "origin"];
 
 export async function applySuggestion(
   suggestion: SuggestionRow,

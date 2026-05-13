@@ -512,9 +512,9 @@ export interface SuggestionRow {
   resolved_at: string | null;
 }
 
-// — Tags-System (Phase A2, Briefing 5.x) ————————————————————
+// — Tags-System (Briefing v3 Section 19, 0026 Cluster-Wechsel) ———
 
-export type TagCluster = "context" | "topic" | "value" | "trigger";
+export type TagCluster = "reminders" | "interests" | "potential" | "origin";
 
 export type TagCreatedBy = "user" | "ai_suggested" | "ai_extracted";
 
@@ -535,20 +535,53 @@ export interface PersonTagRow {
   created_at: string;
 }
 
-// UI-Helper — Cluster-Farben für Tag-Chips (Direction B Tokens).
-export const TAG_CLUSTER_COLORS: Record<TagCluster, { bg: string; fg: string; border: string }> = {
-  context: { bg: "oklch(94% 0.03 220)", fg: "oklch(34% 0.06 220)", border: "oklch(58% 0.10 220)" },
-  topic:   { bg: "oklch(95% 0.03 145)", fg: "oklch(34% 0.06 145)", border: "oklch(58% 0.10 145)" },
-  value:   { bg: "oklch(95% 0.04 60)",  fg: "oklch(34% 0.08 60)",  border: "oklch(58% 0.10 60)"  },
-  trigger: { bg: "oklch(94% 0.03 25)",  fg: "oklch(34% 0.06 25)",  border: "oklch(58% 0.10 25)"  },
+// UI-Helper — Cluster-Farben für Tag-Chips. Exakte Briefing-v3-Hex-
+// Werte (Section 19) statt OKLCH damit das Design-System 1:1 matched.
+export const TAG_CLUSTER_COLORS: Record<TagCluster, { bg: string; fg: string }> = {
+  reminders: { bg: "#FBEAF0", fg: "#72243E" }, // Pink — Geburtstage/Anker
+  interests: { bg: "#E1F5EE", fg: "#085041" }, // Teal — Themen/Skills
+  potential: { bg: "#FAEEDA", fg: "#633806" }, // Amber — Give/Get/Both
+  origin:    { bg: "#EEEDFE", fg: "#3C3489" }, // Purple — Beziehungs-Herkunft
 };
 
 export const TAG_CLUSTER_LABELS: Record<TagCluster, string> = {
-  context: "Kontext",
-  topic: "Thema",
-  value: "Wert",
-  trigger: "Trigger",
+  reminders: "Reminders",
+  interests: "Interests",
+  potential: "Potential",
+  origin: "Origin",
 };
+
+// — Passions (Briefing v3 #19, max 5 pro Person, eigene Tabelle) ———
+
+export interface PassionRow {
+  id: string;
+  user_id: string;
+  person_id: string;
+  name: string;
+  created_at: string;
+}
+
+// Visuell rendert sich passion wie ein Tag-Cluster (separate Farben).
+export const PASSION_COLOR = { bg: "#F7C1C1", fg: "#501313" }; // Red
+
+// — Circles (Briefing v3 #19, Communities/Organisationen) —————
+
+export interface CircleRow {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PersonCircleRow {
+  person_id: string;
+  circle_id: string;
+  added_at: string;
+}
+
+export const CIRCLE_COLOR = { bg: "#E0EEFB", fg: "#103D6B" }; // Blue
 
 // — 3-Achsen-Klassifizierung (Phase A3-A8, Briefing 4.1-4.3) ————
 
