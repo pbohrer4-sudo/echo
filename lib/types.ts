@@ -417,6 +417,173 @@ export interface LocationGeo {
   osm_id?: string;
 }
 
+// ─────── V3 Strukturierte Tabellen (Migration 0030) ───────────
+// Diese drei Tabellen ersetzen langfristig die JSONB-Felder
+// phones/emails/socials/relationships sowie die freitext-Location-
+// Felder auf people. Phase 1 baut sie parallel auf; Reads/Writes
+// migrieren in Phase 2-3.
+
+export const CONTACT_CHANNELS = [
+  "email",
+  "phone",
+  "whatsapp",
+  "linkedin",
+  "telegram",
+  "signal",
+  "sms",
+  "calendly",
+  "website",
+  "instagram",
+  "twitter",
+  "github",
+  "mastodon",
+  "bluesky",
+  "threads",
+  "tiktok",
+  "other",
+] as const;
+export type ContactChannel = (typeof CONTACT_CHANNELS)[number];
+
+export const CONTACT_SOURCES = [
+  "manual",
+  "pdl_enrichment",
+  "linkedin",
+  "vcard_import",
+  "voice_extract",
+  "ai_suggested",
+] as const;
+export type ContactSource = (typeof CONTACT_SOURCES)[number];
+
+export interface PersonContact {
+  id: string;
+  user_id: string;
+  person_id: string;
+  channel: ContactChannel;
+  subtype: string | null;
+  value: string;
+  country_code: string | null;
+  is_primary: boolean;
+  source: ContactSource;
+  created_at: string;
+  updated_at: string;
+}
+
+export const RELATIONSHIP_TYPES = [
+  "introduced_by",
+  "colleague",
+  "co_founder",
+  "mentor",
+  "mentee",
+  "former_manager",
+  "family",
+  "friend",
+  "investor",
+  "advisor",
+  "partner",
+  "spouse",
+  "parent",
+  "child",
+  "sibling",
+  "custom",
+] as const;
+export type RelationshipType = (typeof RELATIONSHIP_TYPES)[number];
+
+export interface PersonRelationship {
+  id: string;
+  user_id: string;
+  person_id: string;
+  related_person_id: string;
+  relationship_type: RelationshipType;
+  label: string | null;
+  created_by: "user" | "ai_suggested";
+  created_at: string;
+}
+
+export const GEO_TYPES = [
+  "residence",
+  "origin",
+  "professional_hub",
+  "current_location",
+  "met_location",
+  "custom",
+] as const;
+export type GeoType = (typeof GEO_TYPES)[number];
+
+export const GEO_PRECISIONS = ["address", "city", "region", "country"] as const;
+export type GeoPrecision = (typeof GEO_PRECISIONS)[number];
+
+export interface PersonGeography {
+  id: string;
+  user_id: string;
+  person_id: string;
+  geo_type: GeoType;
+  custom_label: string | null;
+  is_active: boolean;
+  display_name: string;
+  street: string | null;
+  postal_code: string | null;
+  city: string | null;
+  region: string | null;
+  country: string | null;
+  country_code: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  place_id: string | null;
+  precision: GeoPrecision | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// UI-Helper — Labels (Deutsch) für die neuen Tabellen.
+
+export const CONTACT_CHANNEL_LABELS: Record<ContactChannel, string> = {
+  email: "Email",
+  phone: "Telefon",
+  whatsapp: "WhatsApp",
+  linkedin: "LinkedIn",
+  telegram: "Telegram",
+  signal: "Signal",
+  sms: "SMS",
+  calendly: "Calendly",
+  website: "Website",
+  instagram: "Instagram",
+  twitter: "Twitter / X",
+  github: "GitHub",
+  mastodon: "Mastodon",
+  bluesky: "Bluesky",
+  threads: "Threads",
+  tiktok: "TikTok",
+  other: "Anderes",
+};
+
+export const RELATIONSHIP_TYPE_LABELS: Record<RelationshipType, string> = {
+  introduced_by: "Vermittelt durch",
+  colleague: "Kolleg:in",
+  co_founder: "Co-Founder:in",
+  mentor: "Mentor:in",
+  mentee: "Mentee",
+  former_manager: "Ex-Vorgesetzte:r",
+  family: "Familie",
+  friend: "Freund:in",
+  investor: "Investor:in",
+  advisor: "Advisor",
+  partner: "Partner:in",
+  spouse: "Ehepartner:in",
+  parent: "Elternteil",
+  child: "Kind",
+  sibling: "Geschwister",
+  custom: "Andere",
+};
+
+export const GEO_TYPE_LABELS: Record<GeoType, string> = {
+  residence: "Wohnsitz",
+  origin: "Herkunft",
+  professional_hub: "Berufshub",
+  current_location: "Aktuell vor Ort",
+  met_location: "Wo getroffen",
+  custom: "Anderer Ort",
+};
+
 export interface Interaction {
   id: string;
   user_id: string;
