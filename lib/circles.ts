@@ -3,7 +3,7 @@
 // „Bauma 2024 Attendees".
 
 import { createClient } from "@/lib/supabase/server";
-import type { CircleRow } from "@/lib/types";
+import type { CircleRow, CircleWithNote } from "@/lib/types";
 
 export async function listAllCircles(): Promise<CircleRow[]> {
   const supabase = await createClient();
@@ -121,6 +121,61 @@ export async function removePersonFromCircle(
     .eq("circle_id", circleId);
   if (error) {
     console.error("[circles] removePersonFromCircle failed", error);
+    return false;
+  }
+  return true;
+}
+
+// 0028 — Circles für eine Person inkl. per-Link-Note aus person_circles.
+export async function listCirclesWithNotesForPerson(
+  personId: string,
+): Promise<CircleWithNote[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("person_circles")
+    .select("note, circles(id, name, description)")
+    .eq("person_id", personId);
+  if (error) {
+    console.error("[circles] listCirclesWithNotesForPerson failed", error);
+    return [];
+  }
+  const rows = (data ?? []) as unknown as {
+    note: string | null;
+    circles: {
+      id: string;
+      name: string;
+      description: string | null;
+    } | null;
+  }[];
+  return rows
+    .filter(
+      (r): r is typeof r & {
+        circles: { id: string; name: string; description: string | null };
+      } => r.circles !== null,
+    )
+    .map((r) => ({
+      id: r.circles.id,
+      name: r.circles.name,
+      description: r.circles.description,
+      note: r.note,
+    }));
+}
+
+// 0028 — Note auf person_circles setzen/löschen.
+export async function updatePersonCircleNote(
+  personId: string,
+  circleId: string,
+  note: string | null,
+): Promise<boolean> {
+  const supabase = await createClient();
+  const normalized = note?.trim() ? note.trim() : null;
+  const { error } = await supabase
+    .from("person_circles")
+    .update({ note: normalized })
+    .eq("person_id", personId)
+    .eq("circle_id", circleId);
+  if (error) {
+    console.error("[circles] updatePersonCircleNote failed", error);
     return false;
   }
   return true;

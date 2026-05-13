@@ -1,25 +1,28 @@
 "use client";
 
-// Cluster-Editor (Phase C6, Briefing v3 #19).
+// Cluster-Editor (Phase C6 + 0028 Notes).
 //
 // Drei Subsections auf der Person-Detail-Page:
 //   1. Tags (gruppiert nach 4 Cluster: Reminders, Interests, Potential, Origin)
 //   2. Passions (eigene Tabelle, max 5)
 //   3. Circles (eigene Tabelle, Communities/Organisationen)
 //
-// Jede Section: Pills (klick → entfernen) + Add-UI (Input + commit).
-// Briefing-Farben aus TAG_CLUSTER_COLORS, PASSION_COLOR, CIRCLE_COLOR.
+// Jedes Pill kann eine Person-spezifische Note tragen (0028). Pills
+// ohne Note zeigen on-hover ein „+" zum Anlegen; mit Note zeigt sich
+// ein dauerhaftes „i", Hover gibt die Note als Tooltip, Klick öffnet
+// den Editor. Plus klassisches Entfernen via × bleibt.
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   TAG_CLUSTER_COLORS,
   TAG_CLUSTER_LABELS,
   PASSION_COLOR,
   CIRCLE_COLOR,
   type CircleRow,
+  type CircleWithNote,
   type PassionRow,
   type TagCluster,
-  type TagRow,
+  type TagWithNote,
 } from "@/lib/types";
 import {
   addPersonTag,
@@ -28,13 +31,16 @@ import {
   removePersonPassion,
   addPersonCircle,
   removePersonCircle,
+  updateTagNote,
+  updatePassionNote,
+  updateCircleNote,
 } from "@/app/(app)/people/[id]/cluster-actions";
 
 interface Props {
   personId: string;
-  tags: TagRow[];
+  tags: TagWithNote[];
   passions: PassionRow[];
-  personCircles: CircleRow[];
+  personCircles: CircleWithNote[];
   allCircles: CircleRow[];
 }
 
@@ -67,8 +73,14 @@ export function ClusterEditor({
 
 // ───────────── TAGS ─────────────
 
-function TagsBlock({ personId, tags }: { personId: string; tags: TagRow[] }) {
-  const grouped = new Map<TagCluster, TagRow[]>();
+function TagsBlock({
+  personId,
+  tags,
+}: {
+  personId: string;
+  tags: TagWithNote[];
+}) {
+  const grouped = new Map<TagCluster, TagWithNote[]>();
   for (const c of CLUSTER_ORDER) grouped.set(c, []);
   for (const t of tags) {
     grouped.get(t.cluster)?.push(t);
@@ -110,7 +122,7 @@ function TagClusterRow({
   disabled,
 }: {
   cluster: TagCluster;
-  tags: TagRow[];
+  tags: TagWithNote[];
   personId: string;
   disabled: boolean;
 }) {
@@ -143,6 +155,12 @@ function TagClusterRow({
     });
   }
 
+  function commitNote(tagId: string, note: string | null) {
+    startTransition(async () => {
+      await updateTagNote(personId, tagId, note);
+    });
+  }
+
   const colors = TAG_CLUSTER_COLORS[cluster];
 
   return (
@@ -166,12 +184,14 @@ function TagClusterRow({
           <span className="text-[11px] italic text-ink-4">—</span>
         )}
         {tags.map((t) => (
-          <ClusterPill
+          <PillWithNote
             key={t.id}
             label={t.name}
+            note={t.note}
             bg={colors.bg}
             fg={colors.fg}
             onRemove={() => commitRemove(t.id)}
+            onNoteChange={(n) => commitNote(t.id, n)}
             disabled={pending}
           />
         ))}
@@ -237,6 +257,12 @@ function PassionsBlock({
     });
   }
 
+  function commitNote(id: string, note: string | null) {
+    startTransition(async () => {
+      await updatePassionNote(personId, id, note);
+    });
+  }
+
   return (
     <section className="space-y-3">
       <div className="section-head">
@@ -250,12 +276,14 @@ function PassionsBlock({
           </span>
         )}
         {passions.map((p) => (
-          <ClusterPill
+          <PillWithNote
             key={p.id}
             label={p.name}
+            note={p.note}
             bg={PASSION_COLOR.bg}
             fg={PASSION_COLOR.fg}
             onRemove={() => commitRemove(p.id)}
+            onNoteChange={(n) => commitNote(p.id, n)}
             disabled={pending}
           />
         ))}
@@ -303,7 +331,7 @@ function CirclesBlock({
   allCircles,
 }: {
   personId: string;
-  personCircles: CircleRow[];
+  personCircles: CircleWithNote[];
   allCircles: CircleRow[];
 }) {
   const [adding, setAdding] = useState(false);
@@ -342,6 +370,12 @@ function CirclesBlock({
     });
   }
 
+  function commitNote(id: string, note: string | null) {
+    startTransition(async () => {
+      await updateCircleNote(personId, id, note);
+    });
+  }
+
   return (
     <section className="space-y-3">
       <div className="section-head">
@@ -355,12 +389,14 @@ function CirclesBlock({
           </span>
         )}
         {personCircles.map((c) => (
-          <ClusterPill
+          <PillWithNote
             key={c.id}
             label={c.name}
+            note={c.note}
             bg={CIRCLE_COLOR.bg}
             fg={CIRCLE_COLOR.fg}
             onRemove={() => commitRemove(c.id)}
+            onNoteChange={(n) => commitNote(c.id, n)}
             disabled={pending}
           />
         ))}
@@ -421,35 +457,167 @@ function CirclesBlock({
 
 // ───────────── SHARED PRIMITIVES ─────────────
 
-function ClusterPill({
+// Pill mit optionaler Person-Note (0028).
+// - Note vorhanden  → permanentes „i"-Icon, Hover zeigt Tooltip, Klick öffnet Editor
+// - Keine Note     → „+"-Icon erscheint nur on-hover, Klick öffnet leeren Editor
+// - × bleibt rechts dahinter zum Entfernen
+function PillWithNote({
   label,
+  note,
   bg,
   fg,
   onRemove,
+  onNoteChange,
   disabled,
 }: {
   label: string;
+  note: string | null;
   bg: string;
   fg: string;
   onRemove: () => void;
+  onNoteChange: (note: string | null) => void;
   disabled: boolean;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(note ?? "");
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+  const pillRef = useRef<HTMLSpanElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const hasNote = (note ?? "").trim().length > 0;
+
+  useEffect(() => {
+    setDraft(note ?? "");
+  }, [note]);
+
+  // Click-outside zum Schließen des Editors.
+  useEffect(() => {
+    if (!editing) return;
+    function onDoc(e: MouseEvent) {
+      const t = e.target as Node;
+      if (popoverRef.current?.contains(t)) return;
+      if (pillRef.current?.contains(t)) return;
+      // Beim Schließen ohne Enter trotzdem speichern (autosave-on-blur).
+      commitNote();
+      setEditing(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, draft]);
+
+  function commitNote() {
+    const trimmed = draft.trim();
+    const next = trimmed.length > 0 ? trimmed : null;
+    if (next !== (note ?? null)) onNoteChange(next);
+  }
+
+  function openEditor() {
+    setTooltipOpen(false);
+    setEditing(true);
+  }
+
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs"
+      ref={pillRef}
+      className="group relative inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs"
       style={{ background: bg, color: fg }}
+      onMouseEnter={() => {
+        if (hasNote && !editing) setTooltipOpen(true);
+      }}
+      onMouseLeave={() => setTooltipOpen(false)}
     >
-      {label}
+      <span>{label}</span>
+
+      {/* Info/Add Glyph — klein, dezent. „i" wenn Note vorhanden,
+          sonst „+" das nur on-hover erscheint. */}
+      <button
+        type="button"
+        onClick={openEditor}
+        disabled={disabled}
+        aria-label={hasNote ? `Note für ${label} bearbeiten` : `Note für ${label} hinzufügen`}
+        title={hasNote ? "Note ansehen" : "Note hinzufügen"}
+        className={`inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px] font-bold leading-none transition ${
+          hasNote
+            ? "opacity-80 hover:opacity-100"
+            : "opacity-0 group-hover:opacity-60 hover:!opacity-100"
+        } disabled:cursor-not-allowed disabled:opacity-20`}
+        style={{
+          background: hasNote ? fg : "transparent",
+          color: hasNote ? bg : fg,
+          border: hasNote ? "none" : `1px solid ${fg}`,
+        }}
+      >
+        {hasNote ? "i" : "+"}
+      </button>
+
+      {/* Remove × — wie bisher */}
       <button
         type="button"
         onClick={onRemove}
         disabled={disabled}
         aria-label={`${label} entfernen`}
-        className="rounded-full leading-none opacity-50 transition hover:opacity-100 disabled:opacity-30"
+        className="rounded-full leading-none opacity-40 transition hover:opacity-100 disabled:opacity-20"
         style={{ color: fg }}
       >
         ×
       </button>
+
+      {/* Hover-Tooltip (read-only Vorschau) */}
+      {hasNote && tooltipOpen && !editing && (
+        <span
+          role="tooltip"
+          className="absolute left-1/2 top-full z-40 mt-1 max-w-xs -translate-x-1/2 whitespace-pre-wrap rounded border border-rule bg-paper px-2.5 py-1.5 text-[11px] leading-snug text-ink-2 shadow-[0_4px_14px_rgba(20,17,13,0.08)]"
+        >
+          {note}
+        </span>
+      )}
+
+      {/* Inline-Editor — Popover unter dem Pill */}
+      {editing && (
+        <div
+          ref={popoverRef}
+          className="absolute left-0 top-full z-50 mt-1 w-64 rounded border border-rule bg-paper p-2 shadow-[0_4px_14px_rgba(20,17,13,0.08)]"
+        >
+          <div className="t-label mb-1.5 text-ink-4">Note · {label}</div>
+          <textarea
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                commitNote();
+                setEditing(false);
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                setDraft(note ?? "");
+                setEditing(false);
+              }
+            }}
+            rows={3}
+            placeholder="Was bedeutet das hier speziell für diese Person?"
+            className="w-full resize-none rounded border border-rule bg-paper px-2 py-1.5 text-xs text-ink-1 outline-none transition placeholder:text-ink-4 focus:border-action focus:ring-2 focus:ring-action/20"
+          />
+          <div className="mt-1.5 flex items-center justify-between">
+            <span className="font-mono text-[9px] uppercase tracking-wider text-ink-4">
+              ⌘↵ speichern · Esc verwerfen
+            </span>
+            {hasNote && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDraft("");
+                  onNoteChange(null);
+                  setEditing(false);
+                }}
+                className="text-[10px] text-ink-4 transition hover:text-bad"
+              >
+                löschen
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </span>
   );
 }

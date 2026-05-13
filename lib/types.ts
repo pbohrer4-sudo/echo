@@ -533,6 +533,18 @@ export interface PersonTagRow {
   person_id: string;
   tag_id: string;
   created_at: string;
+  // 0028 — pro-Person-Note auf der Junction. Erlaubt Asymmetrie:
+  // dasselbe Tag bedeutet bei verschiedenen Personen verschiedenes.
+  note: string | null;
+}
+
+// Cluster-Editor + Detail-View bekommen Tags angereichert: Tag-Metadaten
+// (name, cluster) + die per-Link Note. Aggregiert beim Server-Fetch.
+export interface TagWithNote {
+  id: string;          // tag_id
+  name: string;
+  cluster: TagCluster;
+  note: string | null; // person-spezifische Note (0028)
 }
 
 // UI-Helper — Cluster-Farben für Tag-Chips. Exakte Briefing-v3-Hex-
@@ -559,6 +571,7 @@ export interface PassionRow {
   person_id: string;
   name: string;
   created_at: string;
+  note: string | null; // 0028 — frei-Text-Kontext
 }
 
 // Visuell rendert sich passion wie ein Tag-Cluster (separate Farben).
@@ -579,6 +592,15 @@ export interface PersonCircleRow {
   person_id: string;
   circle_id: string;
   added_at: string;
+  note: string | null; // 0028 — person-spezifischer Kontext
+}
+
+// Cluster-Editor-View: Circle-Stammdaten + per-Person-Note vom Junction.
+export interface CircleWithNote {
+  id: string;
+  name: string;
+  description: string | null; // globale Circle-Beschreibung
+  note: string | null;        // person-spezifische Note (0028)
 }
 
 export const CIRCLE_COLOR = { bg: "#E0EEFB", fg: "#103D6B" }; // Blue

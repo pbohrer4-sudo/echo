@@ -58,3 +58,21 @@ export async function removePassion(id: string): Promise<boolean> {
   }
   return true;
 }
+
+// 0028 — Note auf einer Passion setzen/löschen.
+export async function updatePassionNote(
+  id: string,
+  note: string | null,
+): Promise<boolean> {
+  const supabase = await createClient();
+  const normalized = note?.trim() ? note.trim() : null;
+  const { error } = await supabase
+    .from("passions")
+    .update({ note: normalized })
+    .eq("id", id);
+  if (error) {
+    console.error("[passions] updateNote failed", error);
+    return false;
+  }
+  return true;
+}

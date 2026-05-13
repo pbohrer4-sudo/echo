@@ -7,7 +7,12 @@
 // Rolle mehr.
 
 import { createClient } from "@/lib/supabase/server";
-import type { TagCluster, TagCreatedBy, TagRow } from "@/lib/types";
+import type {
+  TagCluster,
+  TagCreatedBy,
+  TagRow,
+  TagWithNote,
+} from "@/lib/types";
 
 /**
  * Idempotent: holt das Tag wenn's existiert, sonst legt es an.
@@ -134,6 +139,62 @@ export async function listTagsForPerson(
   return rows
     .map((r) => r.tags)
     .filter((t): t is TagRow => t !== null);
+}
+
+/**
+ * Wie listTagsForPerson, aber liefert zusätzlich die per-Person-Note
+ * aus person_tags.note (0028). Für den Cluster-Editor + Person-Detail-View.
+ */
+export async function listTagsWithNotesForPerson(
+  personId: string,
+): Promise<TagWithNote[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("person_tags")
+    .select("note, tags(id, name, cluster)")
+    .eq("person_id", personId);
+
+  if (error) {
+    console.error("[tags] listTagsWithNotesForPerson failed", error);
+    return [];
+  }
+  const rows = (data ?? []) as unknown as {
+    note: string | null;
+    tags: { id: string; name: string; cluster: TagCluster } | null;
+  }[];
+  return rows
+    .filter((r): r is typeof r & { tags: { id: string; name: string; cluster: TagCluster } } =>
+      r.tags !== null,
+    )
+    .map((r) => ({
+      id: r.tags.id,
+      name: r.tags.name,
+      cluster: r.tags.cluster,
+      note: r.note,
+    }));
+}
+
+/**
+ * Pro-Person-Note auf person_tags setzen oder löschen.
+ * Leerer String → null (kein Datensatz mit "" speichern).
+ */
+export async function updatePersonTagNote(
+  personId: string,
+  tagId: string,
+  note: string | null,
+): Promise<boolean> {
+  const supabase = await createClient();
+  const normalized = note?.trim() ? note.trim() : null;
+  const { error } = await supabase
+    .from("person_tags")
+    .update({ note: normalized })
+    .eq("person_id", personId)
+    .eq("tag_id", tagId);
+  if (error) {
+    console.error("[tags] updatePersonTagNote failed", error);
+    return false;
+  }
+  return true;
 }
 
 export async function listAllTags(): Promise<TagRow[]> {

@@ -10,15 +10,18 @@ import {
   getOrCreateTag,
   addTagToPerson as addTagToPersonRaw,
   removeTagFromPerson as removeTagFromPersonRaw,
+  updatePersonTagNote as updatePersonTagNoteRaw,
 } from "@/lib/tags";
 import {
   addPassion as addPassionRaw,
   removePassion as removePassionRaw,
+  updatePassionNote as updatePassionNoteRaw,
 } from "@/lib/passions";
 import {
   getOrCreateCircle,
   addPersonToCircle as addPersonToCircleRaw,
   removePersonFromCircle as removePersonFromCircleRaw,
+  updatePersonCircleNote as updatePersonCircleNoteRaw,
 } from "@/lib/circles";
 import type { TagCluster } from "@/lib/types";
 
@@ -101,6 +104,39 @@ export async function removePersonCircle(
   circleId: string,
 ): Promise<{ ok: boolean }> {
   const ok = await removePersonFromCircleRaw(personId, circleId);
+  if (ok) revalidatePath(`/people/${personId}`);
+  return { ok };
+}
+
+// 0028 — Note-Updates: alle drei Aktionen leeren ein leeres Note-
+// Feld zurück nach null und revalidieren die Detail-Route.
+
+export async function updateTagNote(
+  personId: string,
+  tagId: string,
+  note: string | null,
+): Promise<{ ok: boolean }> {
+  const ok = await updatePersonTagNoteRaw(personId, tagId, note);
+  if (ok) revalidatePath(`/people/${personId}`);
+  return { ok };
+}
+
+export async function updatePassionNote(
+  personId: string,
+  passionId: string,
+  note: string | null,
+): Promise<{ ok: boolean }> {
+  const ok = await updatePassionNoteRaw(passionId, note);
+  if (ok) revalidatePath(`/people/${personId}`);
+  return { ok };
+}
+
+export async function updateCircleNote(
+  personId: string,
+  circleId: string,
+  note: string | null,
+): Promise<{ ok: boolean }> {
+  const ok = await updatePersonCircleNoteRaw(personId, circleId, note);
   if (ok) revalidatePath(`/people/${personId}`);
   return { ok };
 }
