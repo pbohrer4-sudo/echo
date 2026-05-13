@@ -1,32 +1,14 @@
 "use client";
 
-// People-Tabelle (Phase C5 v6): Column-Toggle + Reihenfolge per Drag.
+// People-Tabelle (Phase C5 v7).
 //
-// User entscheidet welche Spalten sichtbar sind UND in welcher Folge —
-// sowohl im Spalten-Popover als auch direkt auf den Header-Zellen
-// (Attio-Style). Avatar + Name sind links gepinnt, Aktionen rechts —
-// alles dazwischen ist frei sortierbar.
+// Spalten ein-/ausblenden, sortieren, drag-and-drop reordern — alles
+// über den generischen useColumnConfig-Hook plus die data-table
+// Components. Avatar + Name links gepinnt, Aktionen rechts. Filter und
+// Row-Rendering bleibt people-spezifisch.
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  DndContext,
-  PointerSensor,
-  KeyboardSensor,
-  useSensor,
-  useSensors,
-  closestCenter,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  useSortable,
-  arrayMove,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-  horizontalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { useMemo, useState } from "react";
 import {
   CIRCLE_COLOR,
   DEPTH_LABELS,
@@ -42,9 +24,15 @@ import {
   type Purpose,
   type TagCluster,
 } from "@/lib/types";
+import {
+  useColumnConfig,
+  type DataTableColumn,
+  type SortDir,
+} from "@/hooks/use-column-config";
+import { ColumnPopover } from "@/components/data-table/column-popover";
+import { SortableHeaderRow } from "@/components/data-table/sortable-header-row";
 
 type SortKey = "name" | "company" | "last_contact_at";
-type SortDir = "asc" | "desc";
 type ChannelFilter = "all" | "has_phone" | "has_email" | "has_linkedin";
 
 interface Row {
@@ -88,18 +76,7 @@ type ColumnKey =
   | "circles"
   | "actions";    // always
 
-interface ColumnDef {
-  key: ColumnKey;
-  label: string;
-  always?: boolean;
-  default: boolean;
-  sortKey?: SortKey;
-  gridCol: string;
-  align?: "left" | "right";
-  // Pinned-Spalten lassen sich nicht reordern und behalten ihren Platz
-  // links (avatar/name) oder rechts (actions) — Attio macht's genauso.
-  pinned?: "start" | "end";
-}
+type ColumnDef = DataTableColumn<ColumnKey, SortKey>;
 
 const COLUMNS: ColumnDef[] = [
   { key: "avatar", label: "Avatar", always: true, default: true, gridCol: "40px", pinned: "start" },
@@ -121,86 +98,7 @@ const COLUMNS: ColumnDef[] = [
   { key: "actions", label: "Aktionen", always: true, default: true, gridCol: "auto", align: "right", pinned: "end" },
 ];
 
-// Reihenfolge der nicht-gepinnten Spalten — initial die Registry-Reihenfolge.
-const DEFAULT_MIDDLE_ORDER: ColumnKey[] = COLUMNS.filter((c) => !c.pinned).map(
-  (c) => c.key,
-);
-
 const STORAGE_KEY = "echo:people:columns:v3";
-const STORAGE_KEY_V2 = "echo:people:columns:v2";
-
-interface ColumnConfig {
-  visible: Set<ColumnKey>;
-  order: ColumnKey[]; // nur die middle-Spalten, in Anzeige-Reihenfolge
-}
-
-function defaultConfig(): ColumnConfig {
-  return {
-    visible: new Set(COLUMNS.filter((c) => c.default).map((c) => c.key)),
-    order: [...DEFAULT_MIDDLE_ORDER],
-  };
-}
-
-// Order normalisieren — fehlende Keys ans Ende, unbekannte raus,
-// damit neue Spalten nach einem Release nicht verschwinden.
-function normalizeOrder(input: ColumnKey[]): ColumnKey[] {
-  const validMiddle = new Set(DEFAULT_MIDDLE_ORDER);
-  const seen = new Set<ColumnKey>();
-  const out: ColumnKey[] = [];
-  for (const k of input) {
-    if (validMiddle.has(k) && !seen.has(k)) {
-      out.push(k);
-      seen.add(k);
-    }
-  }
-  for (const k of DEFAULT_MIDDLE_ORDER) {
-    if (!seen.has(k)) out.push(k);
-  }
-  return out;
-}
-
-function loadConfig(): ColumnConfig {
-  if (typeof window === "undefined") return defaultConfig();
-  const validKeys = new Set(COLUMNS.map((c) => c.key));
-  try {
-    // v3 — { visible: string[], order: string[] }
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as {
-        visible?: string[];
-        order?: string[];
-      };
-      const visible = new Set<ColumnKey>();
-      for (const k of parsed.visible ?? []) {
-        if (validKeys.has(k as ColumnKey)) visible.add(k as ColumnKey);
-      }
-      // Always-Spalten immer aktiv
-      for (const c of COLUMNS) if (c.always) visible.add(c.key);
-      const order = normalizeOrder(
-        (parsed.order ?? []).filter((k) =>
-          validKeys.has(k as ColumnKey),
-        ) as ColumnKey[],
-      );
-      return { visible, order };
-    }
-    // Migration v2 → v3 (nur Visibility, Order = default)
-    const rawV2 = window.localStorage.getItem(STORAGE_KEY_V2);
-    if (rawV2) {
-      const parsed = JSON.parse(rawV2) as string[];
-      if (Array.isArray(parsed)) {
-        const visible = new Set<ColumnKey>();
-        for (const k of parsed) {
-          if (validKeys.has(k as ColumnKey)) visible.add(k as ColumnKey);
-        }
-        for (const c of COLUMNS) if (c.always) visible.add(c.key);
-        return { visible, order: [...DEFAULT_MIDDLE_ORDER] };
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return defaultConfig();
-}
 
 // ───────── Utils ─────────
 
@@ -287,122 +185,17 @@ export function PeopleTable({
   const [circleFilter, setCircleFilter] = useState<string>("all");
   const [locationFilter, setLocationFilter] = useState<string>("all");
   const [channelFilter, setChannelFilter] = useState<ChannelFilter>("all");
-  const [sortKey, setSortKey] = useState<SortKey>("name");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
-  const [visibleCols, setVisibleCols] = useState<Set<ColumnKey>>(
-    () => new Set(COLUMNS.filter((c) => c.default).map((c) => c.key)),
-  );
-  const [colOrder, setColOrder] = useState<ColumnKey[]>(
-    () => [...DEFAULT_MIDDLE_ORDER],
-  );
-  const [hydrated, setHydrated] = useState(false);
-  const [colsOpen, setColsOpen] = useState(false);
-  const colsRef = useRef<HTMLDivElement | null>(null);
-
-  // DnD-Sensoren — Pointer mit kleinem activation-distance damit normale
-  // Klicks (z. B. Checkbox-Toggle, Sort-Klick) nicht versehentlich
-  // einen Drag starten.
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
-  );
-
-  // Hydrate column-config nach Mount damit SSR/Client matchen
-  useEffect(() => {
-    const cfg = loadConfig();
-    setVisibleCols(cfg.visible);
-    setColOrder(cfg.order);
-    setHydrated(true);
-  }, []);
-
-  // Persist on change
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      window.localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          visible: Array.from(visibleCols),
-          order: colOrder,
-        }),
-      );
-    } catch {
-      // ignore
-    }
-  }, [visibleCols, colOrder, hydrated]);
-
-  // Click-outside fuer Cols-Popover
-  useEffect(() => {
-    if (!colsOpen) return;
-    function onDoc(e: MouseEvent) {
-      if (!colsRef.current) return;
-      if (!colsRef.current.contains(e.target as Node)) setColsOpen(false);
-    }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [colsOpen]);
-
-  function toggleColumn(key: ColumnKey) {
-    setVisibleCols((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        // Always-Columns nicht entfernbar
-        const def = COLUMNS.find((c) => c.key === key);
-        if (def?.always) return prev;
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  }
-
-  function reorderColumns(activeId: ColumnKey, overId: ColumnKey) {
-    if (activeId === overId) return;
-    setColOrder((prev) => {
-      const from = prev.indexOf(activeId);
-      const to = prev.indexOf(overId);
-      if (from < 0 || to < 0) return prev;
-      return arrayMove(prev, from, to);
-    });
-  }
-
-  function onHeaderDragEnd(e: DragEndEvent) {
-    const { active, over } = e;
-    if (!over) return;
-    reorderColumns(active.id as ColumnKey, over.id as ColumnKey);
-  }
-
-  function onPopoverDragEnd(e: DragEndEvent) {
-    const { active, over } = e;
-    if (!over) return;
-    reorderColumns(active.id as ColumnKey, over.id as ColumnKey);
-  }
-
-  // activeColumns = pinned-start + (ordered middle ∩ visible) + pinned-end
-  const colsByKey = useMemo(() => {
-    const m = new Map<ColumnKey, ColumnDef>();
-    for (const c of COLUMNS) m.set(c.key, c);
-    return m;
-  }, []);
-  const pinnedStart = COLUMNS.filter((c) => c.pinned === "start");
-  const pinnedEnd = COLUMNS.filter((c) => c.pinned === "end");
-  const orderedMiddle = colOrder
-    .map((k) => colsByKey.get(k))
-    .filter((c): c is ColumnDef => Boolean(c));
-  const activeColumns = [
-    ...pinnedStart.filter((c) => visibleCols.has(c.key)),
-    ...orderedMiddle.filter((c) => visibleCols.has(c.key)),
-    ...pinnedEnd.filter((c) => visibleCols.has(c.key)),
-  ];
-  // Header-Sortable bekommt nur die sichtbaren Middle-Keys — Pinned-Header
-  // sind nicht draggable und tauchen separat als statische Cells auf.
-  const draggableMiddleVisible = orderedMiddle.filter((c) =>
-    visibleCols.has(c.key),
-  );
+  // Column-Config (Attio-Pattern) — Hook handelt visibility + order +
+  // persistence + sort + DnD-Sensoren komplett ab.
+  const cols = useColumnConfig<ColumnKey, SortKey>({
+    columns: COLUMNS,
+    storageKey: STORAGE_KEY,
+    defaultSortKey: "name",
+    defaultSortDir: "asc",
+  });
+  const sortKey = cols.sortKey ?? "name";
+  const sortDir = cols.sortDir;
 
   const activeFilterCount =
     (modeFilter !== "all" ? 1 : 0) +
@@ -506,15 +299,6 @@ export function PeopleTable({
     return copy;
   }, [filtered, sortKey, sortDir]);
 
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  }
-
   function resetFilters() {
     setModeFilter("all");
     setPurposeFilter("all");
@@ -525,8 +309,6 @@ export function PeopleTable({
     setLocationFilter("all");
     setChannelFilter("all");
   }
-
-  const gridTemplate = activeColumns.map((c) => c.gridCol).join(" ");
 
   return (
     <div className="space-y-4">
@@ -657,76 +439,7 @@ export function PeopleTable({
         )}
 
         <div className="ml-auto flex items-center gap-2">
-          {/* Column-Toggle */}
-          <div className="relative" ref={colsRef}>
-            <button
-              type="button"
-              onClick={() => setColsOpen((v) => !v)}
-              className="inline-flex h-9 items-center gap-1.5 rounded border border-rule bg-paper px-3 text-xs text-ink-2 transition hover:border-action hover:text-action"
-              title="Spalten ein-/ausblenden"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <path d="M9 3v18M15 3v18" />
-              </svg>
-              Spalten
-            </button>
-            {colsOpen && (
-              <div className="absolute right-0 top-full z-30 mt-1 w-64 rounded border border-rule bg-paper p-1 shadow-[0_4px_14px_rgba(20,17,13,0.08)]">
-                <div className="t-label border-b border-rule-soft px-3 py-2">
-                  Spalten ({activeColumns.length}/{COLUMNS.length})
-                </div>
-                <ul className="max-h-80 overflow-y-auto py-1">
-                  {pinnedStart.map((c) => (
-                    <PopoverPinnedRow
-                      key={c.key}
-                      column={c}
-                      checked={visibleCols.has(c.key)}
-                    />
-                  ))}
-                  <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragEnd={onPopoverDragEnd}
-                  >
-                    <SortableContext
-                      items={colOrder}
-                      strategy={verticalListSortingStrategy}
-                    >
-                      {orderedMiddle.map((c) => (
-                        <PopoverSortableRow
-                          key={c.key}
-                          column={c}
-                          checked={visibleCols.has(c.key)}
-                          onToggle={() => toggleColumn(c.key)}
-                        />
-                      ))}
-                    </SortableContext>
-                  </DndContext>
-                  {pinnedEnd.map((c) => (
-                    <PopoverPinnedRow
-                      key={c.key}
-                      column={c}
-                      checked={visibleCols.has(c.key)}
-                    />
-                  ))}
-                </ul>
-                <div className="border-t border-rule-soft px-3 py-1.5 font-mono text-[9px] uppercase tracking-wider text-ink-4">
-                  Tipp · Greifen & ziehen zum Sortieren
-                </div>
-              </div>
-            )}
-          </div>
+          <ColumnPopover api={cols} />
 
           <Link
             href="/people/import"
@@ -746,55 +459,7 @@ export function PeopleTable({
       {/* Table */}
       <div className="overflow-x-auto rounded border border-rule bg-paper">
         <div className="min-w-max">
-          {/* Header — pinned-start, draggable middle, pinned-end. Drag
-              läuft über einen eigenen DndContext mit horizontaler Strategie. */}
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={onHeaderDragEnd}
-          >
-            <div
-              className="grid gap-3 border-b border-rule bg-paper-2 px-4 py-2.5 text-xs"
-              style={{ gridTemplateColumns: gridTemplate }}
-            >
-              {pinnedStart
-                .filter((c) => visibleCols.has(c.key))
-                .map((c) => (
-                  <HeaderCell
-                    key={c.key}
-                    column={c}
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={(k) => toggleSort(k)}
-                  />
-                ))}
-              <SortableContext
-                items={draggableMiddleVisible.map((c) => c.key)}
-                strategy={horizontalListSortingStrategy}
-              >
-                {draggableMiddleVisible.map((c) => (
-                  <SortableHeaderCell
-                    key={c.key}
-                    column={c}
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={(k) => toggleSort(k)}
-                  />
-                ))}
-              </SortableContext>
-              {pinnedEnd
-                .filter((c) => visibleCols.has(c.key))
-                .map((c) => (
-                  <HeaderCell
-                    key={c.key}
-                    column={c}
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={(k) => toggleSort(k)}
-                  />
-                ))}
-            </div>
-          </DndContext>
+          <SortableHeaderRow api={cols} />
 
           {sorted.length === 0 ? (
             <div className="px-4 py-12 text-center text-sm italic text-ink-3">
@@ -807,8 +472,8 @@ export function PeopleTable({
               <PersonTableRow
                 key={r.person.id}
                 row={r}
-                activeColumns={activeColumns}
-                gridTemplate={gridTemplate}
+                activeColumns={cols.activeColumns}
+                gridTemplate={cols.gridTemplate}
                 circles={circles}
               />
             ))
@@ -816,190 +481,6 @@ export function PeopleTable({
         </div>
       </div>
     </div>
-  );
-}
-
-// ───────── Header Cell ─────────
-
-function HeaderCell({
-  column,
-  sortKey,
-  sortDir,
-  onSort,
-}: {
-  column: ColumnDef;
-  sortKey: SortKey;
-  sortDir: SortDir;
-  onSort: (k: SortKey) => void;
-}) {
-  const alignClass = column.align === "right" ? "text-right" : "text-left";
-  if (column.key === "avatar") return <span className="t-label" />;
-  if (column.sortKey) {
-    return (
-      <button
-        type="button"
-        onClick={() => onSort(column.sortKey!)}
-        className={`t-label transition hover:text-ink-1 ${alignClass}`}
-      >
-        {column.label}{" "}
-        {sortKey === column.sortKey && (sortDir === "asc" ? "↑" : "↓")}
-      </button>
-    );
-  }
-  return <span className={`t-label ${alignClass}`}>{column.label}</span>;
-}
-
-// ───────── Sortable Header Cell ─────────
-
-function SortableHeaderCell({
-  column,
-  sortKey,
-  sortDir,
-  onSort,
-}: {
-  column: ColumnDef;
-  sortKey: SortKey;
-  sortDir: SortDir;
-  onSort: (k: SortKey) => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: column.key });
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-    cursor: isDragging ? "grabbing" : undefined,
-  };
-  const alignClass = column.align === "right" ? "justify-end" : "justify-start";
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`group flex items-center gap-1 ${alignClass}`}
-      {...attributes}
-    >
-      {/* Grip — fasst beim Hover an, klein und unaufdringlich */}
-      <button
-        type="button"
-        className="cursor-grab text-ink-4 opacity-0 transition group-hover:opacity-100 active:cursor-grabbing"
-        title="Spalte verschieben"
-        {...listeners}
-        aria-label={`${column.label} verschieben`}
-      >
-        <svg
-          width="10"
-          height="14"
-          viewBox="0 0 10 14"
-          fill="currentColor"
-          aria-hidden
-        >
-          <circle cx="2.5" cy="3" r="1" />
-          <circle cx="7.5" cy="3" r="1" />
-          <circle cx="2.5" cy="7" r="1" />
-          <circle cx="7.5" cy="7" r="1" />
-          <circle cx="2.5" cy="11" r="1" />
-          <circle cx="7.5" cy="11" r="1" />
-        </svg>
-      </button>
-      {column.sortKey ? (
-        <button
-          type="button"
-          onClick={() => onSort(column.sortKey!)}
-          className="t-label transition hover:text-ink-1"
-        >
-          {column.label}{" "}
-          {sortKey === column.sortKey && (sortDir === "asc" ? "↑" : "↓")}
-        </button>
-      ) : (
-        <span className="t-label">{column.label}</span>
-      )}
-    </div>
-  );
-}
-
-// ───────── Popover Rows ─────────
-
-function PopoverPinnedRow({
-  column,
-  checked,
-}: {
-  column: ColumnDef;
-  checked: boolean;
-}) {
-  return (
-    <li>
-      <label className="flex cursor-not-allowed items-center gap-2 px-3 py-1.5 text-xs opacity-60">
-        <span className="w-3 text-ink-4" aria-hidden />
-        <input
-          type="checkbox"
-          checked={checked}
-          disabled
-          className="h-3.5 w-3.5 accent-[var(--action)]"
-          readOnly
-        />
-        <span className="flex-1 text-ink-1">{column.label}</span>
-        <span className="font-mono text-[9px] uppercase tracking-wider text-ink-4">
-          fix
-        </span>
-      </label>
-    </li>
-  );
-}
-
-function PopoverSortableRow({
-  column,
-  checked,
-  onToggle,
-}: {
-  column: ColumnDef;
-  checked: boolean;
-  onToggle: () => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: column.key });
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.6 : 1,
-    background: isDragging ? "var(--paper-2)" : undefined,
-  };
-  return (
-    <li ref={setNodeRef} style={style}>
-      <div className="flex items-center gap-2 px-3 py-1.5 text-xs transition hover:bg-paper-2">
-        <button
-          type="button"
-          className="cursor-grab text-ink-4 transition hover:text-ink-2 active:cursor-grabbing"
-          title="Reihenfolge ändern"
-          aria-label={`${column.label} verschieben`}
-          {...attributes}
-          {...listeners}
-        >
-          <svg
-            width="10"
-            height="14"
-            viewBox="0 0 10 14"
-            fill="currentColor"
-            aria-hidden
-          >
-            <circle cx="2.5" cy="3" r="1" />
-            <circle cx="7.5" cy="3" r="1" />
-            <circle cx="2.5" cy="7" r="1" />
-            <circle cx="7.5" cy="7" r="1" />
-            <circle cx="2.5" cy="11" r="1" />
-            <circle cx="7.5" cy="11" r="1" />
-          </svg>
-        </button>
-        <label className="flex flex-1 cursor-pointer items-center gap-2">
-          <input
-            type="checkbox"
-            checked={checked}
-            onChange={onToggle}
-            className="h-3.5 w-3.5 accent-[var(--action)]"
-          />
-          <span className="flex-1 text-ink-1">{column.label}</span>
-        </label>
-      </div>
-    </li>
   );
 }
 

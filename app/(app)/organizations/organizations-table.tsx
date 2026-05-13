@@ -1,13 +1,47 @@
 "use client";
 
+// Organisationen-Tabelle (Attio-Pattern v1).
+//
+// Wie people-table: Spalten ein-/ausblenden, sortieren, drag-and-drop
+// reordern. Name links gepinnt, Personenzahl rechts. Andere Spalten
+// (Branche, HQ, Domain, Größe, Tags) frei sortierbar.
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import type { OrgWithCount } from "@/lib/organizations";
 import { InlineTagEditor } from "./inline-tag-editor";
+import {
+  useColumnConfig,
+  type DataTableColumn,
+  type SortDir,
+} from "@/hooks/use-column-config";
+import { ColumnPopover } from "@/components/data-table/column-popover";
+import { SortableHeaderRow } from "@/components/data-table/sortable-header-row";
 
-type SortKey = "name" | "industry" | "people_count";
-type SortDir = "asc" | "desc";
+type SortKey = "name" | "industry" | "hq" | "people_count" | "domain";
+type ColumnKey =
+  | "name"
+  | "industry"
+  | "hq"
+  | "domain"
+  | "size"
+  | "tags"
+  | "people_count";
+
+type ColumnDef = DataTableColumn<ColumnKey, SortKey>;
+
+const COLUMNS: ColumnDef[] = [
+  { key: "name", label: "Name", always: true, default: true, sortKey: "name", gridCol: "minmax(0,1.6fr)", pinned: "start" },
+  { key: "industry", label: "Branche", default: true, sortKey: "industry", gridCol: "minmax(0,1.2fr)" },
+  { key: "hq", label: "HQ", default: true, sortKey: "hq", gridCol: "minmax(0,1fr)" },
+  { key: "domain", label: "Domain", default: false, sortKey: "domain", gridCol: "minmax(0,1.2fr)" },
+  { key: "size", label: "Größe", default: false, gridCol: "100px" },
+  { key: "tags", label: "Tags", default: true, gridCol: "minmax(0,1.4fr)" },
+  { key: "people_count", label: "Personen", always: true, default: true, sortKey: "people_count", gridCol: "100px", align: "right", pinned: "end" },
+];
+
+const STORAGE_KEY = "echo:organizations:columns:v1";
 
 function compare(
   a: string | number | null,
@@ -18,9 +52,7 @@ function compare(
   if (a === null) return 1;
   if (b === null) return -1;
   const cmp =
-    typeof a === "number"
-      ? a - (b as number)
-      : a.localeCompare(b as string);
+    typeof a === "number" ? a - (b as number) : a.localeCompare(b as string);
   return dir === "asc" ? cmp : -cmp;
 }
 
@@ -37,14 +69,21 @@ export function OrganizationsTable({
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("name");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  const cols = useColumnConfig<ColumnKey, SortKey>({
+    columns: COLUMNS,
+    storageKey: STORAGE_KEY,
+    defaultSortKey: "name",
+    defaultSortDir: "asc",
+  });
+  const sortKey = cols.sortKey ?? "name";
+  const sortDir = cols.sortDir;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return orgs;
     return orgs.filter((o) => {
-      const haystack = [o.name, o.industry, o.hq, o.domain, ...(o.tags ?? [])]
+      const haystack = [o.name, o.industry, o.hq, o.domain, o.size, ...(o.tags ?? [])]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
@@ -55,20 +94,18 @@ export function OrganizationsTable({
   const sorted = useMemo(() => {
     const arr = [...filtered];
     arr.sort((a, b) => {
-      const av = a[sortKey] as string | number | null;
-      const bv = b[sortKey] as string | number | null;
+      const av =
+        sortKey === "people_count"
+          ? a.people_count
+          : ((a[sortKey as keyof OrgWithCount] as string | null) ?? null);
+      const bv =
+        sortKey === "people_count"
+          ? b.people_count
+          : ((b[sortKey as keyof OrgWithCount] as string | null) ?? null);
       return compare(av, bv, sortDir);
     });
     return arr;
   }, [filtered, sortKey, sortDir]);
-
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
-    else {
-      setSortKey(key);
-      setSortDir(key === "people_count" ? "desc" : "asc");
-    }
-  }
 
   return (
     <div className="space-y-4">
@@ -77,10 +114,7 @@ export function OrganizationsTable({
           <span className="t-label">Tag-Filter</span>
           <span
             className="tag"
-            style={{
-              borderColor: "var(--action)",
-              color: "var(--action)",
-            }}
+            style={{ borderColor: "var(--action)", color: "var(--action)" }}
           >
             <span className="dot" style={{ background: "var(--action)" }} />
             {activeTag}
@@ -93,6 +127,8 @@ export function OrganizationsTable({
           </Link>
         </div>
       )}
+
+      {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex h-9 min-w-72 flex-1 items-center gap-2 rounded border border-rule bg-paper px-3">
           <span className="t-label" aria-hidden>
@@ -106,38 +142,20 @@ export function OrganizationsTable({
             className="flex-1 bg-transparent text-sm text-ink-1 outline-none placeholder:text-ink-4"
           />
         </div>
-        <Link
-          href="/organizations/new"
-          className="inline-flex h-9 items-center rounded border border-action bg-action px-4 text-sm font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)]"
-        >
-          + Organisation
-        </Link>
+        <div className="ml-auto flex items-center gap-2">
+          <ColumnPopover api={cols} />
+          <Link
+            href="/organizations/new"
+            className="inline-flex h-9 items-center rounded border border-action bg-action px-4 text-sm font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)]"
+          >
+            + Organisation
+          </Link>
+        </div>
       </div>
 
+      {/* Table */}
       <div className="overflow-hidden rounded border border-rule bg-paper">
-        <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_80px] gap-4 border-b border-rule bg-paper-2 px-4 py-2.5">
-          <SortHeader
-            label="Name"
-            active={sortKey === "name"}
-            dir={sortDir}
-            onClick={() => toggleSort("name")}
-          />
-          <SortHeader
-            label="Branche"
-            active={sortKey === "industry"}
-            dir={sortDir}
-            onClick={() => toggleSort("industry")}
-          />
-          <span className="t-label">HQ</span>
-          <span className="t-label">Tags</span>
-          <SortHeader
-            label="Personen"
-            active={sortKey === "people_count"}
-            dir={sortDir}
-            onClick={() => toggleSort("people_count")}
-            align="right"
-          />
-        </div>
+        <SortableHeaderRow api={cols} />
 
         {sorted.length === 0 ? (
           <div className="px-4 py-16 text-center text-sm text-ink-3">
@@ -158,34 +176,12 @@ export function OrganizationsTable({
                   router.push(`/organizations/${o.id}`);
                 }
               }}
-              className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_80px] cursor-pointer gap-4 border-b border-rule-soft px-4 py-3 transition-colors hover:bg-paper-2 last:border-b-0 focus:bg-paper-2 focus:outline-none"
+              className="grid cursor-pointer gap-3 border-b border-rule-soft px-4 py-3 transition-colors hover:bg-paper-2 last:border-b-0 focus:bg-paper-2 focus:outline-none"
+              style={{ gridTemplateColumns: cols.gridTemplate }}
             >
-              <span className="min-w-0 self-center">
-                <span className="block truncate font-medium text-ink-1">
-                  {o.name}
-                </span>
-                {o.domain && (
-                  <span className="block truncate font-mono text-[10px] tracking-wider text-ink-4">
-                    {o.domain}
-                  </span>
-                )}
-              </span>
-              <span className="self-center truncate text-sm text-ink-2">
-                {o.industry ?? "—"}
-              </span>
-              <span className="self-center truncate text-sm text-ink-2">
-                {o.hq ?? "—"}
-              </span>
-              <span className="self-center">
-                <InlineTagEditor
-                  orgId={o.id}
-                  initialTags={o.tags ?? []}
-                  existingTags={allTags}
-                />
-              </span>
-              <span className="self-center text-right font-mono text-xs tracking-wider text-ink-2">
-                {o.people_count}
-              </span>
+              {cols.activeColumns.map((c) => (
+                <OrgCell key={c.key} column={c} org={o} allTags={allTags} />
+              ))}
             </div>
           ))
         )}
@@ -199,29 +195,75 @@ export function OrganizationsTable({
   );
 }
 
-function SortHeader({
-  label,
-  active,
-  dir,
-  onClick,
-  align,
+function OrgCell({
+  column,
+  org,
+  allTags,
 }: {
-  label: string;
-  active: boolean;
-  dir: SortDir;
-  onClick: () => void;
-  align?: "right";
+  column: ColumnDef;
+  org: OrgWithCount;
+  allTags: string[];
 }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`t-label inline-flex items-center gap-1 hover:text-ink-1 ${
-        active ? "text-ink-1" : ""
-      } ${align === "right" ? "justify-end" : ""}`}
-    >
-      {label}
-      {active && <span aria-hidden>{dir === "asc" ? "↑" : "↓"}</span>}
-    </button>
-  );
+  switch (column.key) {
+    case "name":
+      return (
+        <span className="min-w-0 self-center">
+          <span className="block truncate font-medium text-ink-1">
+            {org.name}
+          </span>
+          {org.domain && (
+            <span className="block truncate font-mono text-[10px] tracking-wider text-ink-4">
+              {org.domain}
+            </span>
+          )}
+        </span>
+      );
+    case "industry":
+      return (
+        <span className="self-center truncate text-sm text-ink-2">
+          {org.industry ?? "—"}
+        </span>
+      );
+    case "hq":
+      return (
+        <span className="self-center truncate text-sm text-ink-2">
+          {org.hq ?? "—"}
+        </span>
+      );
+    case "domain":
+      return (
+        <span className="self-center truncate font-mono text-xs text-ink-3">
+          {org.domain ?? "—"}
+        </span>
+      );
+    case "size":
+      return (
+        <span className="self-center text-sm text-ink-2">
+          {org.size ?? "—"}
+        </span>
+      );
+    case "tags":
+      return (
+        <span
+          className="self-center"
+          // Stop-propagation damit Tag-Editor-Klicks die Row nicht navigieren
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <InlineTagEditor
+            orgId={org.id}
+            initialTags={org.tags ?? []}
+            existingTags={allTags}
+          />
+        </span>
+      );
+    case "people_count":
+      return (
+        <span className="self-center text-right font-mono text-xs tracking-wider text-ink-2">
+          {org.people_count}
+        </span>
+      );
+    default:
+      return <span />;
+  }
 }
