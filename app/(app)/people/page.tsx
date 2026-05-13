@@ -17,7 +17,8 @@ export default async function PeoplePage() {
   // Server→Client-Boundary in Next.js, also als string[].
   const rows = contextRows.map((r) => ({
     person: r.person,
-    clusters: Array.from(r.clusters),
+    tagsByCluster: r.tagsByCluster, // Record ist serializable
+    clusters: Object.keys(r.tagsByCluster), // welche Cluster überhaupt Tags haben
     passions: Array.from(r.passions),
     circleIds: Array.from(r.circleIds),
   }));

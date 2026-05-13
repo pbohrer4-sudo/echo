@@ -9,8 +9,10 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  CIRCLE_COLOR,
   DEPTH_LABELS,
   MODE_LABELS,
+  PASSION_COLOR,
   PURPOSE_LABELS,
   TAG_CLUSTER_COLORS,
   TAG_CLUSTER_LABELS,
@@ -28,6 +30,7 @@ type ChannelFilter = "all" | "has_phone" | "has_email" | "has_linkedin";
 
 interface Row {
   person: Person;
+  tagsByCluster: Record<string, string[]>;
   clusters: string[];
   passions: string[];
   circleIds: string[];
@@ -58,9 +61,12 @@ type ColumnKey =
   | "last_contact"
   | "current_location"
   | "met_location"
-  | "tags_count"
-  | "passions_count"
-  | "circles_count"
+  | "reminders"   // Tag-Cluster
+  | "interests"   // Tag-Cluster
+  | "potential"   // Tag-Cluster
+  | "origin"      // Tag-Cluster
+  | "passions"
+  | "circles"
   | "actions";    // always
 
 interface ColumnDef {
@@ -84,9 +90,12 @@ const COLUMNS: ColumnDef[] = [
   { key: "last_contact", label: "Letzter Kontakt", default: true, sortKey: "last_contact_at", gridCol: "110px" },
   { key: "current_location", label: "Stadt", default: false, gridCol: "120px" },
   { key: "met_location", label: "Wo getroffen", default: false, gridCol: "140px" },
-  { key: "tags_count", label: "Tags", default: false, gridCol: "60px", align: "right" },
-  { key: "passions_count", label: "Pas.", default: false, gridCol: "60px", align: "right" },
-  { key: "circles_count", label: "Circ.", default: false, gridCol: "60px", align: "right" },
+  { key: "reminders", label: "Reminders", default: false, gridCol: "minmax(140px,1fr)" },
+  { key: "interests", label: "Interests", default: false, gridCol: "minmax(140px,1fr)" },
+  { key: "potential", label: "Potential", default: false, gridCol: "minmax(140px,1fr)" },
+  { key: "origin", label: "Origin", default: false, gridCol: "minmax(140px,1fr)" },
+  { key: "passions", label: "Passions", default: false, gridCol: "minmax(120px,0.8fr)" },
+  { key: "circles", label: "Circles", default: false, gridCol: "minmax(120px,0.8fr)" },
   { key: "actions", label: "Aktionen", always: true, default: true, gridCol: "auto", align: "right" },
 ];
 
@@ -303,6 +312,13 @@ export function PeopleTable({
       if (channelFilter === "has_linkedin" && !p.linkedin_url) return false;
 
       if (!q) return true;
+      // Haystack umfasst Person-Felder + alle Tag-Namen aller Cluster
+      // + Passion-Namen + Circle-Namen — sodass Free-Text-Suche auch
+      // „geburtstag", „entrepreneurship", „padel" findet.
+      const allTagNames = Object.values(r.tagsByCluster).flat();
+      const circleNames = r.circleIds
+        .map((id) => circles.find((c) => c.id === id)?.name ?? "")
+        .filter(Boolean);
       const haystack = [
         p.name,
         p.company,
@@ -312,6 +328,9 @@ export function PeopleTable({
         p.met_location,
         p.current_location,
         p.home_location,
+        ...allTagNames,
+        ...r.passions,
+        ...circleNames,
       ]
         .filter(Boolean)
         .join(" ")
@@ -329,6 +348,7 @@ export function PeopleTable({
     circleFilter,
     locationFilter,
     channelFilter,
+    circles,
   ]);
 
   const sorted = useMemo(() => {
@@ -814,24 +834,18 @@ function Cell({
           {person.met_location ?? "—"}
         </span>
       );
-    case "tags_count":
-      return (
-        <span className="text-right font-mono text-[11px] text-ink-3">
-          {row.clusters.length > 0 ? row.clusters.length : "—"}
-        </span>
-      );
-    case "passions_count":
-      return (
-        <span className="text-right font-mono text-[11px] text-ink-3">
-          {row.passions.length > 0 ? row.passions.length : "—"}
-        </span>
-      );
-    case "circles_count":
-      return (
-        <span className="text-right font-mono text-[11px] text-ink-3">
-          {row.circleIds.length > 0 ? row.circleIds.length : "—"}
-        </span>
-      );
+    case "reminders":
+      return <TagClusterCell tags={row.tagsByCluster.reminders ?? []} cluster="reminders" />;
+    case "interests":
+      return <TagClusterCell tags={row.tagsByCluster.interests ?? []} cluster="interests" />;
+    case "potential":
+      return <TagClusterCell tags={row.tagsByCluster.potential ?? []} cluster="potential" />;
+    case "origin":
+      return <TagClusterCell tags={row.tagsByCluster.origin ?? []} cluster="origin" />;
+    case "passions":
+      return <PassionsCell names={row.passions} />;
+    case "circles":
+      return <CirclesCell circleIds={row.circleIds} circles={circles} />;
     case "actions": {
       const phone = primaryPhone(person);
       const email = primaryEmail(person);
@@ -951,5 +965,85 @@ function ActionIcon({
     >
       {icon}
     </a>
+  );
+}
+
+// ───────── Cluster / Passion / Circle Cells ─────────
+
+function PillStack({
+  values,
+  bg,
+  fg,
+  max = 3,
+}: {
+  values: string[];
+  bg: string;
+  fg: string;
+  max?: number;
+}) {
+  if (values.length === 0)
+    return <span className="text-[11px] italic text-ink-4">—</span>;
+  const visible = values.slice(0, max);
+  const extra = values.length - visible.length;
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      {visible.map((v, i) => (
+        <span
+          key={`${v}-${i}`}
+          className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] leading-tight"
+          style={{ background: bg, color: fg }}
+          title={v}
+        >
+          <span className="max-w-[120px] truncate">{v}</span>
+        </span>
+      ))}
+      {extra > 0 && (
+        <span
+          className="font-mono text-[10px] text-ink-4"
+          title={values.slice(max).join(", ")}
+        >
+          +{extra}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function TagClusterCell({
+  tags,
+  cluster,
+}: {
+  tags: string[];
+  cluster: TagCluster;
+}) {
+  const colors = TAG_CLUSTER_COLORS[cluster];
+  return <PillStack values={tags} bg={colors.bg} fg={colors.fg} />;
+}
+
+function PassionsCell({ names }: { names: string[] }) {
+  // Names sind lower-cased aus der Server-Aggregation. Capitalize fürs UI.
+  const display = names.map((n) =>
+    n
+      .split(/\s+/)
+      .map((w) => (w.length ? w[0].toUpperCase() + w.slice(1) : w))
+      .join(" "),
+  );
+  return (
+    <PillStack values={display} bg={PASSION_COLOR.bg} fg={PASSION_COLOR.fg} />
+  );
+}
+
+function CirclesCell({
+  circleIds,
+  circles,
+}: {
+  circleIds: string[];
+  circles: CircleRow[];
+}) {
+  const names = circleIds
+    .map((id) => circles.find((c) => c.id === id)?.name)
+    .filter((n): n is string => !!n);
+  return (
+    <PillStack values={names} bg={CIRCLE_COLOR.bg} fg={CIRCLE_COLOR.fg} />
   );
 }

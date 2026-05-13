@@ -82,10 +82,12 @@ export async function findSimilarPeople(
 
 // Listet alle Personen mit den Tag-Clustern, Passions und Circles in
 // denen sie stecken — angereichert via Joins. Wird vom People-Liste-
-// Filter gebraucht.
+// Filter + Cluster-Spalten gebraucht.
 export interface PersonWithContext {
   person: Person;
-  clusters: Set<string>;     // welche der 4 Tag-Cluster diese Person hat
+  // Tag-Namen pro Cluster. Key = cluster-Wert (reminders/interests/
+  // potential/origin), value = sortierte Array von Tag-Namen.
+  tagsByCluster: Record<string, string[]>;
   passions: Set<string>;     // Passion-Names (lower-cased für Match)
   circleIds: Set<string>;
 }
@@ -99,25 +101,25 @@ export async function listPeopleWithContext(): Promise<PersonWithContext[]> {
       .is("deleted_at", null)
       .eq("is_self", false)
       .order("name", { ascending: true }),
-    supabase.from("person_tags").select("person_id, tags(cluster)"),
+    supabase.from("person_tags").select("person_id, tags(cluster, name)"),
     supabase.from("passions").select("person_id, name"),
     supabase.from("person_circles").select("person_id, circle_id"),
   ]);
 
   if (peopleRes.error) throw peopleRes.error;
 
-  // Index person_id → clusters set
-  const clusterMap = new Map<string, Set<string>>();
+  // Index person_id → cluster → tag-names
+  const tagMap = new Map<string, Map<string, Set<string>>>();
   const ptRows = (ptRes.data ?? []) as unknown as {
     person_id: string;
-    tags: { cluster: string } | null;
+    tags: { cluster: string; name: string } | null;
   }[];
   for (const row of ptRows) {
-    if (!row.tags?.cluster) continue;
-    if (!clusterMap.has(row.person_id)) {
-      clusterMap.set(row.person_id, new Set());
-    }
-    clusterMap.get(row.person_id)!.add(row.tags.cluster);
+    if (!row.tags?.cluster || !row.tags.name) continue;
+    if (!tagMap.has(row.person_id)) tagMap.set(row.person_id, new Map());
+    const cm = tagMap.get(row.person_id)!;
+    if (!cm.has(row.tags.cluster)) cm.set(row.tags.cluster, new Set());
+    cm.get(row.tags.cluster)!.add(row.tags.name);
   }
 
   // Index person_id → passion-names set (lower-cased)
@@ -144,12 +146,23 @@ export async function listPeopleWithContext(): Promise<PersonWithContext[]> {
     circleMap.get(row.person_id)!.add(row.circle_id);
   }
 
-  return ((peopleRes.data ?? []) as Person[]).map((p) => ({
-    person: p,
-    clusters: clusterMap.get(p.id) ?? new Set(),
-    passions: passionMap.get(p.id) ?? new Set(),
-    circleIds: circleMap.get(p.id) ?? new Set(),
-  }));
+  return ((peopleRes.data ?? []) as Person[]).map((p) => {
+    const cm = tagMap.get(p.id);
+    const tagsByCluster: Record<string, string[]> = {};
+    if (cm) {
+      for (const [cluster, names] of cm.entries()) {
+        tagsByCluster[cluster] = Array.from(names).sort((a, b) =>
+          a.localeCompare(b),
+        );
+      }
+    }
+    return {
+      person: p,
+      tagsByCluster,
+      passions: passionMap.get(p.id) ?? new Set(),
+      circleIds: circleMap.get(p.id) ?? new Set(),
+    };
+  });
 }
 
 // Returns the person, or null if not found / soft-deleted / not owned.
