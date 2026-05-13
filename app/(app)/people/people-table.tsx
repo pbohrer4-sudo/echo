@@ -90,12 +90,12 @@ const COLUMNS: ColumnDef[] = [
   { key: "last_contact", label: "Letzter Kontakt", default: true, sortKey: "last_contact_at", gridCol: "110px" },
   { key: "current_location", label: "Stadt", default: false, gridCol: "120px" },
   { key: "met_location", label: "Wo getroffen", default: false, gridCol: "140px" },
-  { key: "reminders", label: "Reminders", default: false, gridCol: "minmax(140px,1fr)" },
-  { key: "interests", label: "Interests", default: false, gridCol: "minmax(140px,1fr)" },
-  { key: "potential", label: "Potential", default: false, gridCol: "minmax(140px,1fr)" },
-  { key: "origin", label: "Origin", default: false, gridCol: "minmax(140px,1fr)" },
-  { key: "passions", label: "Passions", default: false, gridCol: "minmax(120px,0.8fr)" },
-  { key: "circles", label: "Circles", default: false, gridCol: "minmax(120px,0.8fr)" },
+  { key: "reminders", label: "Reminders", default: false, gridCol: "minmax(200px,1.4fr)" },
+  { key: "interests", label: "Interests", default: false, gridCol: "minmax(200px,1.4fr)" },
+  { key: "potential", label: "Potential", default: false, gridCol: "minmax(200px,1.4fr)" },
+  { key: "origin", label: "Origin", default: false, gridCol: "minmax(180px,1.2fr)" },
+  { key: "passions", label: "Passions", default: false, gridCol: "minmax(180px,1.2fr)" },
+  { key: "circles", label: "Circles", default: false, gridCol: "minmax(180px,1.2fr)" },
   { key: "actions", label: "Aktionen", always: true, default: true, gridCol: "auto", align: "right" },
 ];
 
@@ -734,7 +734,7 @@ function PersonTableRow({
   const person = row.person;
   return (
     <div
-      className="grid items-center gap-3 border-b border-rule-soft px-4 py-3 transition last:border-0 hover:bg-paper-2"
+      className="grid items-start gap-3 border-b border-rule-soft px-4 py-3 transition last:border-0 hover:bg-paper-2"
       style={{ gridTemplateColumns: gridTemplate }}
     >
       {activeColumns.map((c) => (
@@ -970,11 +970,14 @@ function ActionIcon({
 
 // ───────── Cluster / Passion / Circle Cells ─────────
 
+// Volltextige Pills ohne Truncation, kompakte Optik. Pills wrappen
+// vertikal wenn die Spalte zu eng ist — der Container hat align-items
+// start damit die Row trotzdem oben anliegt.
 function PillStack({
   values,
   bg,
   fg,
-  max = 3,
+  max = 6,
 }: {
   values: string[];
   bg: string;
@@ -986,15 +989,14 @@ function PillStack({
   const visible = values.slice(0, max);
   const extra = values.length - visible.length;
   return (
-    <span className="flex flex-wrap items-center gap-1">
+    <span className="flex flex-wrap items-start gap-1">
       {visible.map((v, i) => (
         <span
           key={`${v}-${i}`}
-          className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] leading-tight"
+          className="inline-flex items-center rounded-full px-1.5 py-px text-[10px] leading-snug"
           style={{ background: bg, color: fg }}
-          title={v}
         >
-          <span className="max-w-[120px] truncate">{v}</span>
+          {v}
         </span>
       ))}
       {extra > 0 && (
