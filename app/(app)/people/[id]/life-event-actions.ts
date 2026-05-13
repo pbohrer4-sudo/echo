@@ -21,6 +21,12 @@ export async function createLifeEventForPerson(formData: FormData): Promise<{
   const eventType = String(formData.get("event_type") ?? "note") as LifeEventType;
   const occurredAtRaw = String(formData.get("occurred_at") ?? "").trim();
   const locationName = String(formData.get("location_name") ?? "").trim();
+  // 0029 — strukturierte Geo-Daten aus OSM-Autocomplete optional dabei
+  const latitudeRaw = String(formData.get("latitude") ?? "").trim();
+  const longitudeRaw = String(formData.get("longitude") ?? "").trim();
+  const placeId = String(formData.get("google_place_id") ?? "").trim() || null;
+  const latitude = latitudeRaw ? Number(latitudeRaw) : null;
+  const longitude = longitudeRaw ? Number(longitudeRaw) : null;
   const filePath = String(formData.get("file_path") ?? "").trim() || null;
   const fileSizeBytes =
     parseInt(String(formData.get("file_size_bytes") ?? "0"), 10) || null;
@@ -47,6 +53,9 @@ export async function createLifeEventForPerson(formData: FormData): Promise<{
     event_type: eventType,
     occurred_at: new Date(occurredAtRaw).toISOString(),
     location_name: locationName || null,
+    latitude: Number.isFinite(latitude) ? latitude : null,
+    longitude: Number.isFinite(longitude) ? longitude : null,
+    google_place_id: placeId,
     file_path: filePath,
     file_size_bytes: fileSizeBytes,
     mime_type: mimeType,

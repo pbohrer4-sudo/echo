@@ -384,6 +384,7 @@ export interface Person {
   how_we_met: string | null;
   met_date: string | null;
   met_location: string | null;
+  met_location_geo: LocationGeo | null;
   // 3-Achsen (Briefing 4.1-4.3).
   depth: Depth | null;
   depth_source: DepthSource;
@@ -396,10 +397,24 @@ export interface Person {
   linkedin_url: string | null;
   photo_url: string | null;
   current_location: string | null;
+  current_location_geo: LocationGeo | null;
   home_location: string | null;
+  home_location_geo: LocationGeo | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+}
+
+// 0029 — OpenStreetMap (Nominatim) Geo-Daten. Wird optional pro
+// Location-Feld gespeichert wenn der Nutzer einen Vorschlag aus dem
+// Autocomplete übernimmt. NULL bedeutet freier Text.
+export interface LocationGeo {
+  display_name: string;
+  lat: number;
+  lng: number;
+  place_id: string;
+  osm_type?: string;
+  osm_id?: string;
 }
 
 export interface Interaction {

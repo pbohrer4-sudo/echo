@@ -20,9 +20,40 @@ import type {
   Depth,
   EmailEntry,
   ImportantDate,
+  LocationGeo,
   PhoneEntry,
   Purpose,
 } from "@/lib/types";
+
+// 0029 — Hidden-Input vom LocationAutocomplete parsen. Untrusted JSON,
+// also Schema validieren bevor wir's persistieren. Bei Format-Fehler
+// einfach null zurückgeben — der freitext-Wert (sichtbares Input)
+// bleibt davon unberührt.
+function parseLocationGeo(raw: FormDataEntryValue | null): LocationGeo | null {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (
+      typeof parsed.display_name === "string" &&
+      typeof parsed.lat === "number" &&
+      typeof parsed.lng === "number" &&
+      typeof parsed.place_id === "string"
+    ) {
+      return {
+        display_name: parsed.display_name,
+        lat: parsed.lat,
+        lng: parsed.lng,
+        place_id: parsed.place_id,
+        osm_type:
+          typeof parsed.osm_type === "string" ? parsed.osm_type : undefined,
+        osm_id: typeof parsed.osm_id === "string" ? parsed.osm_id : undefined,
+      };
+    }
+  } catch {
+    // ignore malformed JSON
+  }
+  return null;
+}
 
 const PURPOSE_VALUES: Purpose[] = [
   "personal",
@@ -111,6 +142,13 @@ export async function createPersonQuick(formData: FormData) {
   const tagInput = trimOrNull(formData.get("tags"));
   const metDate = dateOrNull(formData.get("met_date"));
   const metLocation = trimOrNull(formData.get("met_location"));
+  const metLocationGeo = parseLocationGeo(formData.get("met_location_geo"));
+  const currentLocation = trimOrNull(formData.get("current_location"));
+  const currentLocationGeo = parseLocationGeo(
+    formData.get("current_location_geo"),
+  );
+  const homeLocation = trimOrNull(formData.get("home_location"));
+  const homeLocationGeo = parseLocationGeo(formData.get("home_location_geo"));
 
   // Phone/Email als JSONB-Single-Entry-Array (Echo-Format).
   const phones: PhoneEntry[] = phoneValue
@@ -146,6 +184,11 @@ export async function createPersonQuick(formData: FormData) {
       how_we_met: howWeMet,
       met_date: metDate,
       met_location: metLocation,
+      met_location_geo: metLocationGeo,
+      current_location: currentLocation,
+      current_location_geo: currentLocationGeo,
+      home_location: homeLocation,
+      home_location_geo: homeLocationGeo,
       purpose,
       depth,
       depth_source,

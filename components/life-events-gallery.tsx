@@ -13,11 +13,13 @@ import {
   LIFE_EVENT_LABELS,
   type LifeEventRow,
   type LifeEventType,
+  type LocationGeo,
 } from "@/lib/types";
 import {
   createLifeEventForPerson,
   deleteLifeEventAction,
 } from "@/app/(app)/people/[id]/life-event-actions";
+import { LocationAutocomplete } from "@/components/location-autocomplete";
 
 export interface LifeEventWithUrls extends LifeEventRow {
   fileUrl: string | null;
@@ -183,6 +185,7 @@ function AddModal({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   });
   const [locationName, setLocationName] = useState("");
+  const [locationGeo, setLocationGeo] = useState<LocationGeo | null>(null);
   const [uploadedFile, setUploadedFile] = useState<{
     path: string;
     size: number;
@@ -243,6 +246,11 @@ function AddModal({
     fd.append("event_type", eventType);
     fd.append("occurred_at", occurredAt);
     fd.append("location_name", locationName);
+    if (locationGeo) {
+      fd.append("latitude", String(locationGeo.lat));
+      fd.append("longitude", String(locationGeo.lng));
+      fd.append("google_place_id", locationGeo.place_id);
+    }
     if (uploadedFile) {
       fd.append("file_path", uploadedFile.path);
       fd.append("file_size_bytes", String(uploadedFile.size));
@@ -381,12 +389,15 @@ function AddModal({
             </label>
             <label className="block space-y-1.5">
               <span className="t-label">Ort (optional)</span>
-              <input
-                type="text"
-                value={locationName}
-                onChange={(e) => setLocationName(e.target.value)}
+              <LocationAutocomplete
+                name="location_name"
+                defaultValue={locationName}
                 placeholder="z.B. München, Bauma 2024"
                 className="h-9 w-full rounded border border-rule bg-paper px-3 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20"
+                onChange={(value, geo) => {
+                  setLocationName(value);
+                  setLocationGeo(geo);
+                }}
               />
             </label>
           </div>

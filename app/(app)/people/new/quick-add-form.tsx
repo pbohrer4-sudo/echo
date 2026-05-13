@@ -16,6 +16,7 @@ import {
   type Purpose,
 } from "@/lib/types";
 import { StickySaveBar } from "@/components/sticky-save-bar";
+import { LocationAutocomplete } from "@/components/location-autocomplete";
 import { createPersonQuick } from "./quick-add-actions";
 
 const PURPOSE_HINTS: Record<Purpose, string> = {
@@ -230,10 +231,25 @@ export function QuickAddForm({ error }: { error?: string }) {
               />
             </Field>
             <Field label="Ort des Treffens">
-              <input
+              <LocationAutocomplete
                 name="met_location"
-                type="text"
                 placeholder="z.B. München, Bauma 2024"
+                className={inputClass}
+              />
+            </Field>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Aktueller Wohnort">
+              <LocationAutocomplete
+                name="current_location"
+                placeholder="z.B. Berlin, Schwabing"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Heimat / Herkunft">
+              <LocationAutocomplete
+                name="home_location"
+                placeholder="z.B. Hamburg"
                 className={inputClass}
               />
             </Field>
