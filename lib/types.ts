@@ -572,10 +572,23 @@ export const TAG_CLUSTER_COLORS: Record<TagCluster, { bg: string; fg: string }> 
 };
 
 export const TAG_CLUSTER_LABELS: Record<TagCluster, string> = {
-  reminders: "Reminders",
-  interests: "Interests",
-  potential: "Potential",
-  origin: "Origin",
+  reminders: "Signale",
+  interests: "Interessen",
+  potential: "Potenzial",
+  origin: "Herkunft",
+};
+
+// Beschreibungen für Info-Tooltips an Cluster-Section-Headern (V3-Stil).
+// Knapp, hilft beim Cluster-Einsortieren ohne dass man Briefing nachlesen muss.
+export const TAG_CLUSTER_HINTS: Record<TagCluster, string> = {
+  reminders:
+    "Wiederkehrende Anker — Geburtstage, Jahrestage, Follow-Up-Termine, Ereignisse die du nicht vergessen willst.",
+  interests:
+    "Themen + Skills die diese Person bewegen — Sport, Musik, Fachgebiete. Gut um Gemeinsamkeiten zu finden.",
+  potential:
+    "Was du geben oder holen kannst — Intros, Aufträge, Wissen, Unterstützung. Beides Richtungen.",
+  origin:
+    "Wo + wie ihr euch begegnet seid — Events, Vermittler, Quellen. Stützt die Reconnect-Story.",
 };
 
 // — Passions (Briefing v3 #19, max 5 pro Person, eigene Tabelle) ———
@@ -657,16 +670,22 @@ export const PURPOSE_LABELS: Record<Purpose, string> = {
   family: "Familie",
   business_active: "Business aktiv",
   business_latent: "Business latent",
-  aspirational: "Aspirational",
+  aspirational: "Aufbau",
 };
 
 export const MODE_LABELS: Record<Mode, string> = {
   active: "Aktiv",
   nurture: "Pflege",
   dormant: "Ruhend",
-  reconnect: "Reconnect",
+  reconnect: "Wiederbeleben",
   archive: "Archiviert",
 };
+
+// Section-Header-Beschreibungen für Passions + Circles (V3 Info-Icons).
+export const PASSION_HINT =
+  "Identitätsstiftende Leidenschaften — was diese Person ausmacht jenseits von Beruf. Max 5 pro Person.";
+export const CIRCLE_HINT =
+  "Communities + Organisationen die Personen verbinden — Events, Netzwerke, Programme. Hilft Warm-Intros zu finden.";
 
 // Neue Felder für Person. Bewusst SEPARAT vom bestehenden Person-
 // Interface — der bestehende Type wird in Phase C erweitert, wenn die

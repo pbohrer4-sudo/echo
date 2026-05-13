@@ -14,16 +14,20 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
-  TAG_CLUSTER_COLORS,
-  TAG_CLUSTER_LABELS,
-  PASSION_COLOR,
+  CIRCLE_HINT,
   CIRCLE_COLOR,
+  PASSION_COLOR,
+  PASSION_HINT,
+  TAG_CLUSTER_COLORS,
+  TAG_CLUSTER_HINTS,
+  TAG_CLUSTER_LABELS,
   type CircleRow,
   type CircleWithNote,
   type PassionRow,
   type TagCluster,
   type TagWithNote,
 } from "@/lib/types";
+import { InfoTooltip } from "@/components/info-tooltip";
 import {
   addPersonTag,
   removePersonTag,
@@ -166,8 +170,12 @@ function TagClusterRow({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
-        <span className="t-label" style={{ color: colors.fg }}>
+        <span
+          className="t-label inline-flex items-center gap-1.5"
+          style={{ color: colors.fg }}
+        >
           {TAG_CLUSTER_LABELS[cluster]}
+          <InfoTooltip text={TAG_CLUSTER_HINTS[cluster]} />
         </span>
         {!adding && !disabled && (
           <button
@@ -266,7 +274,10 @@ function PassionsBlock({
   return (
     <section className="space-y-3">
       <div className="section-head">
-        <span className="t-label">Passions ({passions.length}/5)</span>
+        <span className="t-label inline-flex items-center gap-1.5">
+          Leidenschaften ({passions.length}/5)
+          <InfoTooltip text={PASSION_HINT} />
+        </span>
         <span className="rule" />
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
@@ -379,7 +390,10 @@ function CirclesBlock({
   return (
     <section className="space-y-3">
       <div className="section-head">
-        <span className="t-label">Circles</span>
+        <span className="t-label inline-flex items-center gap-1.5">
+          Kreise
+          <InfoTooltip text={CIRCLE_HINT} />
+        </span>
         <span className="rule" />
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
