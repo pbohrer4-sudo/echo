@@ -29,6 +29,9 @@ export default async function PeoplePage({
     clusters: Object.keys(r.tagsByCluster), // welche Cluster überhaupt Tags haben
     passions: Array.from(r.passions),
     circleIds: Array.from(r.circleIds),
+    tagNotes: r.tagNotes,        // 0028 — pro Tag-Name → Note
+    passionNotes: r.passionNotes, // pro lower-case Passion-Name → Note
+    circleNotes: r.circleNotes,   // pro circle_id → Note
   }));
 
   // Distinct Passions für Filter-Dropdown.

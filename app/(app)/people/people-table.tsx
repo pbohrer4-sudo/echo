@@ -47,6 +47,10 @@ interface Row {
   clusters: string[];
   passions: string[];
   circleIds: string[];
+  // 0028 — per-link Notes (pro Tag-Name / Passion-Lower / Circle-ID).
+  tagNotes: Record<string, string>;
+  passionNotes: Record<string, string>;
+  circleNotes: Record<string, string>;
 }
 
 interface LocationOption {
@@ -738,17 +742,47 @@ function Cell({
         </span>
       );
     case "reminders":
-      return <TagClusterCell tags={row.tagsByCluster.reminders ?? []} cluster="reminders" />;
+      return (
+        <TagClusterCell
+          tags={row.tagsByCluster.reminders ?? []}
+          cluster="reminders"
+          notes={row.tagNotes}
+        />
+      );
     case "interests":
-      return <TagClusterCell tags={row.tagsByCluster.interests ?? []} cluster="interests" />;
+      return (
+        <TagClusterCell
+          tags={row.tagsByCluster.interests ?? []}
+          cluster="interests"
+          notes={row.tagNotes}
+        />
+      );
     case "potential":
-      return <TagClusterCell tags={row.tagsByCluster.potential ?? []} cluster="potential" />;
+      return (
+        <TagClusterCell
+          tags={row.tagsByCluster.potential ?? []}
+          cluster="potential"
+          notes={row.tagNotes}
+        />
+      );
     case "origin":
-      return <TagClusterCell tags={row.tagsByCluster.origin ?? []} cluster="origin" />;
+      return (
+        <TagClusterCell
+          tags={row.tagsByCluster.origin ?? []}
+          cluster="origin"
+          notes={row.tagNotes}
+        />
+      );
     case "passions":
-      return <PassionsCell names={row.passions} />;
+      return <PassionsCell names={row.passions} notes={row.passionNotes} />;
     case "circles":
-      return <CirclesCell circleIds={row.circleIds} circles={circles} />;
+      return (
+        <CirclesCell
+          circleIds={row.circleIds}
+          circles={circles}
+          notes={row.circleNotes}
+        />
+      );
     case "actions": {
       const phone = primaryPhone(person);
       const email = primaryEmail(person);
@@ -874,18 +908,23 @@ function ActionIcon({
 // ───────── Cluster / Passion / Circle Cells ─────────
 
 // Volltextige Pills ohne Truncation, kompakte Optik. Pills wrappen
-// vertikal wenn die Spalte zu eng ist — der Container hat align-items
-// start damit die Row trotzdem oben anliegt.
+// vertikal wenn die Spalte zu eng ist. Items mit Note kriegen ein
+// dezentes „·"-Glyph als Hinweis, Hover zeigt die Note als Tooltip
+// (0028, Tag-Notes in der Listen-Übersicht).
 function PillStack({
   values,
   bg,
   fg,
   max = 6,
+  notesByValue,
 }: {
   values: string[];
   bg: string;
   fg: string;
   max?: number;
+  // Optional: Map von value → Note. value ist im selben Format wie der
+  // angezeigte String (also für Passions z. B. capitalized).
+  notesByValue?: Record<string, string>;
 }) {
   if (values.length === 0)
     return <span className="text-[11px] italic text-ink-4">—</span>;
@@ -893,15 +932,28 @@ function PillStack({
   const extra = values.length - visible.length;
   return (
     <span className="flex flex-wrap items-start gap-1">
-      {visible.map((v, i) => (
-        <span
-          key={`${v}-${i}`}
-          className="inline-flex items-center rounded-full px-1.5 py-px text-[10px] leading-snug"
-          style={{ background: bg, color: fg }}
-        >
-          {v}
-        </span>
-      ))}
+      {visible.map((v, i) => {
+        const note = notesByValue?.[v];
+        return (
+          <span
+            key={`${v}-${i}`}
+            className="group/pill relative inline-flex items-center gap-0.5 rounded-full px-1.5 py-px text-[10px] leading-snug"
+            style={{ background: bg, color: fg }}
+            title={note || undefined}
+          >
+            <span>{v}</span>
+            {note && (
+              <span
+                className="font-bold leading-none opacity-60"
+                aria-hidden
+                style={{ fontSize: "9px" }}
+              >
+                ·
+              </span>
+            )}
+          </span>
+        );
+      })}
       {extra > 0 && (
         <span
           className="font-mono text-[10px] text-ink-4"
@@ -917,15 +969,30 @@ function PillStack({
 function TagClusterCell({
   tags,
   cluster,
+  notes,
 }: {
   tags: string[];
   cluster: TagCluster;
+  notes: Record<string, string>;
 }) {
   const colors = TAG_CLUSTER_COLORS[cluster];
-  return <PillStack values={tags} bg={colors.bg} fg={colors.fg} />;
+  return (
+    <PillStack
+      values={tags}
+      bg={colors.bg}
+      fg={colors.fg}
+      notesByValue={notes}
+    />
+  );
 }
 
-function PassionsCell({ names }: { names: string[] }) {
+function PassionsCell({
+  names,
+  notes,
+}: {
+  names: string[];
+  notes: Record<string, string>;
+}) {
   // Names sind lower-cased aus der Server-Aggregation. Capitalize fürs UI.
   const display = names.map((n) =>
     n
@@ -933,22 +1000,51 @@ function PassionsCell({ names }: { names: string[] }) {
       .map((w) => (w.length ? w[0].toUpperCase() + w.slice(1) : w))
       .join(" "),
   );
+  // notes ist auf den lower-cased Namen indiziert — mappen wir auf die
+  // display-Variante damit der Tooltip findet.
+  const displayNotes: Record<string, string> = {};
+  for (let i = 0; i < names.length; i += 1) {
+    const note = notes[names[i]];
+    if (note) displayNotes[display[i]] = note;
+  }
   return (
-    <PillStack values={display} bg={PASSION_COLOR.bg} fg={PASSION_COLOR.fg} />
+    <PillStack
+      values={display}
+      bg={PASSION_COLOR.bg}
+      fg={PASSION_COLOR.fg}
+      notesByValue={displayNotes}
+    />
   );
 }
 
 function CirclesCell({
   circleIds,
   circles,
+  notes,
 }: {
   circleIds: string[];
   circles: CircleRow[];
+  notes: Record<string, string>;
 }) {
-  const names = circleIds
-    .map((id) => circles.find((c) => c.id === id)?.name)
-    .filter((n): n is string => !!n);
+  const items = circleIds
+    .map((id) => {
+      const c = circles.find((cc) => cc.id === id);
+      return c ? { id, name: c.name } : null;
+    })
+    .filter((x): x is { id: string; name: string } => x !== null);
+  const names = items.map((c) => c.name);
+  // Map circle-name → note via id-lookup.
+  const notesByName: Record<string, string> = {};
+  for (const c of items) {
+    const note = notes[c.id];
+    if (note) notesByName[c.name] = note;
+  }
   return (
-    <PillStack values={names} bg={CIRCLE_COLOR.bg} fg={CIRCLE_COLOR.fg} />
+    <PillStack
+      values={names}
+      bg={CIRCLE_COLOR.bg}
+      fg={CIRCLE_COLOR.fg}
+      notesByValue={notesByName}
+    />
   );
 }
