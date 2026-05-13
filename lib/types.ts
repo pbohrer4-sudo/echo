@@ -143,13 +143,27 @@ export interface RelationshipEntry {
 
 // ===== Stakeholder model (Phase 1+2) =====
 
-export const RELATIONSHIP_DEPTHS = [
-  "Fremd",
-  "Bekannt",
-  "Vertraut",
-  "Persönlich",
+export const DEPTH_LEVELS = [
+  "inner_5",
+  "trusted_15",
+  "active_50",
+  "network_150",
+  "periphery_500",
 ] as const;
-export type RelationshipDepth = (typeof RELATIONSHIP_DEPTHS)[number];
+export type DepthLevel = (typeof DEPTH_LEVELS)[number];
+
+export const DEPTH_LABELS: Record<DepthLevel, string> = {
+  inner_5: "Inner Circle",
+  trusted_15: "Enger Kreis",
+  active_50: "Aktiv",
+  network_150: "Netzwerk",
+  periphery_500: "Peripherie",
+};
+
+/** @deprecated use DepthLevel */
+export type RelationshipDepth = DepthLevel;
+/** @deprecated use DEPTH_LEVELS */
+export const RELATIONSHIP_DEPTHS = DEPTH_LEVELS;
 
 export const RELATIONSHIP_WARMTHS = [
   "Aktiv",
@@ -393,7 +407,7 @@ export interface Person {
   priority_bucket: PriorityBucket | null;
   priority_set_at: string | null;
   interests: string[];
-  depth_override: RelationshipDepth | null;
+  depth: DepthLevel | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

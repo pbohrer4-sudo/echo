@@ -4,10 +4,10 @@
 // columns) so we don't need a nightly job to keep them fresh.
 
 import type {
+  DepthLevel,
   Person,
   PriorityBucket,
   PriorityLetter,
-  RelationshipDepth,
   RelationshipWarmth,
 } from "@/lib/types";
 
@@ -32,14 +32,14 @@ export function computeWarmth(
 }
 
 // Beziehungstiefe — derived from interaction count + how long ago we
-// first met them. Manual override always wins. Without interaction
-// history we use person.created_at as a proxy for first contact.
+// first met them. Manual override always wins.
 //
-//   override            → use it
-//   0 interactions      → Fremd
-//   1-3 interactions    → Bekannt
-//   > 3 OR > 6 months   → Vertraut
-//   > 15 AND > 12 months→ Persönlich
+//   override              → use it
+//   0 interactions        → periphery_500
+//   1-3 interactions      → network_150
+//   4-10 interactions     → active_50
+//   11-20 OR > 6 months   → trusted_15
+//   > 20 AND > 12 months  → inner_5
 export function computeDepth({
   interactionCount,
   firstSeenAt,
@@ -47,19 +47,19 @@ export function computeDepth({
 }: {
   interactionCount: number;
   firstSeenAt: string | null;
-  override: RelationshipDepth | null;
-}): RelationshipDepth {
+  override: DepthLevel | null;
+}): DepthLevel {
   if (override) return override;
-  if (interactionCount <= 0) return "Fremd";
-  if (interactionCount <= 3) return "Bekannt";
+  if (interactionCount <= 0) return "periphery_500";
+  if (interactionCount <= 3) return "network_150";
 
   const monthsSpan = firstSeenAt
     ? (Date.now() - new Date(firstSeenAt).getTime()) / (DAY * 30)
     : 0;
 
-  if (interactionCount > 15 && monthsSpan > 12) return "Persönlich";
-  if (interactionCount > 3 || monthsSpan > 6) return "Vertraut";
-  return "Bekannt";
+  if (interactionCount > 20 && monthsSpan > 12) return "inner_5";
+  if (interactionCount > 10 || monthsSpan > 6) return "trusted_15";
+  return "active_50";
 }
 
 // Priorität-Decay — buckets walk forward as time passes since the
@@ -85,7 +85,7 @@ export function relationshipSnapshot(
   interactionCount: number,
 ): {
   warmth: RelationshipWarmth;
-  depth: RelationshipDepth;
+  depth: DepthLevel;
   priority: PriorityLetter | null;
   priorityBucket: PriorityBucket | null;
   priorityDecayed: boolean;
@@ -95,7 +95,7 @@ export function relationshipSnapshot(
   const depth = computeDepth({
     interactionCount,
     firstSeenAt: person.created_at,
-    override: person.depth_override,
+    override: person.depth,
   });
   const decayed = decayedPriorityBucket(
     person.priority_bucket,

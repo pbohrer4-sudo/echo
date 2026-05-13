@@ -13,6 +13,7 @@ import { getProfileDepth } from "@/lib/profile-depth";
 import { StrengthMeter } from "@/components/strength-meter";
 import { GamificationDashboard } from "./gamification-dashboard";
 import { relationshipSnapshot, WARMTH_TONE } from "@/lib/relationship";
+import { DEPTH_LABELS } from "@/lib/types";
 import type { Scope } from "@/lib/types";
 import { DeleteButton } from "./delete-button";
 import { PersonTimeline } from "./timeline";
@@ -165,6 +166,41 @@ function ProfileDepthBar({ person }: { person: import("@/lib/types").Person }) {
   );
 }
 
+function ActionBar({ phones }: { phones: import("@/lib/types").PhoneEntry[] }) {
+  const raw = phones[0]?.value ?? "";
+  const e164 = raw.replace(/\s+/g, "");
+
+  return (
+    <div className="flex gap-2 py-3">
+      <a
+        href={`tel:${e164}`}
+        className="flex h-9 flex-1 items-center justify-center gap-2 rounded border border-transparent text-sm font-medium text-paper transition hover:opacity-90"
+        style={{ background: "oklch(28% 0.04 250)" }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.44 2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.18 6.18l.95-.95a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 17z"/></svg>
+        Anrufen
+      </a>
+      <a
+        href={`https://wa.me/${e164.replace(/^\+/, "")}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex h-9 flex-1 items-center justify-center gap-2 rounded border border-transparent text-sm font-medium text-paper transition hover:opacity-90"
+        style={{ background: "#25D366" }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12.004 2.003C6.473 2.003 2 6.474 2 12.004c0 1.774.463 3.44 1.27 4.895L2 22l5.233-1.252A9.966 9.966 0 0 0 12.004 22C17.535 22 22 17.529 22 12.004c0-5.529-4.465-10.001-9.996-10.001zm0 18.18a8.16 8.16 0 0 1-4.146-1.131l-.297-.176-3.077.735.783-2.998-.194-.308A8.14 8.14 0 0 1 3.82 12.004c0-4.52 3.676-8.198 8.184-8.198 4.504 0 8.18 3.678 8.18 8.198 0 4.52-3.676 8.179-8.18 8.179z"/></svg>
+        WhatsApp
+      </a>
+      <button
+        type="button"
+        className="flex h-9 w-9 items-center justify-center rounded border border-rule text-ink-3 transition hover:border-ink-3 hover:text-ink-1"
+        title="Mehr Optionen"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+      </button>
+    </div>
+  );
+}
+
 function RelationshipBadges({
   person,
   interactionCount,
@@ -200,14 +236,14 @@ function RelationshipBadges({
       <span
         className="tag"
         title={
-          person.depth_override
-            ? `Manuell gesetzt — Auto wäre ${snap.depth}`
+          person.depth
+            ? `Manuell gesetzt — Auto wäre ${DEPTH_LABELS[snap.depth]}`
             : "Aus Interaktionen berechnet"
         }
       >
         <span className="dot" />
-        {snap.depth}
-        {person.depth_override && (
+        {DEPTH_LABELS[snap.depth]}
+        {person.depth && (
           <span className="ml-1 font-mono text-[8px] uppercase tracking-wider text-ink-4">
             manual
           </span>
@@ -432,6 +468,10 @@ export default async function PersonDetailPage({
             <ProfileDepthBar person={person} />
           </div>
         </div>
+
+        {!person.is_self && (person.phones ?? []).length > 0 && (
+          <ActionBar phones={person.phones} />
+        )}
 
         {person.is_self && (
           <SelfProfileTabs personId={person.id} activeTab={activeTab} />
