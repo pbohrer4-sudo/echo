@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listOrganizationDuplicates } from "@/lib/duplicates";
 import { DuplicatePairCard } from "@/components/duplicate-pair-card";
+import { APP_CONFIG } from "@/lib/config";
 
 export const metadata = {
   title: "Doppelte Organisationen",
@@ -23,7 +24,7 @@ export default async function OrganizationDuplicatesPage() {
             Doppelte Organisationen
           </h1>
           <p className="text-sm text-ink-3">
-            ECHO scannt nach Organisationen mit gleichem Namen oder
+            {APP_CONFIG.PUBLIC_NAME} scannt nach Organisationen mit gleichem Namen oder
             gleicher Domain. Beim Mergen werden alle verlinkten Personen
             und Deals auf die behaltene Organisation umgehängt.
           </p>

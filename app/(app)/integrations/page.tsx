@@ -1,5 +1,6 @@
 import { IntegrationsCanvas } from "@/components/integrations-canvas";
 import { INTEGRATIONS } from "@/lib/integrations";
+import { APP_CONFIG } from "@/lib/config";
 
 export default function IntegrationsPage() {
   const total = INTEGRATIONS.length;
@@ -17,7 +18,7 @@ export default function IntegrationsPage() {
             Voice Vibe Integrations
           </h1>
           <p className="max-w-2xl text-sm text-ink-3">
-            Welche Systeme spielen Daten in ECHO, welche bekommen sie raus.
+            Welche Systeme spielen Daten in {APP_CONFIG.PUBLIC_NAME}, welche bekommen sie raus.
             Knoten ziehen, Hintergrund pannen oder zoomen, Klick auf einen
             Knoten oder eine Linie zeigt Workflows und Feld-Mapping. Grün =
             aktiv und Daten fließen, Grau = noch nicht verbunden.

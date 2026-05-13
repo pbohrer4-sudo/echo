@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { updateSettings } from "@/app/(app)/settings/actions";
+import { APP_CONFIG } from "@/lib/config";
 
 interface ProfileRow {
   display_name: string | null;
@@ -85,7 +86,7 @@ export async function SettingsTab({
           </Field>
           <Field
             label="Sprache"
-            hint="Beeinflusst Voice-Erkennung und ECHO-Antworten"
+            hint={`Beeinflusst Voice-Erkennung und ${APP_CONFIG.PUBLIC_NAME}-Antworten`}
           >
             <select
               name="language"
@@ -112,7 +113,7 @@ export async function SettingsTab({
           </Field>
           <Field
             label="Debrief-Zeit"
-            hint="Lokal — wann ECHO dich abends erinnert"
+            hint={`Lokal — wann ${APP_CONFIG.PUBLIC_NAME} dich abends erinnert`}
           >
             <input
               type="time"
@@ -125,7 +126,7 @@ export async function SettingsTab({
 
         <Section
           label="Bring Your Own Keys"
-          hint="Optional. Wenn gesetzt, nutzt ECHO deinen API-Key statt des shared default. Felder leer lassen = unverändert."
+          hint={`Optional. Wenn gesetzt, nutzt ${APP_CONFIG.PUBLIC_NAME} deinen API-Key statt des shared default. Felder leer lassen = unverändert.`}
         >
           <Field
             label="Anthropic API Key"

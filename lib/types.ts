@@ -394,15 +394,12 @@ export interface Person {
   priority_set_at: string | null;
   interests: string[];
   depth_override: RelationshipDepth | null;
-  // Phase A3-A8 (3-Axis + Briefing 3.1/5.1) — alle nullable außer
-  // mode/depth_source die DB-Defaults haben. Legacy-Code ignoriert
-  // diese Felder; UI Phase C nutzt sie zunehmend.
-  first_name: string | null;
-  last_name: string | null;
+  // Phase A3-A8 (3-Axis + Briefing 3.1/5.1) + 0024 (v3-Quickwin-Drops).
+  // first_name/last_name/met_event gibt's NICHT mehr — gedroppt in 0024
+  // per Patrick-Decision (Briefing v3 will sie nicht).
   how_we_met: string | null;
   met_date: string | null;
   met_location: string | null;
-  met_event: string | null;
   depth: Depth | null;
   depth_source: DepthSource;
   purpose: Purpose | null;
@@ -619,13 +616,12 @@ export const MODE_LABELS: Record<Mode, string> = {
 // Interface — der bestehende Type wird in Phase C erweitert, wenn die
 // UI auf die neuen Felder umgestellt wird. Bis dahin können Lib-Funktionen
 // die neuen Felder über diesen Wrapper-Type typed lesen.
+//
+// first_name/last_name/met_event sind raus seit 0024 (v3-Quickwin-Drops).
 export interface PersonNewFields {
-  first_name: string | null;
-  last_name: string | null;
   how_we_met: string | null;
   met_date: string | null;
   met_location: string | null;
-  met_event: string | null;
   depth: Depth | null;
   depth_source: DepthSource;
   purpose: Purpose | null;

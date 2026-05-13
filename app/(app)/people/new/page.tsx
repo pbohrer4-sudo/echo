@@ -1,4 +1,5 @@
 import { QuickAddForm } from "./quick-add-form";
+import { APP_CONFIG } from "@/lib/config";
 
 // Quick-Add Person — 4 Pflicht-Felder (Name, how_we_met, purpose, depth)
 // + Advanced-Toggle mit 7 Zusatz-Feldern (Briefing 5.1, Phase C2).
@@ -21,7 +22,7 @@ export default async function NewPersonPage({
             Person anlegen
           </h1>
           <p className="text-sm text-ink-3">
-            Vier Felder. Den Rest entdeckt ECHO über die Zeit — oder du
+            Vier Felder. Den Rest entdeckt {APP_CONFIG.PUBLIC_NAME} über die Zeit — oder du
             füllst nach auf der Detail-Seite.
           </p>
         </header>

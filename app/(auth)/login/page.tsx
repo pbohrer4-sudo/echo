@@ -1,4 +1,5 @@
 import { signIn } from "./actions";
+import { APP_CONFIG } from "@/lib/config";
 
 type Search = { error?: string };
 
@@ -14,7 +15,7 @@ export default async function LoginPage({
       <div className="w-full max-w-sm space-y-10">
         <header className="space-y-3">
           <p className="t-label">Personal CRM</p>
-          <h1 className="text-3xl font-semibold tracking-tight">ECHO</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">{APP_CONFIG.PUBLIC_NAME}</h1>
           <p className="text-sm text-ink-3">
             Beziehungs-Intelligenz für deinen Tag.
           </p>

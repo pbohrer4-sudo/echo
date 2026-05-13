@@ -8,6 +8,7 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
+import { APP_CONFIG } from "@/lib/config";
 import {
   DEPTH_LABELS,
   PURPOSE_LABELS,
@@ -68,7 +69,7 @@ export function QuickAddForm({ error }: { error?: string }) {
       <Field
         label="Wie wir uns kennengelernt haben"
         required
-        hint="1-3 Sätze. Ort, Anlass, gemeinsame Bekannte. ECHO extrahiert daraus später Details."
+        hint={`1-3 Sätze. Ort, Anlass, gemeinsame Bekannte. ${APP_CONFIG.PUBLIC_NAME} extrahiert daraus später Details.`}
       >
         <textarea
           name="how_we_met"
@@ -108,7 +109,7 @@ export function QuickAddForm({ error }: { error?: string }) {
       <Field
         label="Tiefe"
         required
-        hint='„AI entscheidet" wenn du es nicht weißt — Echo berechnet aus Interaktionen.'
+        hint={`„AI entscheidet" wenn du es nicht weißt — ${APP_CONFIG.PUBLIC_NAME} berechnet aus Interaktionen.`}
       >
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <button

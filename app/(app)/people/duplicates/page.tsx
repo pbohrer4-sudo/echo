@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listPeopleDuplicates } from "@/lib/duplicates";
 import { DuplicatePairCard } from "@/components/duplicate-pair-card";
+import { APP_CONFIG } from "@/lib/config";
 
 export const metadata = {
   title: "Doppelte Personen",
@@ -23,7 +24,7 @@ export default async function PeopleDuplicatesPage() {
             Doppelte Personen
           </h1>
           <p className="text-sm text-ink-3">
-            ECHO findet Personen, die sich mit hoher Wahrscheinlichkeit
+            {APP_CONFIG.PUBLIC_NAME} findet Personen, die sich mit hoher Wahrscheinlichkeit
             überschneiden — über Name, Email, Telefon oder Firma. Beim
             Mergen werden Telefonnummern, Emails, Adressen, Tags,
             Stakeholder-Felder usw. zusammengeführt; Interaktionen,
@@ -44,7 +45,7 @@ export default async function PeopleDuplicatesPage() {
           <div className="rounded-2xl border border-rule bg-paper-2 px-6 py-12 text-center">
             <p className="t-label mb-2">Sauber</p>
             <p className="text-sm text-ink-3">
-              Keine möglichen Duplikate gefunden. ECHO scannt automatisch
+              Keine möglichen Duplikate gefunden. {APP_CONFIG.PUBLIC_NAME} scannt automatisch
               jedes Mal neu, wenn diese Seite geladen wird.
             </p>
           </div>

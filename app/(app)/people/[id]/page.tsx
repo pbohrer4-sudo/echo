@@ -15,6 +15,7 @@ import { AxisBadges } from "@/components/axis-badges";
 import { SuggestionStack } from "./suggestion-stack";
 import { GamificationDashboard } from "./gamification-dashboard";
 import { relationshipSnapshot, WARMTH_TONE } from "@/lib/relationship";
+import { APP_CONFIG } from "@/lib/config";
 import type { Scope } from "@/lib/types";
 import { DeleteButton } from "./delete-button";
 import { PersonTimeline } from "./timeline";
@@ -629,7 +630,7 @@ export default async function PersonDetailPage({
             )}
             {person.notes_summary && (
               <div className="mt-4 rounded border border-rule-soft bg-paper-2 p-4">
-                <p className="t-label mb-2">ECHO-Zusammenfassung</p>
+                <p className="t-label mb-2">{APP_CONFIG.PUBLIC_NAME}-Zusammenfassung</p>
                 <p className="text-sm text-ink-2">{person.notes_summary}</p>
               </div>
             )}

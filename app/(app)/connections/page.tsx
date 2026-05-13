@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listConnections } from "@/lib/connections";
 import { PROVIDERS } from "@/lib/connections-catalog";
+import { APP_CONFIG } from "@/lib/config";
 
 const STATUS_TONE: Record<string, string> = {
   connected: "border-action/40 bg-action-soft text-action",
@@ -54,7 +55,7 @@ export default async function ConnectionsPage({
             Verbindungen
           </h1>
           <p className="max-w-2xl text-sm text-ink-3">
-            Externe Systeme die ECHO ansprechen kann. V1: OAuth-Flow ist
+            Externe Systeme die {APP_CONFIG.PUBLIC_NAME} ansprechen kann. V1: OAuth-Flow ist
             ein Stub — beim Connect wird ein synthetischer Token gespeichert
             damit du die UI testen kannst. V2 wired echte OAuth-Flows pro
             Provider, V3 spawnt MCP-Server und führt Workflow-Actions aus.

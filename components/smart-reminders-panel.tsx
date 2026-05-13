@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { SmartSuggestion } from "@/lib/smart-reminders";
+import { APP_CONFIG } from "@/lib/config";
 
 const TYPE_LABEL: Record<SmartSuggestion["reminder_type"], string> = {
   "check-in": "Check-in",
@@ -79,7 +80,7 @@ export function SmartRemindersPanel() {
     return (
       <div className="rounded-2xl border border-rule bg-paper-2 p-5">
         <p className="t-label mb-1">Smart Reminders</p>
-        <p className="text-xs text-ink-3">ECHO denkt nach…</p>
+        <p className="text-xs text-ink-3">{APP_CONFIG.PUBLIC_NAME} denkt nach…</p>
       </div>
     );
   }
@@ -101,7 +102,7 @@ export function SmartRemindersPanel() {
         <div>
           <p className="t-label">Smart Reminders</p>
           <p className="text-xs text-ink-3">
-            ECHO schlägt vor, was du jetzt anstoßen könntest — based on Cadence
+            {APP_CONFIG.PUBLIC_NAME} schlägt vor, was du jetzt anstoßen könntest — based on Cadence
             + letzte Interaktion.
           </p>
         </div>

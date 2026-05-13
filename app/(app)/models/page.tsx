@@ -8,6 +8,7 @@ import {
   type CatalogModel,
   type ProviderId,
 } from "@/lib/model-catalog";
+import { APP_CONFIG } from "@/lib/config";
 import { TaskPreferenceRow } from "./task-preference-row";
 
 const USD_PER_EUR_HINT = 0.92;
@@ -51,7 +52,7 @@ export default async function ModelsPage() {
           <p className="max-w-2xl text-sm text-ink-3">
             Agnostische KI-Schicht. Pro Aufgabe wählst du ein bevorzugtes
             Modell — die Plattform wächst mit der Technologie. Aktiv heißt
-            in ECHO bereits verdrahtet, geplant heißt im Katalog gelistet
+            in {APP_CONFIG.PUBLIC_NAME} bereits verdrahtet, geplant heißt im Katalog gelistet
             und wartet auf den Provider-Adapter.
           </p>
           <div className="flex flex-wrap gap-2 pt-2">
@@ -74,7 +75,7 @@ export default async function ModelsPage() {
             <span className="rule" />
           </div>
           <p className="text-xs text-ink-4">
-            Welches Modell soll ECHO für welche Aufgabe nutzen. Override
+            Welches Modell soll {APP_CONFIG.PUBLIC_NAME} für welche Aufgabe nutzen. Override
             zeigt sich als Action-Chip — „Default" rechts setzt zurück.
           </p>
           <ul className="overflow-hidden rounded border border-rule bg-paper">
@@ -125,7 +126,7 @@ export default async function ModelsPage() {
 
           <p className="text-xs text-ink-4">
             Preise indikativ in Euro (USD × {USD_PER_EUR_HINT.toFixed(2)})
-            ohne Mehrwertsteuer. ECHO selbst legt keinen Aufschlag drauf —
+            ohne Mehrwertsteuer. {APP_CONFIG.PUBLIC_NAME} selbst legt keinen Aufschlag drauf —
             BYO-Keys gehen direkt zum Provider.
           </p>
         </section>
