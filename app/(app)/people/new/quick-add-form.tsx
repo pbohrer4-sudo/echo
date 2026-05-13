@@ -212,7 +212,7 @@ export function QuickAddForm({ error }: { error?: string }) {
           </div>
           <Field
             label="Tags"
-            hint="Komma-separiert. Max 7. Cluster (Kontext/Thema/Wert/Trigger) wird später re-klassifiziert."
+            hint="Komma-separiert. Max 7. Standard-Cluster: Interests. Auf Detail-Seite re-klassifizierbar (Reminders/Interests/Potential/Origin)."
           >
             <input
               name="tags"

@@ -11,7 +11,10 @@ import {
 } from "@/lib/inbox";
 import { getProfileDepth } from "@/lib/profile-depth";
 import { AxisBadges } from "@/components/axis-badges";
+import { ActionBar } from "@/components/action-bar";
+import { ChannelsList } from "@/components/channels-list";
 import { SuggestionStack } from "./suggestion-stack";
+import { ClusterBlock } from "./cluster-block";
 import { GamificationDashboard } from "./gamification-dashboard";
 import { APP_CONFIG } from "@/lib/config";
 import { DeleteButton } from "./delete-button";
@@ -20,10 +23,7 @@ import { PersonReminders, PersonTodos } from "./person-tasks";
 import {
   AddressList,
   DateList,
-  EmailList,
-  PhoneList,
   RelationshipList,
-  SocialList,
 } from "./contact-fields";
 import { WhatsappSendBox } from "@/components/whatsapp-send-box";
 import {
@@ -293,30 +293,52 @@ export default async function PersonDetailPage({
           </div>
         )}
 
+        {!person.is_self && (
+          <ActionBar
+            phones={person.phones ?? []}
+            emails={person.emails ?? []}
+          />
+        )}
+
         {!person.is_self && <SuggestionStack personId={person.id} />}
 
-        {showProfileBody && (
-          <div className="animate-in fade-in slide-in-from-top-2 duration-300 grid gap-10 md:grid-cols-2">
-            <section className="space-y-3">
-              <div className="section-head">
-                <span className="t-label">Telefon</span>
-                <span className="rule" />
-              </div>
-              <PhoneList phones={person.phones ?? []} />
-              <WhatsappSendBox
-                personId={person.id}
-                phones={person.phones ?? []}
-              />
-            </section>
+        {!person.is_self && <ClusterBlock personId={person.id} />}
 
-            <section>
-              <div className="section-head">
-                <span className="t-label">Email</span>
-                <span className="rule" />
-              </div>
-              <EmailList emails={person.emails ?? []} />
-            </section>
-          </div>
+        {!person.is_self && (
+          <ChannelsList
+            phones={person.phones ?? []}
+            emails={person.emails ?? []}
+            socials={person.socials ?? []}
+          />
+        )}
+
+        {/* Telefon/Email/Social-Sektionen entfernt — ChannelsList oben
+            ersetzt sie mit Briefing-v3-Style Action-Pattern. */}
+
+        {showProfileBody && person.is_self && (
+          <section>
+            <div className="section-head">
+              <span className="t-label">WhatsApp · komponieren</span>
+              <span className="rule" />
+            </div>
+            <WhatsappSendBox
+              personId={person.id}
+              phones={person.phones ?? []}
+            />
+          </section>
+        )}
+
+        {showProfileBody && !person.is_self && (person.phones?.length ?? 0) > 0 && (
+          <section>
+            <div className="section-head">
+              <span className="t-label">WhatsApp · komponieren</span>
+              <span className="rule" />
+            </div>
+            <WhatsappSendBox
+              personId={person.id}
+              phones={person.phones ?? []}
+            />
+          </section>
         )}
 
         {showProfileBody && (person.addresses?.length ?? 0) > 0 && (
@@ -326,16 +348,6 @@ export default async function PersonDetailPage({
               <span className="rule" />
             </div>
             <AddressList addresses={person.addresses ?? []} />
-          </section>
-        )}
-
-        {showProfileBody && (person.socials?.length ?? 0) > 0 && (
-          <section>
-            <div className="section-head">
-              <span className="t-label">Social</span>
-              <span className="rule" />
-            </div>
-            <SocialList socials={person.socials ?? []} />
           </section>
         )}
 
