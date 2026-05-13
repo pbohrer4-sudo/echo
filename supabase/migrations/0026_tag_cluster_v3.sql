@@ -38,9 +38,13 @@ create table if not exists public.passions (
   person_id uuid references public.people(id) on delete cascade not null,
   name text not null,
   created_at timestamptz not null default now(),
-  constraint passions_name_not_empty check (length(trim(name)) > 0),
-  unique (person_id, lower(name))
+  constraint passions_name_not_empty check (length(trim(name)) > 0)
 );
+
+-- Case-insensitive unique constraint via expression index. Inline-
+-- UNIQUE-Constraints in Postgres erlauben keine Funktionsaufrufe.
+create unique index if not exists idx_passions_person_lower_name
+  on public.passions (person_id, lower(name));
 
 create index if not exists idx_passions_person on public.passions(person_id);
 create index if not exists idx_passions_user on public.passions(user_id);
@@ -98,9 +102,12 @@ create table if not exists public.circles (
   description text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint circles_name_not_empty check (length(trim(name)) > 0),
-  unique (user_id, lower(name))
+  constraint circles_name_not_empty check (length(trim(name)) > 0)
 );
+
+-- Case-insensitive unique constraint als expression index.
+create unique index if not exists idx_circles_user_lower_name
+  on public.circles (user_id, lower(name));
 
 create index if not exists idx_circles_user on public.circles(user_id);
 
