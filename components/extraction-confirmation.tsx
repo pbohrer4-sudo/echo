@@ -313,6 +313,7 @@ function makeEdit(call: ToolCall): CallEdit {
       };
 
     case "suggest_replies":
+    case "query_people":
       return base; // filtered out before reaching this card
   }
 }
@@ -420,6 +421,7 @@ function applyEdit(edit: CallEdit): ToolCall {
       setIf("priority", edit.priority);
       break;
     case "suggest_replies":
+    case "query_people":
       // not reached — filtered before render
       break;
   }
@@ -454,6 +456,7 @@ function callHeader(edit: CallEdit): string {
     case "create_todo":
       return "Aufgabe";
     case "suggest_replies":
+    case "query_people":
       return "";
   }
 }

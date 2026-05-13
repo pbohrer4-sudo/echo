@@ -8,7 +8,13 @@
 // Row-Rendering bleibt people-spezifisch.
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  isEmptyFilter,
+  serializeFilterToParams,
+  type PeopleFilterSpec,
+} from "@/lib/people-filter";
 import {
   CIRCLE_COLOR,
   DEPTH_LABELS,
@@ -54,6 +60,10 @@ interface Props {
   passions: string[];
   locations: LocationOption[];
   totalCount?: number;
+  // Voice / Deep-Link: initiale Filter aus URL-Params. Wenn gesetzt,
+  // wird die UI sofort mit diesen Filtern gerendert; jede manuelle
+  // Änderung schreibt zurück in die URL.
+  initialFilter?: PeopleFilterSpec;
 }
 
 // ───────── Column Registry ─────────
@@ -173,18 +183,99 @@ export function PeopleTable({
   passions,
   locations,
   totalCount,
+  initialFilter,
 }: Props) {
-  const [search, setSearch] = useState("");
-  const [modeFilter, setModeFilter] = useState<"all" | Mode>("all");
-  const [purposeFilter, setPurposeFilter] = useState<"all" | Purpose>("all");
-  const [depthFilter, setDepthFilter] = useState<"all" | Depth>("all");
-  const [clusterFilter, setClusterFilter] = useState<"all" | TagCluster>(
-    "all",
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // initialFilter aus URL (Voice/Deep-Link). circle kommt entweder als
+  // circle_id ODER als name-substring — bei name suchen wir die circle_id.
+  // location kommt lower-cased — passt direkt zu locationFilter-value.
+  const resolvedCircleId = useMemo(() => {
+    const v = initialFilter?.circle;
+    if (!v) return undefined;
+    // Wenn UUID, direkt nehmen.
+    if (/^[0-9a-f-]{36}$/i.test(v)) {
+      return circles.find((c) => c.id === v)?.id;
+    }
+    // Substring-Match über alle Circles.
+    const lower = v.toLowerCase();
+    return circles.find((c) => c.name.toLowerCase().includes(lower))?.id;
+  }, [initialFilter?.circle, circles]);
+
+  const resolvedLocation = useMemo(() => {
+    const v = initialFilter?.location;
+    if (!v) return undefined;
+    // Substring-Match gegen die known locations damit Dropdown-Value matched.
+    const hit = locations.find((l) => l.value.includes(v));
+    return hit?.value ?? v;
+  }, [initialFilter?.location, locations]);
+
+  const [search, setSearch] = useState(initialFilter?.q ?? "");
+  const [modeFilter, setModeFilter] = useState<"all" | Mode>(
+    initialFilter?.mode ?? "all",
   );
-  const [passionFilter, setPassionFilter] = useState<string>("all");
-  const [circleFilter, setCircleFilter] = useState<string>("all");
-  const [locationFilter, setLocationFilter] = useState<string>("all");
-  const [channelFilter, setChannelFilter] = useState<ChannelFilter>("all");
+  const [purposeFilter, setPurposeFilter] = useState<"all" | Purpose>(
+    initialFilter?.purpose ?? "all",
+  );
+  const [depthFilter, setDepthFilter] = useState<"all" | Depth>(
+    initialFilter?.depth ?? "all",
+  );
+  const [clusterFilter, setClusterFilter] = useState<"all" | TagCluster>(
+    initialFilter?.cluster ?? "all",
+  );
+  const [passionFilter, setPassionFilter] = useState<string>(
+    initialFilter?.passion ?? "all",
+  );
+  const [circleFilter, setCircleFilter] = useState<string>(
+    resolvedCircleId ?? "all",
+  );
+  const [locationFilter, setLocationFilter] = useState<string>(
+    resolvedLocation ?? "all",
+  );
+  const [channelFilter, setChannelFilter] = useState<ChannelFilter>(
+    initialFilter?.channel ?? "all",
+  );
+
+  // URL-Sync — jede Filter-Änderung schreibt die URL um, sodass der
+  // Stand bookmarkbar/shareable bleibt. Beim ersten Render skip damit
+  // wir nicht mit ?cluster=all&… volllaufen.
+  const skipFirstSync = useRef(true);
+  useEffect(() => {
+    if (skipFirstSync.current) {
+      skipFirstSync.current = false;
+      return;
+    }
+    const spec: PeopleFilterSpec = {};
+    if (search.trim()) spec.q = search.trim();
+    if (modeFilter !== "all") spec.mode = modeFilter;
+    if (purposeFilter !== "all") spec.purpose = purposeFilter;
+    if (depthFilter !== "all") spec.depth = depthFilter;
+    if (clusterFilter !== "all") spec.cluster = clusterFilter;
+    if (passionFilter !== "all") spec.passion = passionFilter;
+    if (circleFilter !== "all") spec.circle = circleFilter;
+    if (locationFilter !== "all") spec.location = locationFilter;
+    if (channelFilter !== "all") spec.channel = channelFilter;
+    const params = serializeFilterToParams(spec);
+    const qs = params.toString();
+    const target = qs ? `${pathname}?${qs}` : pathname;
+    router.replace(target, { scroll: false });
+  }, [
+    search,
+    modeFilter,
+    purposeFilter,
+    depthFilter,
+    clusterFilter,
+    passionFilter,
+    circleFilter,
+    locationFilter,
+    channelFilter,
+    pathname,
+    router,
+  ]);
+
+  // Aktive-Filter-Indikator nutzt isEmptyFilter unten (siehe activeFilterCount).
+  void isEmptyFilter;
 
   // Column-Config (Attio-Pattern) — Hook handelt visibility + order +
   // persistence + sort + DnD-Sensoren komplett ab.

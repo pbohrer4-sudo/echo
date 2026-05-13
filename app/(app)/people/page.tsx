@@ -3,8 +3,16 @@ import { listPeopleDuplicates } from "@/lib/duplicates";
 import { listAllCircles } from "@/lib/circles";
 import { PeopleTable } from "./people-table";
 import { DuplicateBanner } from "@/components/duplicate-banner";
+import { parseFilterFromParams } from "@/lib/people-filter";
 
-export default async function PeoplePage() {
+export default async function PeoplePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const params = await searchParams;
+  const initialFilter = parseFilterFromParams(params);
+
   const [contextRows, dupes, circles] = await Promise.all([
     listPeopleWithContext(),
     listPeopleDuplicates(),
@@ -74,6 +82,7 @@ export default async function PeoplePage() {
           passions={passionsList}
           locations={locationsList}
           totalCount={rows.length}
+          initialFilter={initialFilter}
         />
       </div>
     </div>

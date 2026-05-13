@@ -11,6 +11,10 @@ import {
 import { useRouter } from "next/navigation";
 import type { ToolCall } from "@/lib/tools";
 import type { BusinessCardData } from "@/lib/business-card";
+import {
+  serializeFilterToParams,
+  type PeopleFilterSpec,
+} from "@/lib/people-filter";
 import { stripMarkdown } from "@/lib/text";
 import { ExtractionConfirmation } from "./extraction-confirmation";
 
@@ -402,8 +406,19 @@ export function VoiceOrb() {
           ]);
         }
 
+        // query_people ist read-only: Voice navigiert den Nutzer zur
+        // People-Liste mit gesetzten Filtern, ohne Confirmation-Dialog.
+        const queryCall = (toolCalls ?? []).find(
+          (c) => c.name === "query_people",
+        );
+        if (queryCall) {
+          const spec = queryCall.input as PeopleFilterSpec;
+          const qs = serializeFilterToParams(spec).toString();
+          router.push(qs ? `/people?${qs}` : "/people");
+        }
+
         const writeCalls = (toolCalls ?? []).filter(
-          (c) => c.name !== "suggest_replies",
+          (c) => c.name !== "suggest_replies" && c.name !== "query_people",
         );
         const hasExtractions = writeCalls.length > 0;
         if (hasExtractions) setPendingToolCalls(writeCalls);
