@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { updateSettings } from "@/app/(app)/settings/actions";
+import { updateSettings, restartOnboarding } from "@/app/(app)/settings/actions";
 import { APP_CONFIG } from "@/lib/config";
 
 interface ProfileRow {
@@ -202,6 +202,20 @@ export async function SettingsTab({
           </button>
         </div>
       </form>
+
+      <Section
+        label="Onboarding"
+        hint="Du kannst den Einrichtungs-Assistenten jederzeit erneut durchlaufen — alle Daten bleiben erhalten, nur die Wizard-Schritte werden wieder gezeigt."
+      >
+        <form action={restartOnboarding}>
+          <button
+            type="submit"
+            className="rounded border border-rule bg-paper px-4 py-2 text-sm text-ink-2 transition hover:border-action hover:text-action"
+          >
+            Onboarding erneut starten
+          </button>
+        </form>
+      </Section>
     </div>
   );
 }

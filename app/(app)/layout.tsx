@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getOrCreateSelfPerson } from "@/lib/people";
 import { isAdminEmail } from "@/lib/admin";
 import { countOverdueReminders } from "@/lib/inbox";
+import { getOnboardingProgress, isComplete } from "@/lib/onboarding";
 import { APP_CONFIG } from "@/lib/config";
 import { SignOutButton } from "./sign-out-button";
 import { NavLink } from "./nav-link";
@@ -33,6 +34,15 @@ export default async function AppLayout({
 
   if (!user) {
     redirect("/login");
+  }
+
+  // Onboarding-Gate — wenn nicht abgeschlossen, zum Wizard schicken.
+  // Liegt VOR getOrCreateSelfPerson damit der Wizard die Self-Person
+  // beim Welcome-Step kontrolliert anlegt (Name aus dem Wizard-Input
+  // statt aus dem Email-Fallback).
+  const onboarding = await getOnboardingProgress();
+  if (!isComplete(onboarding)) {
+    redirect("/onboarding");
   }
 
   const self = await getOrCreateSelfPerson();
