@@ -13,6 +13,7 @@ import { getProfileDepth } from "@/lib/profile-depth";
 import { AxisBadges } from "@/components/axis-badges";
 import { ActionBar } from "@/components/action-bar";
 import { ChannelsList } from "@/components/channels-list";
+import { DraftGenerator } from "@/components/draft-generator";
 import { SuggestionStack } from "./suggestion-stack";
 import { ClusterBlock } from "./cluster-block";
 import { GamificationDashboard } from "./gamification-dashboard";
@@ -25,7 +26,8 @@ import {
   DateList,
   RelationshipList,
 } from "./contact-fields";
-import { WhatsappSendBox } from "@/components/whatsapp-send-box";
+// WhatsappSendBox durch DraftGenerator ersetzt (Phase D1) — alter
+// Manual-Composer hatte keine AI-Drafts und keine Use-Case-Templates.
 import {
   SelfProfileTabs,
   parseSelfTab,
@@ -315,30 +317,12 @@ export default async function PersonDetailPage({
         {/* Telefon/Email/Social-Sektionen entfernt — ChannelsList oben
             ersetzt sie mit Briefing-v3-Style Action-Pattern. */}
 
-        {showProfileBody && person.is_self && (
-          <section>
-            <div className="section-head">
-              <span className="t-label">WhatsApp · komponieren</span>
-              <span className="rule" />
-            </div>
-            <WhatsappSendBox
-              personId={person.id}
-              phones={person.phones ?? []}
-            />
-          </section>
-        )}
-
-        {showProfileBody && !person.is_self && (person.phones?.length ?? 0) > 0 && (
-          <section>
-            <div className="section-head">
-              <span className="t-label">WhatsApp · komponieren</span>
-              <span className="rule" />
-            </div>
-            <WhatsappSendBox
-              personId={person.id}
-              phones={person.phones ?? []}
-            />
-          </section>
+        {!person.is_self && (
+          <DraftGenerator
+            personId={person.id}
+            personName={person.name}
+            phones={person.phones ?? []}
+          />
         )}
 
         {showProfileBody && (person.addresses?.length ?? 0) > 0 && (
