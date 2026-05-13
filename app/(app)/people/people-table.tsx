@@ -1,17 +1,21 @@
 "use client";
 
-// People-Tabelle (Phase C5 v4): Filter-Dropdowns in einer Toolbar
-// statt Pills in mehreren Reihen. Filter: Modus, Zweck, Cluster,
-// Passion, Circle. Plus Search + Inline-Actions pro Row.
+// People-Tabelle (Phase C5 v5): Column-Toggle + erweiterte Filter.
+//
+// User entscheidet welche Spalten sichtbar sind (persistiert in
+// localStorage). Filter umfassen alle relevanten Person-Felder:
+// Mode, Zweck, Tiefe, Tag-Cluster, Passion, Circle, Ort, Kanäle.
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  DEPTH_LABELS,
   MODE_LABELS,
   PURPOSE_LABELS,
   TAG_CLUSTER_COLORS,
   TAG_CLUSTER_LABELS,
   type CircleRow,
+  type Depth,
   type Mode,
   type Person,
   type Purpose,
@@ -20,27 +24,102 @@ import {
 
 type SortKey = "name" | "company" | "last_contact_at";
 type SortDir = "asc" | "desc";
+type ChannelFilter = "all" | "has_phone" | "has_email" | "has_linkedin";
 
 interface Row {
   person: Person;
   clusters: string[];
-  passions: string[];   // lower-cased names
+  passions: string[];
   circleIds: string[];
+}
+
+interface LocationOption {
+  value: string; // lower-cased
+  label: string; // original
 }
 
 interface Props {
   rows: Row[];
   circles: CircleRow[];
-  passions: string[];   // distinct lower-cased names, alphabetically
+  passions: string[];
+  locations: LocationOption[];
   totalCount?: number;
 }
 
-const CLUSTER_ORDER: TagCluster[] = [
-  "reminders",
-  "interests",
-  "potential",
-  "origin",
+// ───────── Column Registry ─────────
+type ColumnKey =
+  | "avatar"      // always
+  | "name"        // always
+  | "company"
+  | "purpose"
+  | "mode"
+  | "depth"
+  | "cadence"
+  | "last_contact"
+  | "current_location"
+  | "met_location"
+  | "tags_count"
+  | "passions_count"
+  | "circles_count"
+  | "actions";    // always
+
+interface ColumnDef {
+  key: ColumnKey;
+  label: string;
+  always?: boolean;
+  default: boolean;
+  sortKey?: SortKey;
+  gridCol: string;
+  align?: "left" | "right";
+}
+
+const COLUMNS: ColumnDef[] = [
+  { key: "avatar", label: "Avatar", always: true, default: true, gridCol: "40px" },
+  { key: "name", label: "Name", always: true, default: true, sortKey: "name", gridCol: "minmax(180px,1.6fr)" },
+  { key: "company", label: "Firma · Rolle", default: true, sortKey: "company", gridCol: "minmax(140px,1fr)" },
+  { key: "purpose", label: "Zweck", default: true, gridCol: "100px" },
+  { key: "mode", label: "Modus", default: true, gridCol: "100px" },
+  { key: "depth", label: "Tiefe", default: false, gridCol: "110px" },
+  { key: "cadence", label: "Cadence", default: false, gridCol: "80px", align: "right" },
+  { key: "last_contact", label: "Letzter Kontakt", default: true, sortKey: "last_contact_at", gridCol: "110px" },
+  { key: "current_location", label: "Stadt", default: false, gridCol: "120px" },
+  { key: "met_location", label: "Wo getroffen", default: false, gridCol: "140px" },
+  { key: "tags_count", label: "Tags", default: false, gridCol: "60px", align: "right" },
+  { key: "passions_count", label: "Pas.", default: false, gridCol: "60px", align: "right" },
+  { key: "circles_count", label: "Circ.", default: false, gridCol: "60px", align: "right" },
+  { key: "actions", label: "Aktionen", always: true, default: true, gridCol: "auto", align: "right" },
 ];
+
+const STORAGE_KEY = "echo:people:columns:v2";
+
+function loadVisibleColumns(): Set<ColumnKey> {
+  if (typeof window === "undefined") {
+    return new Set(COLUMNS.filter((c) => c.default).map((c) => c.key));
+  }
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as string[];
+      if (Array.isArray(parsed)) {
+        const validKeys = new Set(COLUMNS.map((c) => c.key));
+        const set = new Set<ColumnKey>();
+        for (const k of parsed) {
+          if (validKeys.has(k as ColumnKey)) set.add(k as ColumnKey);
+        }
+        // Always-Columns immer aktiv halten falls aus alter localStorage-Version fehlend
+        for (const c of COLUMNS) {
+          if (c.always) set.add(c.key);
+        }
+        return set;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return new Set(COLUMNS.filter((c) => c.default).map((c) => c.key));
+}
+
+// ───────── Utils ─────────
 
 function initials(name: string): string {
   return name
@@ -98,29 +177,99 @@ function primaryEmail(person: Person): string | null {
   return person.emails?.[0]?.value ?? null;
 }
 
+const CLUSTER_ORDER: TagCluster[] = [
+  "reminders",
+  "interests",
+  "potential",
+  "origin",
+];
+
+// ───────── Main ─────────
+
 export function PeopleTable({
   rows,
   circles,
   passions,
+  locations,
   totalCount,
 }: Props) {
   const [search, setSearch] = useState("");
   const [modeFilter, setModeFilter] = useState<"all" | Mode>("all");
   const [purposeFilter, setPurposeFilter] = useState<"all" | Purpose>("all");
+  const [depthFilter, setDepthFilter] = useState<"all" | Depth>("all");
   const [clusterFilter, setClusterFilter] = useState<"all" | TagCluster>(
     "all",
   );
   const [passionFilter, setPassionFilter] = useState<string>("all");
   const [circleFilter, setCircleFilter] = useState<string>("all");
+  const [locationFilter, setLocationFilter] = useState<string>("all");
+  const [channelFilter, setChannelFilter] = useState<ChannelFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  const [visibleCols, setVisibleCols] = useState<Set<ColumnKey>>(
+    () => new Set(COLUMNS.filter((c) => c.default).map((c) => c.key)),
+  );
+  const [hydrated, setHydrated] = useState(false);
+  const [colsOpen, setColsOpen] = useState(false);
+  const colsRef = useRef<HTMLDivElement | null>(null);
+
+  // Hydrate column-visibility nach Mount damit SSR/Client matchen
+  useEffect(() => {
+    setVisibleCols(loadVisibleColumns());
+    setHydrated(true);
+  }, []);
+
+  // Persist on change
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(Array.from(visibleCols)),
+      );
+    } catch {
+      // ignore
+    }
+  }, [visibleCols, hydrated]);
+
+  // Click-outside fuer Cols-Popover
+  useEffect(() => {
+    if (!colsOpen) return;
+    function onDoc(e: MouseEvent) {
+      if (!colsRef.current) return;
+      if (!colsRef.current.contains(e.target as Node)) setColsOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [colsOpen]);
+
+  function toggleColumn(key: ColumnKey) {
+    setVisibleCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        // Always-Columns nicht entfernbar
+        const def = COLUMNS.find((c) => c.key === key);
+        if (def?.always) return prev;
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
+  const activeColumns = COLUMNS.filter((c) => visibleCols.has(c.key));
 
   const activeFilterCount =
     (modeFilter !== "all" ? 1 : 0) +
     (purposeFilter !== "all" ? 1 : 0) +
+    (depthFilter !== "all" ? 1 : 0) +
     (clusterFilter !== "all" ? 1 : 0) +
     (passionFilter !== "all" ? 1 : 0) +
-    (circleFilter !== "all" ? 1 : 0);
+    (circleFilter !== "all" ? 1 : 0) +
+    (locationFilter !== "all" ? 1 : 0) +
+    (channelFilter !== "all" ? 1 : 0);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -128,12 +277,31 @@ export function PeopleTable({
       const p = r.person;
       if (modeFilter !== "all" && p.mode !== modeFilter) return false;
       if (purposeFilter !== "all" && p.purpose !== purposeFilter) return false;
+      if (depthFilter !== "all" && p.depth !== depthFilter) return false;
       if (clusterFilter !== "all" && !r.clusters.includes(clusterFilter))
         return false;
       if (passionFilter !== "all" && !r.passions.includes(passionFilter))
         return false;
       if (circleFilter !== "all" && !r.circleIds.includes(circleFilter))
         return false;
+
+      // Location-Filter — match gegen current/home/met_location case-insensitive
+      if (locationFilter !== "all") {
+        const cands = [
+          p.current_location?.toLowerCase(),
+          p.home_location?.toLowerCase(),
+          p.met_location?.toLowerCase(),
+        ].filter((x): x is string => Boolean(x));
+        if (!cands.includes(locationFilter)) return false;
+      }
+
+      // Channel-Filter
+      if (channelFilter === "has_phone" && (p.phones?.length ?? 0) === 0)
+        return false;
+      if (channelFilter === "has_email" && (p.emails?.length ?? 0) === 0)
+        return false;
+      if (channelFilter === "has_linkedin" && !p.linkedin_url) return false;
+
       if (!q) return true;
       const haystack = [
         p.name,
@@ -155,9 +323,12 @@ export function PeopleTable({
     search,
     modeFilter,
     purposeFilter,
+    depthFilter,
     clusterFilter,
     passionFilter,
     circleFilter,
+    locationFilter,
+    channelFilter,
   ]);
 
   const sorted = useMemo(() => {
@@ -193,14 +364,19 @@ export function PeopleTable({
   function resetFilters() {
     setModeFilter("all");
     setPurposeFilter("all");
+    setDepthFilter("all");
     setClusterFilter("all");
     setPassionFilter("all");
     setCircleFilter("all");
+    setLocationFilter("all");
+    setChannelFilter("all");
   }
+
+  const gridTemplate = activeColumns.map((c) => c.gridCol).join(" ");
 
   return (
     <div className="space-y-4">
-      {/* Toolbar: Search + Filter-Dropdowns + Actions */}
+      {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
         <input
           type="text"
@@ -237,6 +413,19 @@ export function PeopleTable({
         />
 
         <FilterSelect
+          label="Tiefe"
+          value={depthFilter}
+          onChange={(v) => setDepthFilter(v as "all" | Depth)}
+          options={[
+            { value: "all", label: "Alle" },
+            ...(Object.keys(DEPTH_LABELS) as Depth[]).map((d) => ({
+              value: d,
+              label: DEPTH_LABELS[d],
+            })),
+          ]}
+        />
+
+        <FilterSelect
           label="Cluster"
           value={clusterFilter}
           onChange={(v) => setClusterFilter(v as "all" | TagCluster)}
@@ -261,10 +450,7 @@ export function PeopleTable({
             onChange={setPassionFilter}
             options={[
               { value: "all", label: "Alle" },
-              ...passions.map((p) => ({
-                value: p,
-                label: titleCase(p),
-              })),
+              ...passions.map((p) => ({ value: p, label: titleCase(p) })),
             ]}
           />
         )}
@@ -276,13 +462,34 @@ export function PeopleTable({
             onChange={setCircleFilter}
             options={[
               { value: "all", label: "Alle" },
-              ...circles.map((c) => ({
-                value: c.id,
-                label: c.name,
-              })),
+              ...circles.map((c) => ({ value: c.id, label: c.name })),
             ]}
           />
         )}
+
+        {locations.length > 0 && (
+          <FilterSelect
+            label="Ort"
+            value={locationFilter}
+            onChange={setLocationFilter}
+            options={[
+              { value: "all", label: "Alle" },
+              ...locations.map((l) => ({ value: l.value, label: l.label })),
+            ]}
+          />
+        )}
+
+        <FilterSelect
+          label="Kanäle"
+          value={channelFilter}
+          onChange={(v) => setChannelFilter(v as ChannelFilter)}
+          options={[
+            { value: "all", label: "Alle" },
+            { value: "has_phone", label: "Hat Telefon" },
+            { value: "has_email", label: "Hat Email" },
+            { value: "has_linkedin", label: "Hat LinkedIn" },
+          ]}
+        />
 
         {activeFilterCount > 0 && (
           <button
@@ -296,6 +503,68 @@ export function PeopleTable({
         )}
 
         <div className="ml-auto flex items-center gap-2">
+          {/* Column-Toggle */}
+          <div className="relative" ref={colsRef}>
+            <button
+              type="button"
+              onClick={() => setColsOpen((v) => !v)}
+              className="inline-flex h-9 items-center gap-1.5 rounded border border-rule bg-paper px-3 text-xs text-ink-2 transition hover:border-action hover:text-action"
+              title="Spalten ein-/ausblenden"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <path d="M9 3v18M15 3v18" />
+              </svg>
+              Spalten
+            </button>
+            {colsOpen && (
+              <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded border border-rule bg-paper p-1 shadow-[0_4px_14px_rgba(20,17,13,0.08)]">
+                <div className="t-label border-b border-rule-soft px-3 py-2">
+                  Spalten ({activeColumns.length}/{COLUMNS.length})
+                </div>
+                <ul className="max-h-80 overflow-y-auto py-1">
+                  {COLUMNS.map((c) => {
+                    const checked = visibleCols.has(c.key);
+                    const disabled = c.always === true;
+                    return (
+                      <li key={c.key}>
+                        <label
+                          className={`flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs transition hover:bg-paper-2 ${
+                            disabled ? "opacity-50" : ""
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={disabled}
+                            onChange={() => toggleColumn(c.key)}
+                            className="h-3.5 w-3.5 accent-[var(--action)]"
+                          />
+                          <span className="flex-1 text-ink-1">{c.label}</span>
+                          {disabled && (
+                            <span className="font-mono text-[9px] uppercase tracking-wider text-ink-4">
+                              fix
+                            </span>
+                          )}
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </div>
+
           <Link
             href="/people/import"
             className="inline-flex h-9 items-center rounded border border-rule px-3 text-xs text-ink-2 transition hover:border-action hover:text-action"
@@ -311,55 +580,80 @@ export function PeopleTable({
         </div>
       </div>
 
-      {/* Header */}
-      <div className="overflow-hidden rounded border border-rule bg-paper">
-        <div className="grid grid-cols-[40px_minmax(180px,1.6fr)_minmax(140px,1fr)_100px_100px_110px_auto] gap-3 border-b border-rule bg-paper-2 px-4 py-2.5 text-xs">
-          <span className="t-label" />
-          <button
-            type="button"
-            onClick={() => toggleSort("name")}
-            className="t-label text-left transition hover:text-ink-1"
+      {/* Table */}
+      <div className="overflow-x-auto rounded border border-rule bg-paper">
+        <div className="min-w-max">
+          {/* Header */}
+          <div
+            className="grid gap-3 border-b border-rule bg-paper-2 px-4 py-2.5 text-xs"
+            style={{ gridTemplateColumns: gridTemplate }}
           >
-            Name {sortKey === "name" && (sortDir === "asc" ? "↑" : "↓")}
-          </button>
-          <button
-            type="button"
-            onClick={() => toggleSort("company")}
-            className="t-label text-left transition hover:text-ink-1"
-          >
-            Firma{" "}
-            {sortKey === "company" && (sortDir === "asc" ? "↑" : "↓")}
-          </button>
-          <span className="t-label">Zweck</span>
-          <span className="t-label">Modus</span>
-          <button
-            type="button"
-            onClick={() => toggleSort("last_contact_at")}
-            className="t-label text-left transition hover:text-ink-1"
-          >
-            Letzter Kontakt{" "}
-            {sortKey === "last_contact_at" && (sortDir === "asc" ? "↑" : "↓")}
-          </button>
-          <span className="t-label text-right">Aktionen</span>
-        </div>
-
-        {sorted.length === 0 ? (
-          <div className="px-4 py-12 text-center text-sm italic text-ink-3">
-            {totalCount === 0
-              ? "Noch keine Personen — leg die erste an."
-              : "Keine Treffer für diese Filter."}
+            {activeColumns.map((c) => (
+              <HeaderCell
+                key={c.key}
+                column={c}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={(k) => toggleSort(k)}
+              />
+            ))}
           </div>
-        ) : (
-          sorted.map((r) => <PersonTableRow key={r.person.id} person={r.person} />)
-        )}
+
+          {sorted.length === 0 ? (
+            <div className="px-4 py-12 text-center text-sm italic text-ink-3">
+              {totalCount === 0
+                ? "Noch keine Personen — leg die erste an."
+                : "Keine Treffer für diese Filter."}
+            </div>
+          ) : (
+            sorted.map((r) => (
+              <PersonTableRow
+                key={r.person.id}
+                row={r}
+                activeColumns={activeColumns}
+                gridTemplate={gridTemplate}
+                circles={circles}
+              />
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-// Native-Select-Dropdown — barrierearm + responsive ohne Library.
-// "label" steht als Text vor dem Wert. Optional highlight-Tönung
-// für Cluster.
+// ───────── Header Cell ─────────
+
+function HeaderCell({
+  column,
+  sortKey,
+  sortDir,
+  onSort,
+}: {
+  column: ColumnDef;
+  sortKey: SortKey;
+  sortDir: SortDir;
+  onSort: (k: SortKey) => void;
+}) {
+  const alignClass = column.align === "right" ? "text-right" : "text-left";
+  if (column.key === "avatar") return <span className="t-label" />;
+  if (column.sortKey) {
+    return (
+      <button
+        type="button"
+        onClick={() => onSort(column.sortKey!)}
+        className={`t-label transition hover:text-ink-1 ${alignClass}`}
+      >
+        {column.label}{" "}
+        {sortKey === column.sortKey && (sortDir === "asc" ? "↑" : "↓")}
+      </button>
+    );
+  }
+  return <span className={`t-label ${alignClass}`}>{column.label}</span>;
+}
+
+// ───────── Filter Select ─────────
+
 function FilterSelect({
   label,
   value,
@@ -404,104 +698,210 @@ function FilterSelect({
   );
 }
 
-// Eine Zeile in der Personen-Tabelle. Inline-Actions am Ende.
-function PersonTableRow({ person }: { person: Person }) {
-  const phone = primaryPhone(person);
-  const email = primaryEmail(person);
-  const phoneDigits = phone ? normalizeForWaMe(phone) : "";
-  const hasUsablePhone = phoneDigits.length >= 7;
+// ───────── Row Renderer ─────────
 
+function PersonTableRow({
+  row,
+  activeColumns,
+  gridTemplate,
+  circles,
+}: {
+  row: Row;
+  activeColumns: ColumnDef[];
+  gridTemplate: string;
+  circles: CircleRow[];
+}) {
+  const person = row.person;
   return (
-    <div className="grid grid-cols-[40px_minmax(180px,1.6fr)_minmax(140px,1fr)_100px_100px_110px_auto] items-center gap-3 border-b border-rule-soft px-4 py-3 transition last:border-0 hover:bg-paper-2">
-      <Link
-        href={`/people/${person.id}`}
-        className="flex items-center justify-center"
-      >
-        <span className="avatar" aria-hidden>
-          {initials(person.name)}
-        </span>
-      </Link>
-      <Link href={`/people/${person.id}`} className="min-w-0">
-        <span className="block truncate text-sm font-medium text-ink-1">
-          {person.name}
-        </span>
-        {person.how_we_met && (
-          <span className="block truncate text-[11px] italic text-ink-4">
-            {person.how_we_met}
-          </span>
-        )}
-      </Link>
-      <Link href={`/people/${person.id}`} className="min-w-0">
-        <span className="block truncate text-xs text-ink-3">
-          {[person.company, person.role].filter(Boolean).join(" · ") || "—"}
-        </span>
-      </Link>
-      <span className="text-xs text-ink-2">
-        {person.purpose ? PURPOSE_LABELS[person.purpose] : "—"}
-      </span>
-      <span className="text-xs text-ink-2">{MODE_LABELS[person.mode]}</span>
-      <span className="font-mono text-[11px] text-ink-3">
-        {formatDate(person.last_contact_at)}
-      </span>
-      <div className="flex items-center gap-1">
-        <ActionIcon
-          href={hasUsablePhone ? `tel:${phone}` : undefined}
-          title="Anrufen"
-          icon={
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z" />
-            </svg>
-          }
+    <div
+      className="grid items-center gap-3 border-b border-rule-soft px-4 py-3 transition last:border-0 hover:bg-paper-2"
+      style={{ gridTemplateColumns: gridTemplate }}
+    >
+      {activeColumns.map((c) => (
+        <Cell
+          key={c.key}
+          column={c}
+          person={person}
+          row={row}
+          circles={circles}
         />
-        <ActionIcon
-          href={hasUsablePhone ? `https://wa.me/${phoneDigits}` : undefined}
-          title="WhatsApp"
-          variant="wa"
-          icon={
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              aria-hidden
-            >
-              <path d="M20.52 3.48A11.94 11.94 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.11.55 4.17 1.6 5.99L0 24l6.18-1.62A11.94 11.94 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.2-1.25-6.21-3.48-8.52z" />
-            </svg>
-          }
-        />
-        <ActionIcon
-          href={email ? `mailto:${email}` : undefined}
-          title="Email"
-          icon={
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <rect x="3" y="5" width="18" height="14" rx="2" />
-              <path d="m3 7 9 6 9-6" />
-            </svg>
-          }
-        />
-      </div>
+      ))}
     </div>
   );
+}
+
+function Cell({
+  column,
+  person,
+  row,
+  circles,
+}: {
+  column: ColumnDef;
+  person: Person;
+  row: Row;
+  circles: CircleRow[];
+}) {
+  switch (column.key) {
+    case "avatar":
+      return (
+        <Link
+          href={`/people/${person.id}`}
+          className="flex items-center justify-center"
+        >
+          <span className="avatar" aria-hidden>
+            {initials(person.name)}
+          </span>
+        </Link>
+      );
+    case "name":
+      return (
+        <Link href={`/people/${person.id}`} className="min-w-0">
+          <span className="block truncate text-sm font-medium text-ink-1">
+            {person.name}
+          </span>
+          {person.how_we_met && (
+            <span className="block truncate text-[11px] italic text-ink-4">
+              {person.how_we_met}
+            </span>
+          )}
+        </Link>
+      );
+    case "company":
+      return (
+        <Link href={`/people/${person.id}`} className="min-w-0">
+          <span className="block truncate text-xs text-ink-3">
+            {[person.company, person.role].filter(Boolean).join(" · ") || "—"}
+          </span>
+        </Link>
+      );
+    case "purpose":
+      return (
+        <span className="text-xs text-ink-2">
+          {person.purpose ? PURPOSE_LABELS[person.purpose] : "—"}
+        </span>
+      );
+    case "mode":
+      return (
+        <span className="text-xs text-ink-2">{MODE_LABELS[person.mode]}</span>
+      );
+    case "depth":
+      return (
+        <span className="text-xs text-ink-2">
+          {person.depth ? DEPTH_LABELS[person.depth] : "—"}
+        </span>
+      );
+    case "cadence":
+      return (
+        <span className="text-right font-mono text-[11px] text-ink-3">
+          {person.cadence_days ? `${person.cadence_days}d` : "—"}
+        </span>
+      );
+    case "last_contact":
+      return (
+        <span className="font-mono text-[11px] text-ink-3">
+          {formatDate(person.last_contact_at)}
+        </span>
+      );
+    case "current_location":
+      return (
+        <span className="truncate text-xs text-ink-3">
+          {person.current_location ?? "—"}
+        </span>
+      );
+    case "met_location":
+      return (
+        <span className="truncate text-xs text-ink-3">
+          {person.met_location ?? "—"}
+        </span>
+      );
+    case "tags_count":
+      return (
+        <span className="text-right font-mono text-[11px] text-ink-3">
+          {row.clusters.length > 0 ? row.clusters.length : "—"}
+        </span>
+      );
+    case "passions_count":
+      return (
+        <span className="text-right font-mono text-[11px] text-ink-3">
+          {row.passions.length > 0 ? row.passions.length : "—"}
+        </span>
+      );
+    case "circles_count":
+      return (
+        <span className="text-right font-mono text-[11px] text-ink-3">
+          {row.circleIds.length > 0 ? row.circleIds.length : "—"}
+        </span>
+      );
+    case "actions": {
+      const phone = primaryPhone(person);
+      const email = primaryEmail(person);
+      const phoneDigits = phone ? normalizeForWaMe(phone) : "";
+      const hasUsablePhone = phoneDigits.length >= 7;
+      return (
+        <div className="flex items-center justify-end gap-1">
+          <ActionIcon
+            href={hasUsablePhone ? `tel:${phone}` : undefined}
+            title="Anrufen"
+            icon={
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z" />
+              </svg>
+            }
+          />
+          <ActionIcon
+            href={
+              hasUsablePhone ? `https://wa.me/${phoneDigits}` : undefined
+            }
+            title="WhatsApp"
+            variant="wa"
+            icon={
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden
+              >
+                <path d="M20.52 3.48A11.94 11.94 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.11.55 4.17 1.6 5.99L0 24l6.18-1.62A11.94 11.94 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.2-1.25-6.21-3.48-8.52z" />
+              </svg>
+            }
+          />
+          <ActionIcon
+            href={email ? `mailto:${email}` : undefined}
+            title="Email"
+            icon={
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <rect x="3" y="5" width="18" height="14" rx="2" />
+                <path d="m3 7 9 6 9-6" />
+              </svg>
+            }
+          />
+        </div>
+      );
+    }
+    default:
+      return <span />;
+  }
 }
 
 function ActionIcon({

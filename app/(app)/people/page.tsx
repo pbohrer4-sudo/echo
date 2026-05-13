@@ -22,12 +22,32 @@ export default async function PeoplePage() {
     circleIds: Array.from(r.circleIds),
   }));
 
-  // Alle distinct Passions für das Filter-Dropdown sammeln, sortiert.
+  // Distinct Passions für Filter-Dropdown.
   const passionSet = new Set<string>();
   for (const r of rows) for (const p of r.passions) passionSet.add(p);
   const passionsList = Array.from(passionSet).sort((a, b) =>
     a.localeCompare(b),
   );
+
+  // Distinct Locations für Ort-Filter (current_location, home_location,
+  // met_location aggregiert, case-insensitive dedupliziert).
+  const locationMap = new Map<string, string>(); // lower → original
+  for (const r of rows) {
+    for (const loc of [
+      r.person.current_location,
+      r.person.home_location,
+      r.person.met_location,
+    ]) {
+      if (loc && loc.trim()) {
+        const trimmed = loc.trim();
+        const lower = trimmed.toLowerCase();
+        if (!locationMap.has(lower)) locationMap.set(lower, trimmed);
+      }
+    }
+  }
+  const locationsList = Array.from(locationMap.entries())
+    .map(([lower, orig]) => ({ value: lower, label: orig }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
   return (
     <div className="px-8 py-10">
@@ -51,6 +71,7 @@ export default async function PeoplePage() {
           rows={rows}
           circles={circles}
           passions={passionsList}
+          locations={locationsList}
           totalCount={rows.length}
         />
       </div>
