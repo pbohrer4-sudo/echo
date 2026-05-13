@@ -80,27 +80,27 @@ export async function findSimilarPeople(
   return [];
 }
 
-// Listet alle Personen mit den Tag-Clustern und Circles in denen sie
-// stecken — angereichert via Joins. Wird vom People-Liste-Filter
-// gebraucht (filter nach Cluster oder Circle).
+// Listet alle Personen mit den Tag-Clustern, Passions und Circles in
+// denen sie stecken — angereichert via Joins. Wird vom People-Liste-
+// Filter gebraucht.
 export interface PersonWithContext {
   person: Person;
-  clusters: Set<string>; // welche der 4 Tag-Cluster diese Person hat
+  clusters: Set<string>;     // welche der 4 Tag-Cluster diese Person hat
+  passions: Set<string>;     // Passion-Names (lower-cased für Match)
   circleIds: Set<string>;
 }
 
 export async function listPeopleWithContext(): Promise<PersonWithContext[]> {
   const supabase = await createClient();
-  const [peopleRes, ptRes, pcRes] = await Promise.all([
+  const [peopleRes, ptRes, pasRes, pcRes] = await Promise.all([
     supabase
       .from("people")
       .select("*")
       .is("deleted_at", null)
       .eq("is_self", false)
       .order("name", { ascending: true }),
-    supabase
-      .from("person_tags")
-      .select("person_id, tags(cluster)"),
+    supabase.from("person_tags").select("person_id, tags(cluster)"),
+    supabase.from("passions").select("person_id, name"),
     supabase.from("person_circles").select("person_id, circle_id"),
   ]);
 
@@ -120,6 +120,17 @@ export async function listPeopleWithContext(): Promise<PersonWithContext[]> {
     clusterMap.get(row.person_id)!.add(row.tags.cluster);
   }
 
+  // Index person_id → passion-names set (lower-cased)
+  const passionMap = new Map<string, Set<string>>();
+  const pasRows = (pasRes.data ?? []) as { person_id: string; name: string }[];
+  for (const row of pasRows) {
+    if (!row.name) continue;
+    if (!passionMap.has(row.person_id)) {
+      passionMap.set(row.person_id, new Set());
+    }
+    passionMap.get(row.person_id)!.add(row.name.toLowerCase());
+  }
+
   // Index person_id → circleIds set
   const circleMap = new Map<string, Set<string>>();
   const pcRows = (pcRes.data ?? []) as {
@@ -136,6 +147,7 @@ export async function listPeopleWithContext(): Promise<PersonWithContext[]> {
   return ((peopleRes.data ?? []) as Person[]).map((p) => ({
     person: p,
     clusters: clusterMap.get(p.id) ?? new Set(),
+    passions: passionMap.get(p.id) ?? new Set(),
     circleIds: circleMap.get(p.id) ?? new Set(),
   }));
 }

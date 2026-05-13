@@ -18,8 +18,16 @@ export default async function PeoplePage() {
   const rows = contextRows.map((r) => ({
     person: r.person,
     clusters: Array.from(r.clusters),
+    passions: Array.from(r.passions),
     circleIds: Array.from(r.circleIds),
   }));
+
+  // Alle distinct Passions für das Filter-Dropdown sammeln, sortiert.
+  const passionSet = new Set<string>();
+  for (const r of rows) for (const p of r.passions) passionSet.add(p);
+  const passionsList = Array.from(passionSet).sort((a, b) =>
+    a.localeCompare(b),
+  );
 
   return (
     <div className="px-8 py-10">
@@ -39,7 +47,12 @@ export default async function PeoplePage() {
           href="/people/duplicates"
           entity="Personen"
         />
-        <PeopleTable rows={rows} circles={circles} totalCount={rows.length} />
+        <PeopleTable
+          rows={rows}
+          circles={circles}
+          passions={passionsList}
+          totalCount={rows.length}
+        />
       </div>
     </div>
   );

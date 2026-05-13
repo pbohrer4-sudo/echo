@@ -1,9 +1,8 @@
 "use client";
 
-// People-Tabelle (Phase C5 v3): Cluster-Filter + Circle-Filter +
-// Inline-Actions pro Row (Anrufen/WhatsApp/Mehr).
-// Vorgänger-Version war Briefing-v3-naive — diese matched den
-// Briefing-Style.
+// People-Tabelle (Phase C5 v4): Filter-Dropdowns in einer Toolbar
+// statt Pills in mehreren Reihen. Filter: Modus, Zweck, Cluster,
+// Passion, Circle. Plus Search + Inline-Actions pro Row.
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -21,21 +20,27 @@ import {
 
 type SortKey = "name" | "company" | "last_contact_at";
 type SortDir = "asc" | "desc";
-type ModeFilter = "all" | Mode;
-type PurposeFilter = "all" | Purpose;
-type ClusterFilter = "all" | TagCluster;
 
 interface Row {
   person: Person;
   clusters: string[];
+  passions: string[];   // lower-cased names
   circleIds: string[];
 }
 
 interface Props {
   rows: Row[];
   circles: CircleRow[];
+  passions: string[];   // distinct lower-cased names, alphabetically
   totalCount?: number;
 }
+
+const CLUSTER_ORDER: TagCluster[] = [
+  "reminders",
+  "interests",
+  "potential",
+  "origin",
+];
 
 function initials(name: string): string {
   return name
@@ -44,6 +49,13 @@ function initials(name: string): string {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+}
+
+function titleCase(s: string): string {
+  return s
+    .split(/\s+/)
+    .map((w) => (w.length > 0 ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(" ");
 }
 
 function formatDate(iso: string | null): string {
@@ -86,21 +98,29 @@ function primaryEmail(person: Person): string | null {
   return person.emails?.[0]?.value ?? null;
 }
 
-const CLUSTER_ORDER: TagCluster[] = [
-  "reminders",
-  "interests",
-  "potential",
-  "origin",
-];
-
-export function PeopleTable({ rows, circles, totalCount }: Props) {
+export function PeopleTable({
+  rows,
+  circles,
+  passions,
+  totalCount,
+}: Props) {
   const [search, setSearch] = useState("");
-  const [modeFilter, setModeFilter] = useState<ModeFilter>("all");
-  const [purposeFilter, setPurposeFilter] = useState<PurposeFilter>("all");
-  const [clusterFilter, setClusterFilter] = useState<ClusterFilter>("all");
+  const [modeFilter, setModeFilter] = useState<"all" | Mode>("all");
+  const [purposeFilter, setPurposeFilter] = useState<"all" | Purpose>("all");
+  const [clusterFilter, setClusterFilter] = useState<"all" | TagCluster>(
+    "all",
+  );
+  const [passionFilter, setPassionFilter] = useState<string>("all");
   const [circleFilter, setCircleFilter] = useState<string>("all");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  const activeFilterCount =
+    (modeFilter !== "all" ? 1 : 0) +
+    (purposeFilter !== "all" ? 1 : 0) +
+    (clusterFilter !== "all" ? 1 : 0) +
+    (passionFilter !== "all" ? 1 : 0) +
+    (circleFilter !== "all" ? 1 : 0);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -109,6 +129,8 @@ export function PeopleTable({ rows, circles, totalCount }: Props) {
       if (modeFilter !== "all" && p.mode !== modeFilter) return false;
       if (purposeFilter !== "all" && p.purpose !== purposeFilter) return false;
       if (clusterFilter !== "all" && !r.clusters.includes(clusterFilter))
+        return false;
+      if (passionFilter !== "all" && !r.passions.includes(passionFilter))
         return false;
       if (circleFilter !== "all" && !r.circleIds.includes(circleFilter))
         return false;
@@ -128,7 +150,15 @@ export function PeopleTable({ rows, circles, totalCount }: Props) {
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [rows, search, modeFilter, purposeFilter, clusterFilter, circleFilter]);
+  }, [
+    rows,
+    search,
+    modeFilter,
+    purposeFilter,
+    clusterFilter,
+    passionFilter,
+    circleFilter,
+  ]);
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
@@ -160,10 +190,18 @@ export function PeopleTable({ rows, circles, totalCount }: Props) {
     }
   }
 
+  function resetFilters() {
+    setModeFilter("all");
+    setPurposeFilter("all");
+    setClusterFilter("all");
+    setPassionFilter("all");
+    setCircleFilter("all");
+  }
+
   return (
     <div className="space-y-4">
-      {/* Search + Filters row 1 */}
-      <div className="flex flex-wrap items-center gap-3">
+      {/* Toolbar: Search + Filter-Dropdowns + Actions */}
+      <div className="flex flex-wrap items-center gap-2">
         <input
           type="text"
           value={search}
@@ -171,6 +209,91 @@ export function PeopleTable({ rows, circles, totalCount }: Props) {
           placeholder="Name, Firma, Ort, Notiz …"
           className="h-9 w-full max-w-xs rounded border border-rule bg-paper px-3 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20"
         />
+
+        <FilterSelect
+          label="Modus"
+          value={modeFilter}
+          onChange={(v) => setModeFilter(v as "all" | Mode)}
+          options={[
+            { value: "all", label: "Alle" },
+            ...(Object.keys(MODE_LABELS) as Mode[]).map((m) => ({
+              value: m,
+              label: MODE_LABELS[m],
+            })),
+          ]}
+        />
+
+        <FilterSelect
+          label="Zweck"
+          value={purposeFilter}
+          onChange={(v) => setPurposeFilter(v as "all" | Purpose)}
+          options={[
+            { value: "all", label: "Alle" },
+            ...(Object.keys(PURPOSE_LABELS) as Purpose[]).map((p) => ({
+              value: p,
+              label: PURPOSE_LABELS[p],
+            })),
+          ]}
+        />
+
+        <FilterSelect
+          label="Cluster"
+          value={clusterFilter}
+          onChange={(v) => setClusterFilter(v as "all" | TagCluster)}
+          options={[
+            { value: "all", label: "Alle" },
+            ...CLUSTER_ORDER.map((c) => ({
+              value: c,
+              label: TAG_CLUSTER_LABELS[c],
+            })),
+          ]}
+          highlight={
+            clusterFilter !== "all"
+              ? TAG_CLUSTER_COLORS[clusterFilter as TagCluster]
+              : undefined
+          }
+        />
+
+        {passions.length > 0 && (
+          <FilterSelect
+            label="Passion"
+            value={passionFilter}
+            onChange={setPassionFilter}
+            options={[
+              { value: "all", label: "Alle" },
+              ...passions.map((p) => ({
+                value: p,
+                label: titleCase(p),
+              })),
+            ]}
+          />
+        )}
+
+        {circles.length > 0 && (
+          <FilterSelect
+            label="Circle"
+            value={circleFilter}
+            onChange={setCircleFilter}
+            options={[
+              { value: "all", label: "Alle" },
+              ...circles.map((c) => ({
+                value: c.id,
+                label: c.name,
+              })),
+            ]}
+          />
+        )}
+
+        {activeFilterCount > 0 && (
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="inline-flex h-9 items-center rounded border border-dashed border-rule px-3 text-xs text-ink-3 transition hover:border-bad hover:text-bad"
+            title="Alle Filter zurücksetzen"
+          >
+            × {activeFilterCount}
+          </button>
+        )}
 
         <div className="ml-auto flex items-center gap-2">
           <Link
@@ -187,95 +310,6 @@ export function PeopleTable({ rows, circles, totalCount }: Props) {
           </Link>
         </div>
       </div>
-
-      {/* Filter row 2: Mode + Purpose */}
-      <div className="flex flex-wrap items-center gap-3 text-xs">
-        <span className="t-label">Modus</span>
-        <FilterPill
-          active={modeFilter === "all"}
-          onClick={() => setModeFilter("all")}
-        >
-          Alle
-        </FilterPill>
-        {(Object.keys(MODE_LABELS) as Mode[]).map((m) => (
-          <FilterPill
-            key={m}
-            active={modeFilter === m}
-            onClick={() => setModeFilter(m)}
-          >
-            {MODE_LABELS[m]}
-          </FilterPill>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3 text-xs">
-        <span className="t-label">Zweck</span>
-        <FilterPill
-          active={purposeFilter === "all"}
-          onClick={() => setPurposeFilter("all")}
-        >
-          Alle
-        </FilterPill>
-        {(Object.keys(PURPOSE_LABELS) as Purpose[]).map((p) => (
-          <FilterPill
-            key={p}
-            active={purposeFilter === p}
-            onClick={() => setPurposeFilter(p)}
-          >
-            {PURPOSE_LABELS[p]}
-          </FilterPill>
-        ))}
-      </div>
-
-      {/* Filter row 3: Tag-Cluster (Briefing v3 #19) */}
-      <div className="flex flex-wrap items-center gap-3 text-xs">
-        <span className="t-label">Tag-Cluster</span>
-        <FilterPill
-          active={clusterFilter === "all"}
-          onClick={() => setClusterFilter("all")}
-        >
-          Alle
-        </FilterPill>
-        {CLUSTER_ORDER.map((c) => (
-          <FilterPill
-            key={c}
-            active={clusterFilter === c}
-            onClick={() => setClusterFilter(c)}
-            style={
-              clusterFilter === c
-                ? {
-                    background: TAG_CLUSTER_COLORS[c].bg,
-                    color: TAG_CLUSTER_COLORS[c].fg,
-                  }
-                : undefined
-            }
-          >
-            {TAG_CLUSTER_LABELS[c]}
-          </FilterPill>
-        ))}
-      </div>
-
-      {/* Filter row 4: Circles — nur wenn welche existieren */}
-      {circles.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 text-xs">
-          <span className="t-label">Circle</span>
-          <FilterPill
-            active={circleFilter === "all"}
-            onClick={() => setCircleFilter("all")}
-          >
-            Alle
-          </FilterPill>
-          {circles.map((c) => (
-            <FilterPill
-              key={c.id}
-              active={circleFilter === c.id}
-              onClick={() => setCircleFilter(c.id)}
-            >
-              {c.name}
-            </FilterPill>
-          ))}
-        </div>
-      )}
 
       {/* Header */}
       <div className="overflow-hidden rounded border border-rule bg-paper">
@@ -323,36 +357,54 @@ export function PeopleTable({ rows, circles, totalCount }: Props) {
   );
 }
 
-function FilterPill({
-  active,
-  onClick,
-  children,
-  style,
+// Native-Select-Dropdown — barrierearm + responsive ohne Library.
+// "label" steht als Text vor dem Wert. Optional highlight-Tönung
+// für Cluster.
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+  highlight,
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-  style?: React.CSSProperties;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  highlight?: { bg: string; fg: string };
 }) {
+  const active = value !== "all";
+  const style: React.CSSProperties | undefined =
+    active && highlight
+      ? { background: highlight.bg, color: highlight.fg, borderColor: highlight.fg }
+      : undefined;
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-full border px-3 py-1 transition ${
+    <label
+      className={`inline-flex h-9 items-center gap-1.5 rounded border bg-paper px-2.5 text-xs transition ${
         active
-          ? "border-action bg-action-soft text-ink-1"
-          : "border-rule bg-paper text-ink-3 hover:border-ink-3 hover:text-ink-1"
+          ? "border-action text-ink-1"
+          : "border-rule text-ink-3 hover:border-ink-3 hover:text-ink-1"
       }`}
-      style={active && style ? style : undefined}
+      style={style}
     >
-      {children}
-    </button>
+      <span className="t-label">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="cursor-pointer bg-transparent text-xs text-inherit outline-none"
+        style={style}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
-// Eine Zeile in der Personen-Tabelle. Inline-Actions am Ende
-// (Anrufen/WhatsApp/Detail). Tabbed-fokussiert ist die ganze Zeile
-// klickbar via Detail-Link.
+// Eine Zeile in der Personen-Tabelle. Inline-Actions am Ende.
 function PersonTableRow({ person }: { person: Person }) {
   const phone = primaryPhone(person);
   const email = primaryEmail(person);
