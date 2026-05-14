@@ -92,6 +92,8 @@ export async function executeQueryPeople(
       const legacy = Boolean(p.linkedin_url);
       if (!v3 && !legacy) return false;
     }
+    if (spec.gifts === "yes" && !p.gift_idea) return false;
+    if (spec.gifts === "no" && p.gift_idea) return false;
 
     if (q) {
       const tagNames = Object.values(r.tagsByCluster).flat();
@@ -103,6 +105,7 @@ export async function executeQueryPeople(
         p.company,
         p.role,
         p.notes,
+        p.gift_idea,
         p.how_we_met,
         p.met_location,
         p.current_location,

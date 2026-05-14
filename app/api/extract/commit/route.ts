@@ -280,6 +280,7 @@ export async function POST(request: Request) {
         organization_id,
         role: stringOrNull(input.role),
         notes: stringOrNull(input.notes),
+        gift_idea: stringOrNull(input.gift_idea),
         // Goldfeld + Met-Kontext aus Voice-Extraction.
         how_we_met: stringOrNull(input.how_we_met),
         met_date: stringOrNull(input.met_date),
@@ -343,7 +344,7 @@ export async function POST(request: Request) {
     const existingRes = await supabase
       .from("people")
       .select(
-        "company, organization_id, role, notes, how_we_met, met_date, met_location, tags, phones, emails, addresses, socials, important_dates",
+        "company, organization_id, role, notes, gift_idea, how_we_met, met_date, met_location, tags, phones, emails, addresses, socials, important_dates",
       )
       .eq("id", id)
       .eq("user_id", user.id)
@@ -356,6 +357,7 @@ export async function POST(request: Request) {
       organization_id: string | null;
       role: string | null;
       notes: string | null;
+      gift_idea: string | null;
       how_we_met: string | null;
       met_date: string | null;
       met_location: string | null;
@@ -407,6 +409,25 @@ export async function POST(request: Request) {
     if (typeof input.met_location === "string" && !existing.met_location) {
       const v = stringOrNull(input.met_location);
       if (v) update.met_location = v;
+    }
+    // gift_idea: APPEND-Verhalten. Wenn schon was drin steht, kommt
+    // der neue Vorschlag mit ' · ' getrennt hinten dran — der Nutzer
+    // sammelt damit über Zeit eine kleine Liste an Ideen, statt
+    // dass nur die zuletzt erwähnte überlebt. Doppelte Einträge
+    // werden case-insensitive übersprungen.
+    if (typeof input.gift_idea === "string") {
+      const fresh = stringOrNull(input.gift_idea);
+      if (fresh) {
+        const current = existing.gift_idea?.trim() ?? "";
+        if (!current) {
+          update.gift_idea = fresh;
+        } else {
+          const parts = current.split(" · ").map((s) => s.trim().toLowerCase());
+          if (!parts.includes(fresh.toLowerCase())) {
+            update.gift_idea = `${current} · ${fresh}`;
+          }
+        }
+      }
     }
 
     const addTags = stringArray(input.add_tags);

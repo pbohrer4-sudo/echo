@@ -58,6 +58,11 @@ export const EXTRACTION_TOOLS: Anthropic.Tool[] = [
           description:
             "Ort des ersten Treffens. Stadt oder Event-Name. Z.B. 'Muenchen', 'Bauma 2024', 'TUM Campus'.",
         },
+        gift_idea: {
+          type: "string",
+          description:
+            "Was man dieser Person zum naechsten Anlass schenken wuerde. WICHTIG: Geschenkideen gehoeren IMMER hierher, NIE in notes oder als create_note. Z.B. 'Whisky 1990', 'Buch ueber Bauhaus', 'Pflanze fuers Buero'.",
+        },
         phones: {
           type: "array",
           items: {
@@ -175,7 +180,7 @@ export const EXTRACTION_TOOLS: Anthropic.Tool[] = [
   {
     name: "update_person",
     description:
-      "Ergänze eine EXISTIERENDE Person. Nutze das, wenn der Nutzer neue Infos zu jemandem im CRM hinzufügt — z.B. neue Telefonnummer, Tag/Hobby, Firma. WICHTIG: Skalare Felder (company, role, notes, how_we_met, met_date, met_location) überschreiben NICHT mehr — sie werden nur gesetzt wenn das Feld noch leer ist. Array-Felder (add_tags, add_phones, …) werden immer ANGEHÄNGT. Der Nutzer verliert NIE etwas durch ein Voice-Update — destruktive Edits laufen ausschließlich über die UI. Setze nur die Felder, die der Nutzer tatsächlich erwähnt.",
+      "Ergänze eine EXISTIERENDE Person. Nutze das, wenn der Nutzer neue Infos zu jemandem im CRM hinzufügt — z.B. neue Telefonnummer, Tag/Hobby, Firma, Geschenkidee. WICHTIG: Skalare Felder (company, role, notes, how_we_met, met_date, met_location) überschreiben NICHT mehr — sie werden nur gesetzt wenn das Feld noch leer ist. gift_idea wird angehängt statt überschrieben. Array-Felder (add_tags, add_phones, …) werden immer ANGEHÄNGT. Der Nutzer verliert NIE etwas durch ein Voice-Update — destruktive Edits laufen ausschließlich über die UI. Setze nur die Felder, die der Nutzer tatsächlich erwähnt.",
     input_schema: {
       type: "object",
       properties: {
@@ -207,6 +212,11 @@ export const EXTRACTION_TOOLS: Anthropic.Tool[] = [
         met_location: {
           type: "string",
           description: "Ort des ersten Treffens.",
+        },
+        gift_idea: {
+          type: "string",
+          description:
+            "Geschenkidee für diese Person. WICHTIG: Wenn der Nutzer sagt 'ich habe das perfekte Geschenk für X' oder 'X mag Whisky', IMMER hierher — NIE als create_note, NIE in notes. Wird angehängt (mit ' · '-Trenner) wenn schon ein gift_idea drin steht, statt überschrieben.",
         },
         add_tags: {
           type: "array",
@@ -344,7 +354,7 @@ export const EXTRACTION_TOOLS: Anthropic.Tool[] = [
   {
     name: "create_note",
     description:
-      "Speichere eine Freitext-Notiz, optional zu einer Person. Nutze für Beobachtungen, Eindrücke, Hintergrund — alles was kein zeitgebundenes Event ist.",
+      "Speichere eine Freitext-Notiz, optional zu einer Person. Nutze für Beobachtungen, Eindrücke, Hintergrund — alles was kein zeitgebundenes Event ist. NICHT verwenden für: Geschenkideen (→ gift_idea via update_person/create_person), Beziehungen (→ add_relationships), Telefonnummern/Emails (→ add_phones/add_emails), Geburtstage (→ add_important_dates).",
     input_schema: {
       type: "object",
       properties: {

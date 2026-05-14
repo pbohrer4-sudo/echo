@@ -1,10 +1,11 @@
-// Visitenkarten-Scan auf Mistral OCR (document_annotation_format).
-// Vorher lief der Scan über Claude Vision — gut, aber teurer und ohne
-// dedizierten OCR-Pfad für PDFs/HEICs. Mistral OCR erkennt Text
-// zuverlässig und liefert in einem einzigen API-Call direkt das
-// strukturierte JSON gemäß BusinessCard-Schema.
+// Visitenkarten-Scan läuft (für jetzt) auf Claude Vision.
+// Alternative Implementierung über Mistral OCR liegt in
+// lib/mistral-ocr.ts bereit — kann später umgeswitcht werden, sobald
+// MISTRAL_API_KEY in den Vercel-Envs gesetzt + Migration 0032
+// ausgerollt ist. Bis dahin bleibt der Anthropic-Pfad live.
 
-import { mistralOcr, MISTRAL_OCR_MODEL, type MistralMediaType, type OcrSchema } from "@/lib/mistral-ocr";
+import Anthropic from "@anthropic-ai/sdk";
+import { CLAUDE_MODEL } from "@/lib/claude";
 
 export type SupportedMediaType =
   | "image/jpeg"
@@ -38,20 +39,16 @@ const EMPTY: BusinessCardData = {
   socials: [],
 };
 
-// JSON-Schema das Mistral als document_annotation_format bekommt.
-// Strikt halten wir bewusst NICHT — Visitenkarten haben oft Lücken
-// (kein Email, keine Adresse) und Mistral macht's mit lockerem Mode
-// nicht schlechter, dafür kommt mehr durch.
-const SCHEMA: OcrSchema = {
-  name: "business_card",
+const TOOL: Anthropic.Tool = {
+  name: "extract_business_card",
   description:
-    "Strukturierte Kontaktdaten einer Visitenkarte. Nur Felder ausfüllen die wirklich lesbar sind — keine Halluzinationen. Mehrsprachige Karten: Werte so übernehmen wie sie auf der Karte stehen.",
-  schema: {
+    "Strukturierte Daten von einer Visitenkarte extrahieren. Setze nur Felder, die wirklich auf der Karte stehen — keine Halluzinationen, keine Vermutungen. Wenn ein Feld unklar ist: weglassen.",
+  input_schema: {
     type: "object",
     properties: {
-      name: { type: "string", description: "Vor- und Nachname" },
-      company: { type: "string", description: "Firmenname" },
-      role: { type: "string", description: "Rolle/Position/Titel" },
+      name: { type: "string", description: "Vor- und Nachname." },
+      company: { type: "string" },
+      role: { type: "string", description: "Rolle/Position/Titel." },
       phones: {
         type: "array",
         items: {
@@ -60,7 +57,7 @@ const SCHEMA: OcrSchema = {
             label: {
               type: "string",
               description:
-                "z.B. mobile, arbeit, fax, haupt — basierend auf der Karte (mobil/M/tel/fax)",
+                "z.B. mobile, arbeit, fax, haupt — basierend auf der Karte ('mobil' / 'M' / 'tel' / 'fax').",
             },
             value: { type: "string" },
           },
@@ -72,10 +69,7 @@ const SCHEMA: OcrSchema = {
         items: {
           type: "object",
           properties: {
-            label: {
-              type: "string",
-              description: "arbeit, persönlich, andere",
-            },
+            label: { type: "string", description: "arbeit, persönlich, andere" },
             value: { type: "string" },
           },
           required: ["value"],
@@ -113,12 +107,21 @@ const SCHEMA: OcrSchema = {
   },
 };
 
+let sharedClient: Anthropic | null = null;
+
+function getClient(apiKey?: string | null): Anthropic {
+  if (apiKey) return new Anthropic({ apiKey });
+  if (!sharedClient) {
+    sharedClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+  }
+  return sharedClient;
+}
+
 export interface BusinessCardResult {
   data: BusinessCardData;
-  // Für Logging. Mistral OCR rechnet in Seiten ab — pagesProcessed=1
-  // bei Einzelbildern, mehr nur bei Multi-Page-PDFs.
   usage: {
-    pages_processed: number;
+    input_tokens: number;
+    output_tokens: number;
   };
   model: string;
 }
@@ -129,38 +132,73 @@ export async function extractBusinessCard({
   apiKey,
 }: {
   imageBase64: string;
+  // PDFs werden via document-content geschickt; alles andere als image.
   mediaType: SupportedMediaType | "application/pdf";
-  // BYO Mistral-Key aus dem User-Profil; fällt auf MISTRAL_API_KEY zurück.
   apiKey?: string | null;
 }): Promise<BusinessCardResult> {
-  const result = await mistralOcr<Partial<BusinessCardData>>({
-    base64: imageBase64,
-    mediaType: mediaType as MistralMediaType,
-    schema: SCHEMA,
-    apiKey,
+  const mediaBlock: Anthropic.ContentBlockParam =
+    mediaType === "application/pdf"
+      ? {
+          type: "document",
+          source: {
+            type: "base64",
+            media_type: "application/pdf",
+            data: imageBase64,
+          },
+        }
+      : {
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: mediaType,
+            data: imageBase64,
+          },
+        };
+
+  const response = await getClient(apiKey).messages.create({
+    model: CLAUDE_MODEL,
+    max_tokens: 1024,
+    tools: [TOOL],
+    tool_choice: { type: "tool", name: "extract_business_card" },
+    messages: [
+      {
+        role: "user",
+        content: [
+          mediaBlock,
+          {
+            type: "text",
+            text: "Das ist ein Foto / Scan / PDF einer Visitenkarte. Extrahiere die Kontaktdaten via Tool. Bei mehrsprachigen Karten: die Felder so übernehmen wie sie auf der Karte stehen.",
+          },
+        ],
+      },
+    ],
   });
 
-  if (!result.annotation) {
-    return {
-      data: EMPTY,
-      usage: { pages_processed: result.pagesProcessed },
-      model: result.model,
-    };
+  const usage = {
+    input_tokens: response.usage?.input_tokens ?? 0,
+    output_tokens: response.usage?.output_tokens ?? 0,
+  };
+
+  const toolUse = response.content.find(
+    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+  );
+  if (!toolUse) {
+    return { data: EMPTY, usage, model: CLAUDE_MODEL };
   }
 
-  const a = result.annotation;
+  const input = toolUse.input as Partial<BusinessCardData>;
   return {
     data: {
-      name: stringOrNull(a.name),
-      company: stringOrNull(a.company),
-      role: stringOrNull(a.role),
-      phones: cleanPhones(a.phones),
-      emails: cleanEmails(a.emails),
-      addresses: cleanAddresses(a.addresses),
-      socials: cleanSocials(a.socials),
+      name: stringOrNull(input.name),
+      company: stringOrNull(input.company),
+      role: stringOrNull(input.role),
+      phones: cleanPhones(input.phones),
+      emails: cleanEmails(input.emails),
+      addresses: cleanAddresses(input.addresses),
+      socials: cleanSocials(input.socials),
     },
-    usage: { pages_processed: result.pagesProcessed },
-    model: result.model || MISTRAL_OCR_MODEL,
+    usage,
+    model: CLAUDE_MODEL,
   };
 }
 

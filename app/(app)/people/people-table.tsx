@@ -87,6 +87,7 @@ type ColumnKey =
   | "last_contact"
   | "current_location"
   | "met_location"
+  | "gifts"       // gift_idea, filterbar (hat/hat nicht)
   | "reminders"   // Tag-Cluster
   | "interests"   // Tag-Cluster
   | "potential"   // Tag-Cluster
@@ -109,6 +110,7 @@ const COLUMNS: ColumnDef[] = [
   { key: "last_contact", label: "Letzter Kontakt", default: true, sortKey: "last_contact_at", gridCol: "110px" },
   { key: "current_location", label: "Stadt", default: false, gridCol: "120px" },
   { key: "met_location", label: "Wo getroffen", default: false, gridCol: "140px" },
+  { key: "gifts", label: "Gifts", default: false, gridCol: "minmax(140px,1fr)" },
   { key: "reminders", label: "Signale", default: false, gridCol: "minmax(200px,1.4fr)" },
   { key: "interests", label: "Interests", default: false, gridCol: "minmax(200px,1.4fr)" },
   { key: "potential", label: "Potential", default: false, gridCol: "minmax(200px,1.4fr)" },
@@ -252,6 +254,9 @@ export function PeopleTable({
   const [channelFilter, setChannelFilter] = useState<ChannelFilter>(
     initialFilter?.channel ?? "all",
   );
+  const [giftsFilter, setGiftsFilter] = useState<"all" | "yes" | "no">(
+    initialFilter?.gifts ?? "all",
+  );
 
   // URL-Sync — jede Filter-Änderung schreibt die URL um, sodass der
   // Stand bookmarkbar/shareable bleibt. Beim ersten Render skip damit
@@ -273,6 +278,7 @@ export function PeopleTable({
     if (circleFilter !== "all") spec.circle = circleFilter;
     if (locationFilter !== "all") spec.location = locationFilter;
     if (channelFilter !== "all") spec.channel = channelFilter;
+    if (giftsFilter !== "all") spec.gifts = giftsFilter;
     const params = serializeFilterToParams(spec);
     const qs = params.toString();
     const target = qs ? `${pathname}?${qs}` : pathname;
@@ -288,6 +294,7 @@ export function PeopleTable({
     circleFilter,
     locationFilter,
     channelFilter,
+    giftsFilter,
     pathname,
     router,
   ]);
@@ -315,7 +322,8 @@ export function PeopleTable({
     (passionFilter !== "all" ? 1 : 0) +
     (circleFilter !== "all" ? 1 : 0) +
     (locationFilter !== "all" ? 1 : 0) +
-    (channelFilter !== "all" ? 1 : 0);
+    (channelFilter !== "all" ? 1 : 0) +
+    (giftsFilter !== "all" ? 1 : 0);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -368,6 +376,9 @@ export function PeopleTable({
         if (!v3 && !legacy) return false;
       }
 
+      if (giftsFilter === "yes" && !p.gift_idea) return false;
+      if (giftsFilter === "no" && p.gift_idea) return false;
+
       if (!q) return true;
       // Haystack umfasst Person-Felder + alle Tag-Namen aller Cluster
       // + Passion-Namen + Circle-Namen — sodass Free-Text-Suche auch
@@ -381,6 +392,7 @@ export function PeopleTable({
         p.company,
         p.role,
         p.notes,
+        p.gift_idea,
         p.how_we_met,
         p.met_location,
         p.current_location,
@@ -406,6 +418,7 @@ export function PeopleTable({
     circleFilter,
     locationFilter,
     channelFilter,
+    giftsFilter,
     circles,
   ]);
 
@@ -440,6 +453,7 @@ export function PeopleTable({
     setCircleFilter("all");
     setLocationFilter("all");
     setChannelFilter("all");
+    setGiftsFilter("all");
   }
 
   return (
@@ -556,6 +570,17 @@ export function PeopleTable({
             { value: "has_phone", label: "Hat Telefon" },
             { value: "has_email", label: "Hat Email" },
             { value: "has_linkedin", label: "Hat LinkedIn" },
+          ]}
+        />
+
+        <FilterSelect
+          label="Gifts"
+          value={giftsFilter}
+          onChange={(v) => setGiftsFilter(v as "all" | "yes" | "no")}
+          options={[
+            { value: "all", label: "Alle" },
+            { value: "yes", label: "Mit Geschenkidee" },
+            { value: "no", label: "Ohne Geschenkidee" },
           ]}
         />
 
@@ -922,6 +947,15 @@ function Cell({
           {person.met_location ?? "—"}
         </span>
       );
+    case "gifts":
+      return (
+        <span
+          className="block truncate text-xs text-ink-2"
+          title={person.gift_idea ?? undefined}
+        >
+          {person.gift_idea ?? "—"}
+        </span>
+      );
     case "reminders":
       return (
         <TagClusterCell
@@ -1098,6 +1132,7 @@ function PillStack({
   fg,
   max = 6,
   notesByValue,
+  hrefFor,
 }: {
   values: string[];
   bg: string;
@@ -1106,6 +1141,10 @@ function PillStack({
   // Optional: Map von value → Note. value ist im selben Format wie der
   // angezeigte String (also für Passions z. B. capitalized).
   notesByValue?: Record<string, string>;
+  // Wenn gesetzt: jede Pill wird ein <Link> auf den entsprechenden
+  // Filter (z.B. /people?tag=stammtisch). Klick auf Pill leitet auf die
+  // People-Liste mit allen Trägern dieses Tags.
+  hrefFor?: (value: string) => string;
 }) {
   if (values.length === 0)
     return <span className="text-[11px] italic text-ink-4">—</span>;
@@ -1115,13 +1154,8 @@ function PillStack({
     <span className="flex flex-wrap items-start gap-1">
       {visible.map((v, i) => {
         const note = notesByValue?.[v];
-        return (
-          <span
-            key={`${v}-${i}`}
-            className="group/pill relative inline-flex items-center gap-0.5 rounded-full px-1.5 py-px text-[10px] leading-snug"
-            style={{ background: bg, color: fg }}
-            title={note || undefined}
-          >
+        const inner = (
+          <>
             <span>{v}</span>
             {note && (
               <span
@@ -1132,6 +1166,33 @@ function PillStack({
                 ·
               </span>
             )}
+          </>
+        );
+        const className =
+          "group/pill relative inline-flex items-center gap-0.5 rounded-full px-1.5 py-px text-[10px] leading-snug" +
+          (hrefFor ? " cursor-pointer transition hover:opacity-80" : "");
+        if (hrefFor) {
+          return (
+            <Link
+              key={`${v}-${i}`}
+              href={hrefFor(v)}
+              className={className}
+              style={{ background: bg, color: fg }}
+              title={note ? `${note} — Filter auf "${v}"` : `Filter auf "${v}"`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {inner}
+            </Link>
+          );
+        }
+        return (
+          <span
+            key={`${v}-${i}`}
+            className={className}
+            style={{ background: bg, color: fg }}
+            title={note || undefined}
+          >
+            {inner}
           </span>
         );
       })}
@@ -1163,6 +1224,9 @@ function TagClusterCell({
       bg={colors.bg}
       fg={colors.fg}
       notesByValue={notes}
+      hrefFor={(tag) =>
+        `/people?cluster=${cluster}&tag=${encodeURIComponent(tag)}`
+      }
     />
   );
 }
@@ -1188,12 +1252,20 @@ function PassionsCell({
     const note = notes[names[i]];
     if (note) displayNotes[display[i]] = note;
   }
+  // hrefFor bekommt den display-Wert (capitalized) — wir geben aber den
+  // lower-case-Namen an die URL weiter, weil parseFilterFromParams das
+  // erwartet und das tatsächliche Match auf lower-case läuft.
   return (
     <PillStack
       values={display}
       bg={PASSION_COLOR.bg}
       fg={PASSION_COLOR.fg}
       notesByValue={displayNotes}
+      hrefFor={(displayValue) => {
+        const idx = display.indexOf(displayValue);
+        const lower = idx >= 0 ? names[idx] : displayValue.toLowerCase();
+        return `/people?passion=${encodeURIComponent(lower)}`;
+      }}
     />
   );
 }
@@ -1220,12 +1292,19 @@ function CirclesCell({
     const note = notes[c.id];
     if (note) notesByName[c.name] = note;
   }
+  // Filter nimmt circle_id ODER name-substring; wir nutzen die id für
+  // deterministisches Matching auch bei umbenannten Circles.
   return (
     <PillStack
       values={names}
       bg={CIRCLE_COLOR.bg}
       fg={CIRCLE_COLOR.fg}
       notesByValue={notesByName}
+      hrefFor={(name) => {
+        const item = items.find((i) => i.name === name);
+        const param = item ? item.id : name;
+        return `/people?circle=${encodeURIComponent(param)}`;
+      }}
     />
   );
 }

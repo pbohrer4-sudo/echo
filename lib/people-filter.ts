@@ -19,6 +19,10 @@ export interface PeopleFilterSpec {
   circle?: string;             // circle_id ODER name-substring
   location?: string;           // city-substring, lower-cased
   channel?: ChannelFilter;
+  // "yes" → nur Personen mit gift_idea, "no" → nur ohne. case-insensitive
+  // string-Match unterstützen wir bewusst nicht (zu viel Streuung im
+  // Freitext); wer das braucht nutzt q.
+  gifts?: "yes" | "no";
 }
 
 const VALID_MODES = new Set<Mode>([
@@ -87,6 +91,8 @@ export function parseFilterFromParams(
   const channel = get("channel");
   if (channel && VALID_CHANNELS.has(channel as ChannelFilter))
     out.channel = channel as ChannelFilter;
+  const gifts = get("gifts");
+  if (gifts === "yes" || gifts === "no") out.gifts = gifts;
   return out;
 }
 
@@ -103,6 +109,7 @@ export function serializeFilterToParams(spec: PeopleFilterSpec): URLSearchParams
   if (spec.circle) p.set("circle", spec.circle);
   if (spec.location) p.set("location", spec.location);
   if (spec.channel) p.set("channel", spec.channel);
+  if (spec.gifts) p.set("gifts", spec.gifts);
   return p;
 }
 
