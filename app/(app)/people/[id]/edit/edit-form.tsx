@@ -10,7 +10,7 @@
 // Editor sauber funktionieren.
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   DEPTH_LABELS,
   MODE_LABELS,
@@ -33,6 +33,7 @@ import {
   type DraftClusterState,
 } from "@/components/draft-cluster-editor";
 import { VoiceCapture, type VoiceExtractedFields } from "@/app/(app)/people/new/voice-capture";
+import { StickySaveBar } from "@/components/sticky-save-bar";
 import {
   AddressesRepeater,
   ContactsRepeater,
@@ -264,6 +265,7 @@ export function EditPersonForm({
   }
 
   const action = updatePerson.bind(null, person.id);
+  const formRef = useRef<HTMLFormElement | null>(null);
 
   return (
     <div className="space-y-6">
@@ -274,7 +276,12 @@ export function EditPersonForm({
         </p>
       )}
 
-      <form action={action} className="space-y-6">
+      <StickySaveBar
+        formRef={formRef}
+        cancelHref={`/people/${person.id}`}
+      />
+
+      <form ref={formRef} action={action} className="space-y-6">
         <Field label="Name" required>
           <input
             type="text"
