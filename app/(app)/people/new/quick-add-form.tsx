@@ -178,21 +178,6 @@ export function QuickAddForm({
           />
         </Field>
 
-        {/* — Optional: Wie wir uns kennengelernt haben (Goldfeld) — */}
-        <Field
-          label="Wie wir uns kennengelernt haben"
-          hint={`Optional. 1-3 Sätze: Ort, Anlass, gemeinsame Bekannte. ${APP_CONFIG.PUBLIC_NAME} extrahiert daraus später Details.`}
-        >
-          <textarea
-            name="how_we_met"
-            rows={3}
-            placeholder="z.B. „Auf der Bauma 2024 in München kennengelernt, über Max. Wir saßen am Abendessen am selben Tisch."
-            value={state.how_we_met}
-            onChange={(e) => patch("how_we_met", e.target.value)}
-            className="w-full rounded border border-rule bg-paper px-3 py-2 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20"
-          />
-        </Field>
-
         {/* — Zweck — */}
         <Field label="Zweck" hint="Wo gehört diese Person in dein Leben?">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -273,6 +258,23 @@ export function QuickAddForm({
           name="cluster_state"
           value={JSON.stringify(cluster)}
         />
+
+        {/* — Wie wir uns kennengelernt haben (Goldfeld) — nach den
+            Kreisen damit Patrick erst den groben Kontext (Cluster,
+            Passions, Kreise) setzt und dann die persönliche Story dazu. */}
+        <Field
+          label="Wie wir uns kennengelernt haben"
+          hint={`Optional. 1-3 Sätze: Ort, Anlass, gemeinsame Bekannte. ${APP_CONFIG.PUBLIC_NAME} extrahiert daraus später Details.`}
+        >
+          <textarea
+            name="how_we_met"
+            rows={3}
+            placeholder={`z.B. "Auf der Bauma 2024 in München kennengelernt, über Max. Wir saßen am Abendessen am selben Tisch."`}
+            value={state.how_we_met}
+            onChange={(e) => patch("how_we_met", e.target.value)}
+            className="w-full rounded border border-rule bg-paper px-3 py-2 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20"
+          />
+        </Field>
 
         {/* — Advanced-Toggle — */}
         <div>
