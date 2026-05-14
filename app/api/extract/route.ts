@@ -7,6 +7,7 @@ import {
   type ChatMessage,
 } from "@/lib/claude";
 import { buildExtractionSystemPrompt } from "@/lib/prompts";
+import { loadPeopleContext } from "@/lib/llm-people-context";
 import { EXTRACTION_TOOLS } from "@/lib/tools";
 import { getUserContext } from "@/lib/user-context";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
@@ -59,24 +60,14 @@ export async function POST(request: Request) {
   }
 
   const supabase = await createClient();
-  const { data: peopleData, error: peopleError } = await supabase
-    .from("people")
-    .select("id, name, company, role, gift_idea, notes, how_we_met")
-    .is("deleted_at", null)
-    .eq("is_self", false)
-    .order("last_contact_at", { ascending: false, nullsFirst: false })
-    .limit(PEOPLE_PROMPT_LIMIT);
-
-  if (peopleError) {
-    return NextResponse.json(
-      { error: `people fetch: ${peopleError.message}` },
-      { status: 500 },
-    );
-  }
+  // Rich-Context: people-Skalare + tags + passions + contacts +
+  // relationships + life_events. Verhindert „nichts hinterlegt"-
+  // Halluzinationen wenn der User nach Daten fragt die im CRM stehen.
+  const people = await loadPeopleContext(supabase, PEOPLE_PROMPT_LIMIT);
 
   const system = buildExtractionSystemPrompt({
     displayName: ctx.display_name,
-    people: peopleData ?? [],
+    people,
     now: new Date(),
   });
 
@@ -148,7 +139,7 @@ export async function POST(request: Request) {
     }
 
     const peopleMap = new Map<string, string>(
-      (peopleData ?? []).map((p) => [p.id as string, p.name as string]),
+      people.map((p) => [p.id, p.name]),
     );
     const enrichedCalls = toolCalls.map((c) => {
       if (c.name !== "update_person") return c;

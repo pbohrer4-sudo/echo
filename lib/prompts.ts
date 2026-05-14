@@ -6,18 +6,66 @@ export interface PersonContext {
   name: string;
   company: string | null;
   role: string | null;
-  // Felder die der LLM zur Beantwortung von „was hast du über X?"-Fragen
-  // braucht. gift_idea ist explizit drin damit Geschenk-Suchen nicht
-  // mit „nichts hinterlegt" abgewiesen werden obwohl der User schon
-  // was eingetragen hat.
+  // Skalare Felder für „was hast du über X?"-Fragen. gift_idea ist
+  // explizit drin damit Geschenk-Suchen nicht mit „nichts hinterlegt"
+  // abgewiesen werden obwohl der User schon was eingetragen hat.
   gift_idea: string | null;
   notes: string | null;
   how_we_met: string | null;
+  // Aggregations aus Joined-Tabellen (siehe lib/llm-people-context.ts).
+  // Können leer-Array sein wenn die Person nichts in dem Cluster hat
+  // ODER wenn die Tabelle auf der Remote-DB noch fehlt (Migration-Drift).
+  tags: { name: string; cluster: string }[];
+  passions: string[];
+  contacts: { channel: string; value: string; subtype: string | null }[];
+  relationships: { label: string; related_name: string | null }[];
+  life_events: { title: string; date: string; kind: string }[];
 }
 
 function truncate(s: string, n: number): string {
   if (s.length <= n) return s;
   return `${s.slice(0, n - 1).trim()}…`;
+}
+
+function renderTags(tags: PersonContext["tags"]): string {
+  if (tags.length === 0) return "";
+  // Gruppieren nach cluster damit der LLM die Semantik sieht.
+  const byCluster = new Map<string, string[]>();
+  for (const t of tags) {
+    const arr = byCluster.get(t.cluster) ?? [];
+    arr.push(t.name);
+    byCluster.set(t.cluster, arr);
+  }
+  const parts: string[] = [];
+  for (const [cluster, names] of byCluster) {
+    parts.push(`${cluster}=[${names.slice(0, 6).join(", ")}]`);
+  }
+  return parts.join(" ");
+}
+
+function renderContacts(contacts: PersonContext["contacts"]): string {
+  return contacts
+    .map((c) => {
+      const labelSuffix = c.subtype ? ` (${c.subtype})` : "";
+      return `${c.channel}: ${c.value}${labelSuffix}`;
+    })
+    .join(" · ");
+}
+
+function renderRelationships(rels: PersonContext["relationships"]): string {
+  return rels
+    .filter((r) => r.related_name)
+    .map((r) => `${r.label} von ${r.related_name}`)
+    .join(", ");
+}
+
+function renderLifeEvents(events: PersonContext["life_events"]): string {
+  return events
+    .map((e) => {
+      const year = e.date.slice(0, 4);
+      return `${year} ${e.title}`;
+    })
+    .join(" · ");
 }
 
 function renderPeopleSection(people: PersonContext[]): string {
@@ -34,9 +82,19 @@ function renderPeopleSection(people: PersonContext[]): string {
         .join(" ");
       const details: string[] = [];
       if (p.gift_idea) details.push(`    Gifts: ${truncate(p.gift_idea, 200)}`);
+      const tagsLine = renderTags(p.tags);
+      if (tagsLine) details.push(`    Tags: ${tagsLine}`);
+      if (p.passions.length > 0)
+        details.push(`    Passions: ${p.passions.join(", ")}`);
+      if (p.contacts.length > 0)
+        details.push(`    Kontakte: ${renderContacts(p.contacts)}`);
+      if (p.relationships.length > 0)
+        details.push(`    Beziehungen: ${renderRelationships(p.relationships)}`);
+      if (p.life_events.length > 0)
+        details.push(`    Life-Events: ${renderLifeEvents(p.life_events)}`);
       if (p.how_we_met)
         details.push(`    Kennengelernt: ${truncate(p.how_we_met, 160)}`);
-      if (p.notes) details.push(`    Notes: ${truncate(p.notes, 200)}`);
+      if (p.notes) details.push(`    Notes: ${truncate(p.notes, 240)}`);
       return [head, ...details].join("\n");
     })
     .join("\n");

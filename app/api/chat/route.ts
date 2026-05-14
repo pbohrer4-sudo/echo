@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { CLAUDE_MODEL, chat, type ChatMessage } from "@/lib/claude";
-import { buildVoiceSystemPrompt, type PersonContext } from "@/lib/prompts";
+import { buildVoiceSystemPrompt } from "@/lib/prompts";
+import { loadPeopleContext } from "@/lib/llm-people-context";
 import { getUserContext } from "@/lib/user-context";
 import { createClient } from "@/lib/supabase/server";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
@@ -49,20 +50,12 @@ export async function POST(request: Request) {
 
   const supabase = await createClient();
 
-  // Personen-Kontext für den System-Prompt. Ohne das hier weiß der LLM
-  // NICHTS über die Leute in Patricks CRM — Fragen wie „suche Geschenk
-  // für Hannes" landeten am 14. Mai in einem „keine Geschenkidee
-  // hinterlegt" obwohl Hannes' gift_idea voll war. Wir laden die
-  // wichtigsten Skalare (gift_idea / notes / how_we_met) damit der LLM
-  // direkt antworten kann statt zu raten.
-  const { data: peopleData } = await supabase
-    .from("people")
-    .select("id, name, company, role, gift_idea, notes, how_we_met")
-    .is("deleted_at", null)
-    .eq("is_self", false)
-    .order("last_contact_at", { ascending: false, nullsFirst: false })
-    .limit(PEOPLE_CONTEXT_LIMIT);
-  const people = (peopleData ?? []) as PersonContext[];
+  // Personen-Kontext für den System-Prompt. loadPeopleContext aggregiert
+  // people-Skalare + tags + passions + contacts + relationships +
+  // life_events via batched IN-Queries — der LLM hat damit alles um
+  // „was hast du über X?"-Fragen direkt zu beantworten ohne zu
+  // halluzinieren oder „nichts hinterlegt" zu sagen.
+  const people = await loadPeopleContext(supabase, PEOPLE_CONTEXT_LIMIT);
 
   const startMs = Date.now();
   try {
