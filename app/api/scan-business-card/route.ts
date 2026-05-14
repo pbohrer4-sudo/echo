@@ -5,10 +5,10 @@ import {
   extractBusinessCard,
   type SupportedMediaType,
 } from "@/lib/business-card";
+import { MISTRAL_OCR_MODEL } from "@/lib/mistral-ocr";
 import { createClient } from "@/lib/supabase/server";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
-import { mapAnthropicError } from "@/lib/anthropic-error";
-import { logAnthropic } from "@/lib/llm-usage";
+import { logMistralOcr } from "@/lib/llm-usage";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -26,8 +26,10 @@ function isPdf(buf: Buffer): boolean {
   );
 }
 
-// Map sharp's format strings → Anthropic media types. Anything not in
-// this map (heif/heic/avif/tiff/raw/svg/…) gets re-encoded as JPEG.
+// Map sharp's format strings → Mistral-OCR-kompatible media types.
+// Mistral akzeptiert image/jpeg, image/png, image/webp, image/gif
+// nativ — alles andere (HEIC, AVIF, TIFF, …) wird vorab nach JPEG
+// re-encoded.
 const SHARP_TO_MEDIA: Record<string, SupportedMediaType | undefined> = {
   jpeg: "image/jpeg",
   jpg: "image/jpeg",
@@ -41,10 +43,6 @@ interface PreparedMedia {
   mediaType: SupportedMediaType | "application/pdf";
 }
 
-// Akzeptiert alles was sharp lesen kann (HEIC, HEIF, AVIF, TIFF, …) und
-// konvertiert nach JPEG wenn das Format nicht direkt von Anthropic
-// unterstützt wird. PDFs werden unverändert durchgereicht — der Caller
-// schickt sie als document-content statt image-content.
 async function prepareMedia(buf: Buffer): Promise<PreparedMedia | null> {
   if (isPdf(buf)) {
     return { base64: buf.toString("base64"), mediaType: "application/pdf" };
@@ -62,9 +60,9 @@ async function prepareMedia(buf: Buffer): Promise<PreparedMedia | null> {
     return { base64: buf.toString("base64"), mediaType: direct };
   }
 
-  // Fremdformat (HEIC, AVIF, TIFF, …) — nach JPEG re-encoden. EXIF wird
-  // entfernt damit Orientation korrekt gerendert wird; rotate() ohne
-  // Argument wendet die Orientation auf die Pixel an.
+  // Fremdformat (HEIC, AVIF, TIFF, …) → JPEG. rotate() ohne Argument
+  // wendet die EXIF-Orientation auf die Pixel an damit OCR die Karte
+  // korrekt herum sieht.
   try {
     const jpeg = await sharp(buf)
       .rotate()
@@ -126,34 +124,51 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
+
+  // BYO Mistral-Key aus Profil; fällt automatisch auf MISTRAL_API_KEY
+  // (Server-Env) zurück wenn der User keinen eigenen hinterlegt hat.
+  const mistralKey = ctx.byo_keys.mistral ?? null;
+
   const supabase = await createClient();
   const startMs = Date.now();
   try {
     const { data, usage, model } = await extractBusinessCard({
       imageBase64: prepared.base64,
       mediaType: prepared.mediaType,
-      apiKey: ctx.claude_key,
+      apiKey: mistralKey,
     });
-    void logAnthropic({
+    void logMistralOcr({
       supabase,
       userId: ctx.user_id,
       endpoint: "/api/scan-business-card",
       model,
-      usage,
+      pagesProcessed: usage.pages_processed,
       latencyMs: Date.now() - startMs,
     });
     return NextResponse.json({ data });
   } catch (err) {
-    void logAnthropic({
+    void logMistralOcr({
       supabase,
       userId: ctx.user_id,
       endpoint: "/api/scan-business-card",
-      model: "claude-sonnet-4-6",
-      usage: null,
+      model: MISTRAL_OCR_MODEL,
+      pagesProcessed: 0,
       latencyMs: Date.now() - startMs,
       status: "error",
     });
-    const { status, message } = mapAnthropicError(err);
+    const message =
+      err instanceof Error
+        ? err.message
+        : "Mistral OCR fehlgeschlagen";
+    // Mistral 401/403/429 sollen als 4xx zum Client durchgereicht
+    // werden damit das UI vernünftig reagieren kann; alle anderen
+    // Mistral-Fehler werden zu 502.
+    const lower = message.toLowerCase();
+    let status = 502;
+    if (lower.includes("401") || lower.includes("unauthorized")) status = 401;
+    else if (lower.includes("403")) status = 403;
+    else if (lower.includes("429")) status = 429;
+    else if (lower.includes("mistral_api_key")) status = 500;
     return NextResponse.json({ error: message }, { status });
   }
 }

@@ -34,8 +34,16 @@ const ANTHROPIC_PRICING: Record<
 // ElevenLabs Multilingual v2 ~ $0.18 per 1000 chars → 0.018 cents/char
 const ELEVENLABS_PER_CHAR_CENTS = 0.018;
 
+// Mistral OCR: $1 per 1000 pages laut Mistral-Pricing (Mai 2026).
+// Wir tracken `pages` als characters-Proxy weil das DB-Schema sonst
+// keine eigene Spalte hätte — calculateCostCents bekommt pages über
+// `characters`, was hier ok ist da Mistral keine Tokens berechnet.
+const MISTRAL_OCR_PER_PAGE_CENTS = 0.1; // 1$ / 1000 pages = 0.1 cent / page
+
+export type LogProvider = "anthropic" | "elevenlabs" | "mistral" | "openai";
+
 export function calculateCostCents(params: {
-  provider: "anthropic" | "elevenlabs";
+  provider: LogProvider;
   model?: string | null;
   inputTokens?: number;
   outputTokens?: number;
@@ -53,6 +61,10 @@ export function calculateCostCents(params: {
   if (params.provider === "elevenlabs") {
     return (params.characters ?? 0) * ELEVENLABS_PER_CHAR_CENTS;
   }
+  if (params.provider === "mistral") {
+    // Für OCR: characters trägt die Seitenzahl, weil pages-Spalte fehlt.
+    return (params.characters ?? 0) * MISTRAL_OCR_PER_PAGE_CENTS;
+  }
   return 0;
 }
 
@@ -60,7 +72,7 @@ export interface LogParams {
   supabase: SupabaseClient;
   userId: string;
   endpoint: string;
-  provider: "anthropic" | "elevenlabs";
+  provider: LogProvider;
   model?: string | null;
   inputTokens?: number;
   outputTokens?: number;
@@ -117,6 +129,30 @@ export async function logAnthropic(args: {
     model: args.model,
     inputTokens: args.usage?.input_tokens ?? 0,
     outputTokens: args.usage?.output_tokens ?? 0,
+    latencyMs: args.latencyMs,
+    status: args.status ?? "ok",
+  });
+}
+
+// Convenience-Wrapper für Mistral OCR. Tracken Seitenzahl in
+// `characters` weil das DB-Schema keine pages-Spalte hat — der
+// Cost-Calc oben kennt diesen Trick.
+export async function logMistralOcr(args: {
+  supabase: SupabaseClient;
+  userId: string;
+  endpoint: string;
+  model: string;
+  pagesProcessed: number;
+  latencyMs: number;
+  status?: "ok" | "error" | "rate_limited";
+}): Promise<void> {
+  await logUsage({
+    supabase: args.supabase,
+    userId: args.userId,
+    endpoint: args.endpoint,
+    provider: "mistral",
+    model: args.model,
+    characters: args.pagesProcessed,
     latencyMs: args.latencyMs,
     status: args.status ?? "ok",
   });
