@@ -15,6 +15,7 @@ import {
   type PersonContact,
 } from "@/lib/types";
 import { addContactAction } from "@/app/(app)/people/[id]/contact-actions";
+import { PhoneInput } from "@/components/phone-input";
 
 interface Props {
   personId: string;
@@ -174,20 +175,42 @@ export function ActionBar({ personId, contacts }: Props) {
                     ? "Handle oder URL"
                     : "Wert"}
             </span>
-            <input
-              type="text"
-              value={addValue}
-              onChange={(e) => setAddValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  submit();
-                }
-                if (e.key === "Escape") setAddOpen(false);
-              }}
-              autoFocus
-              className="h-9 w-full min-w-[16rem] rounded border border-rule bg-paper px-2 text-xs text-ink-1 outline-none focus:border-action focus:ring-2 focus:ring-action/20"
-            />
+            {addChannel === "phone" ||
+            addChannel === "whatsapp" ||
+            addChannel === "sms" ? (
+              <div
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    submit();
+                  }
+                  if (e.key === "Escape") setAddOpen(false);
+                }}
+                className="min-w-[16rem]"
+              >
+                <PhoneInput
+                  value={addValue}
+                  onChange={setAddValue}
+                  inputClassName="h-9 w-full rounded border border-rule bg-paper px-2 text-xs text-ink-1 outline-none focus:border-action focus:ring-2 focus:ring-action/20"
+                  autoFocus
+                />
+              </div>
+            ) : (
+              <input
+                type="text"
+                value={addValue}
+                onChange={(e) => setAddValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    submit();
+                  }
+                  if (e.key === "Escape") setAddOpen(false);
+                }}
+                autoFocus
+                className="h-9 w-full min-w-[16rem] rounded border border-rule bg-paper px-2 text-xs text-ink-1 outline-none focus:border-action focus:ring-2 focus:ring-action/20"
+              />
+            )}
           </label>
           <button
             type="button"

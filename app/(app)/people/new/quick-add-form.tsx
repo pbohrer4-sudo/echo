@@ -26,6 +26,7 @@ import {
 import type { CircleRow } from "@/lib/types";
 import { createPersonQuick } from "./quick-add-actions";
 import { VoiceCapture, type VoiceExtractedFields } from "./voice-capture";
+import { PhoneInput } from "@/components/phone-input";
 
 const PURPOSE_HINTS: Record<Purpose, string> = {
   personal: "Privater Kontakt",
@@ -328,15 +329,15 @@ export function QuickAddForm({
             <SectionLabel>Kontakt</SectionLabel>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Telefon">
-                <input
-                  name="phone"
-                  type="tel"
-                  autoComplete="tel"
-                  placeholder="+49 …"
+                <PhoneInput
                   value={state.phone}
-                  onChange={(e) => patch("phone", e.target.value)}
-                  className={inputClass}
+                  onChange={(v) => patch("phone", v)}
+                  inputClassName={inputClass}
                 />
+                {/* Hidden mirror damit das bestehende form-action den
+                    Wert per FormData mitschickt — der server-action
+                    erwartet ein name="phone"-Feld. */}
+                <input type="hidden" name="phone" value={state.phone} />
               </Field>
               <Field label="Email">
                 <input

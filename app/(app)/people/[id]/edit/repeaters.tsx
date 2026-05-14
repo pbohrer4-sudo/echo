@@ -14,6 +14,7 @@ import {
   type ContactChannel,
   type ImportantDate,
 } from "@/lib/types";
+import { PhoneInput } from "@/components/phone-input";
 
 const inputClass =
   "h-9 w-full rounded border border-rule bg-paper px-2 text-xs text-ink-1 outline-none focus:border-action focus:ring-2 focus:ring-action/20";
@@ -88,13 +89,23 @@ export function ContactsRepeater({
               </option>
             ))}
           </select>
-          <input
-            type="text"
-            value={c.value}
-            onChange={(e) => update(i, { value: e.target.value })}
-            placeholder={placeholderFor(c.channel)}
-            className={inputClass}
-          />
+          {c.channel === "phone" ||
+          c.channel === "whatsapp" ||
+          c.channel === "sms" ? (
+            <PhoneInput
+              value={c.value}
+              onChange={(v) => update(i, { value: v })}
+              inputClassName={inputClass}
+            />
+          ) : (
+            <input
+              type="text"
+              value={c.value}
+              onChange={(e) => update(i, { value: e.target.value })}
+              placeholder={placeholderFor(c.channel)}
+              className={inputClass}
+            />
+          )}
           <input
             type="text"
             value={c.subtype}
