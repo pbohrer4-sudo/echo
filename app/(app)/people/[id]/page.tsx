@@ -27,6 +27,8 @@ import {
   SocialList,
 } from "./contact-fields";
 import { WhatsappSendBox } from "@/components/whatsapp-send-box";
+import { WaAiDraft } from "@/components/wa-ai-draft";
+import { createClient } from "@/lib/supabase/server";
 import {
   SelfProfileTabs,
   parseSelfTab,
@@ -334,6 +336,20 @@ export default async function PersonDetailPage({
   const relatedIds = (person.relationships ?? []).map(
     (r) => r.related_person_id,
   );
+
+  // Load user profile for message_style preference (used by WaAiDraft).
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: profileRow } = user
+    ? await supabase
+        .from("profiles")
+        .select("message_style")
+        .eq("id", user.id)
+        .maybeSingle()
+    : { data: null };
+  const messageStyle: "locker" | "professionell" =
+    profileRow?.message_style === "professionell" ? "professionell" : "locker";
+
   const [interactions, notes, reminders, todos, peopleMap, similar] =
     await Promise.all([
       listInteractionsForPerson(id),
@@ -625,6 +641,14 @@ export default async function PersonDetailPage({
               <ClassificationView person={person} />
             </section>
           )}
+
+        {!person.is_self && (person.phones ?? []).length > 0 && (
+          <WaAiDraft
+            person={{ id: person.id, name: person.name }}
+            phones={person.phones ?? []}
+            defaultStyle={messageStyle}
+          />
+        )}
 
         {!person.is_self && (person.interests?.length ?? 0) > 0 && (
           <section>
