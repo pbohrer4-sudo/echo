@@ -93,11 +93,12 @@ export function ActionBar({ personId, contacts }: Props) {
 
   return (
     <div className="space-y-2">
-      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto]">
+      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
         <ActionButton
           href={hasUsablePhone ? `tel:${phone!.value}` : undefined}
           onClickIfDisabled={() => quickAdd("phone")}
           label={hasUsablePhone ? "Anrufen" : "+ Telefon"}
+          subLabel={hasUsablePhone ? phone!.value : undefined}
           icon={
             <svg
               width="18"
@@ -121,6 +122,7 @@ export function ActionBar({ personId, contacts }: Props) {
           href={hasUsableWa ? `https://wa.me/${whatsappDigits}` : undefined}
           onClickIfDisabled={() => quickAdd("whatsapp")}
           label={hasUsableWa ? "WhatsApp" : "+ WhatsApp"}
+          subLabel={hasUsableWa ? whatsapp!.value : undefined}
           icon={
             <svg
               width="18"
@@ -136,32 +138,10 @@ export function ActionBar({ personId, contacts }: Props) {
           background="#25D366"
           foreground="#fff"
         />
-        <ActionButton
-          label="Mehr"
-          icon={
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <circle cx="5" cy="12" r="1.5" />
-              <circle cx="12" cy="12" r="1.5" />
-              <circle cx="19" cy="12" r="1.5" />
-            </svg>
-          }
-          href="#weitere-kanaele"
-          primary={false}
-        />
         <button
           type="button"
           onClick={() => quickAdd("phone")}
-          className="inline-flex h-12 items-center justify-center gap-1 rounded border border-dashed border-rule bg-paper px-3 text-sm text-ink-3 transition hover:border-action hover:text-action"
+          className="inline-flex min-h-12 items-center justify-center gap-1 rounded border border-dashed border-rule bg-paper px-3 text-sm text-ink-3 transition hover:border-action hover:text-action"
           title="Kontakt hinzufügen"
         >
           + Kontakt
@@ -239,6 +219,7 @@ export function ActionBar({ personId, contacts }: Props) {
 function ActionButton({
   href,
   label,
+  subLabel,
   icon,
   primary = false,
   background,
@@ -247,6 +228,7 @@ function ActionButton({
 }: {
   href?: string;
   label: string;
+  subLabel?: string;
   icon: React.ReactNode;
   primary?: boolean;
   background?: string;
@@ -256,8 +238,21 @@ function ActionButton({
   onClickIfDisabled?: () => void;
 }) {
   const disabled = !href;
-  const baseClasses =
-    "inline-flex h-12 items-center justify-center gap-2 rounded text-sm font-medium transition";
+  const baseClasses = subLabel
+    ? "inline-flex min-h-12 flex-col items-center justify-center gap-0.5 rounded py-1.5 text-sm font-medium transition"
+    : "inline-flex h-12 items-center justify-center gap-2 rounded text-sm font-medium transition";
+
+  const inner = (
+    <>
+      <span className="inline-flex items-center gap-2">
+        {icon}
+        <span>{label}</span>
+      </span>
+      {subLabel && (
+        <span className="text-[11px] font-normal opacity-80">{subLabel}</span>
+      )}
+    </>
+  );
 
   if (disabled) {
     if (onClickIfDisabled) {
@@ -268,8 +263,7 @@ function ActionButton({
           className={`${baseClasses} border border-dashed border-rule bg-paper text-ink-3 hover:border-action hover:text-action`}
           aria-label={label}
         >
-          {icon}
-          <span>{label}</span>
+          {inner}
         </button>
       );
     }
@@ -280,8 +274,7 @@ function ActionButton({
         className={`${baseClasses} cursor-not-allowed border border-rule bg-paper-2 text-ink-4`}
         aria-label={label}
       >
-        {icon}
-        <span>{label}</span>
+        {inner}
       </button>
     );
   }
@@ -294,8 +287,7 @@ function ActionButton({
         style={{ background, color: foreground }}
         aria-label={label}
       >
-        {icon}
-        <span>{label}</span>
+        {inner}
       </a>
     );
   }
@@ -306,8 +298,7 @@ function ActionButton({
       className={`${baseClasses} border border-rule bg-paper text-ink-2 hover:border-ink-3 hover:text-ink-1 px-4`}
       aria-label={label}
     >
-      {icon}
-      <span className="hidden sm:inline">{label}</span>
+      {inner}
     </a>
   );
 }
