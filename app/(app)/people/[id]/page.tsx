@@ -147,7 +147,7 @@ export default async function PersonDetailPage({
 
   return (
     <div className="px-8 py-10">
-      <div className="mx-auto max-w-3xl space-y-10">
+      <div className="mx-auto max-w-3xl space-y-5">
         <Link
           href={person.is_self ? "/" : "/people"}
           className="t-label inline-flex items-center hover:text-ink-1"

@@ -65,7 +65,7 @@ export function ClusterEditor({
   allCircles,
 }: Props) {
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       <TagsBlock personId={personId} tags={tags} />
       <PassionsBlock personId={personId} passions={passions} />
       <CirclesBlock
