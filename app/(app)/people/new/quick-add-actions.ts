@@ -23,6 +23,7 @@ import type {
   LocationGeo,
   PhoneEntry,
   Purpose,
+  TagCluster,
 } from "@/lib/types";
 
 // 0029 — Hidden-Input vom LocationAutocomplete parsen. Untrusted JSON,
@@ -85,15 +86,6 @@ function dateOrNull(value: FormDataEntryValue | null): string | null {
   return trimmed;
 }
 
-function parseTags(raw: string | null): string[] {
-  if (!raw) return [];
-  return raw
-    .split(/[,\n]/)
-    .map((t) => t.trim().toLowerCase())
-    .filter((t) => t.length > 0 && t.length <= 50)
-    .slice(0, 7); // Briefing 5.x: max 7 Tags pro Person
-}
-
 export async function createPersonQuick(formData: FormData) {
   const supabase = await createClient();
   const {
@@ -134,7 +126,6 @@ export async function createPersonQuick(formData: FormData) {
   const emailValue = trimOrNull(formData.get("email"));
   const linkedinValue = trimOrNull(formData.get("linkedin_url"));
   const websiteValue = trimOrNull(formData.get("website"));
-  const tagInput = trimOrNull(formData.get("tags"));
   const notes = trimOrNull(formData.get("notes"));
   const birthday = dateOrNull(formData.get("birthday"));
   const photoUrl = trimOrNull(formData.get("photo_url"));
@@ -305,28 +296,33 @@ export async function createPersonQuick(formData: FormData) {
     );
   }
 
-  // Tags anlegen + verknüpfen (idempotent via getOrCreateTag).
-  // Nicht inline mit dem Insert, weil supabase-js keine atomare
-  // Cross-Tabelle-Transaktion bietet. Failure hier blockt den Person-
-  // Create nicht — Tags sind nice-to-have.
-  const tagNames = parseTags(tagInput);
-  if (tagNames.length > 0) {
-    for (const tagName of tagNames) {
+  // Cluster-State aus dem Form-Hidden-Input: Tags pro Cluster +
+  // Passions + Circles. Failures hier blocken den Person-Create
+  // nicht — alles best-effort.
+  const cluster = parseClusterState(formData.get("cluster_state"));
+
+  // Tags: pro Cluster, getOrCreateTag + addTagToPerson.
+  const tagClusterEntries = Object.entries(cluster.tags) as Array<
+    [TagCluster, string[]]
+  >;
+  for (const [tagCluster, tagNames] of tagClusterEntries) {
+    for (const rawName of tagNames) {
+      const name = rawName.trim().toLowerCase();
+      if (!name) continue;
       const { data: existingTag } = await supabase
         .from("tags")
         .select("id")
         .eq("user_id", user.id)
-        .eq("name", tagName)
+        .eq("name", name)
         .maybeSingle();
-
       let tagId = existingTag?.id ?? null;
       if (!tagId) {
         const { data: inserted } = await supabase
           .from("tags")
           .insert({
             user_id: user.id,
-            name: tagName,
-            cluster: "interests",
+            name,
+            cluster: tagCluster,
             created_by: "user",
           })
           .select("id")
@@ -341,6 +337,90 @@ export async function createPersonQuick(formData: FormData) {
     }
   }
 
+  // Passions: einfach pro Eintrag eine Row in passions.
+  for (const passion of cluster.passions) {
+    const trimmed = passion.trim();
+    if (!trimmed) continue;
+    await supabase.from("passions").insert({
+      user_id: user.id,
+      person_id: newPerson.id,
+      name: trimmed,
+    });
+  }
+
+  // Circles: getOrCreateCircle + addPersonToCircle. resolveOrCreate ist
+  // race-safe gegenüber Unique-Constraint.
+  for (const circleName of cluster.circles) {
+    const trimmed = circleName.trim();
+    if (!trimmed) continue;
+    const { data: existingCircle } = await supabase
+      .from("circles")
+      .select("id")
+      .eq("user_id", user.id)
+      .ilike("name", trimmed)
+      .maybeSingle();
+    let circleId = existingCircle?.id ?? null;
+    if (!circleId) {
+      const { data: inserted } = await supabase
+        .from("circles")
+        .insert({ user_id: user.id, name: trimmed })
+        .select("id")
+        .single();
+      circleId = inserted?.id ?? null;
+    }
+    if (circleId) {
+      await supabase
+        .from("person_circles")
+        .insert({ person_id: newPerson.id, circle_id: circleId });
+    }
+  }
+
   revalidatePath("/people");
   redirect(`/people/${newPerson.id}`);
+}
+
+// 0030 — Cluster-Hidden-Input vom Quick-Add-Form parsen. Defensive
+// Validierung: nur bekannte TagCluster-Werte landen in der Map,
+// Arrays werden auf String-Items normalisiert.
+interface ParsedCluster {
+  tags: Record<TagCluster, string[]>;
+  passions: string[];
+  circles: string[];
+}
+const VALID_CLUSTERS: TagCluster[] = [
+  "reminders",
+  "interests",
+  "potential",
+  "origin",
+];
+function parseClusterState(raw: FormDataEntryValue | null): ParsedCluster {
+  const empty: ParsedCluster = {
+    tags: { reminders: [], interests: [], potential: [], origin: [] },
+    passions: [],
+    circles: [],
+  };
+  if (typeof raw !== "string" || !raw.trim()) return empty;
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const tagsRaw = (parsed.tags ?? {}) as Record<string, unknown>;
+    for (const c of VALID_CLUSTERS) {
+      const arr = tagsRaw[c];
+      if (Array.isArray(arr)) {
+        empty.tags[c] = arr.filter((x): x is string => typeof x === "string");
+      }
+    }
+    if (Array.isArray(parsed.passions)) {
+      empty.passions = parsed.passions.filter(
+        (x): x is string => typeof x === "string",
+      );
+    }
+    if (Array.isArray(parsed.circles)) {
+      empty.circles = parsed.circles.filter(
+        (x): x is string => typeof x === "string",
+      );
+    }
+  } catch {
+    // ignore — leerer Cluster-State falls JSON kaputt war
+  }
+  return empty;
 }

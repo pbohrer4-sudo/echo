@@ -18,6 +18,12 @@ import {
 } from "@/lib/types";
 import { StickySaveBar } from "@/components/sticky-save-bar";
 import { LocationAutocomplete } from "@/components/location-autocomplete";
+import {
+  DraftClusterEditor,
+  emptyDraftClusterState,
+  type DraftClusterState,
+} from "@/components/draft-cluster-editor";
+import type { CircleRow } from "@/lib/types";
 import { createPersonQuick } from "./quick-add-actions";
 import { VoiceCapture, type VoiceExtractedFields } from "./voice-capture";
 
@@ -51,7 +57,6 @@ interface FormState {
   email: string;
   linkedin_url: string;
   website: string;
-  tags: string;
   met_date: string;
   met_location: string;
   met_location_geo: LocationGeo | null;
@@ -75,7 +80,6 @@ const empty: FormState = {
   email: "",
   linkedin_url: "",
   website: "",
-  tags: "",
   met_date: "",
   met_location: "",
   met_location_geo: null,
@@ -88,10 +92,19 @@ const empty: FormState = {
   photo_url: "",
 };
 
-export function QuickAddForm({ error }: { error?: string }) {
+export function QuickAddForm({
+  error,
+  existingCircles = [],
+}: {
+  error?: string;
+  existingCircles?: CircleRow[];
+}) {
   const formRef = useRef<HTMLFormElement | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [state, setState] = useState<FormState>(empty);
+  const [cluster, setCluster] = useState<DraftClusterState>(
+    emptyDraftClusterState(),
+  );
 
   function applyVoice(fields: VoiceExtractedFields) {
     setState((prev) => ({
@@ -104,10 +117,32 @@ export function QuickAddForm({ error }: { error?: string }) {
       linkedin_url: fields.linkedin_url ?? prev.linkedin_url,
       website: fields.website ?? prev.website,
       notes: fields.notes ?? prev.notes,
-      tags: fields.tags ?? prev.tags,
       birthday: fields.birthday ?? prev.birthday,
       current_location: fields.current_location ?? prev.current_location,
     }));
+    // Voice-extracted tags → default-Cluster „interests". Dedupe gegen
+    // bestehenden Cluster-State.
+    if (fields.tags) {
+      const incoming = fields.tags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+      if (incoming.length > 0) {
+        setCluster((prev) => {
+          const existing = new Set(
+            prev.tags.interests.map((t) => t.toLowerCase()),
+          );
+          const merged = [...prev.tags.interests];
+          for (const t of incoming) {
+            if (!existing.has(t.toLowerCase())) merged.push(t);
+          }
+          return {
+            ...prev,
+            tags: { ...prev.tags, interests: merged.slice(0, 7) },
+          };
+        });
+      }
+    }
     // Wenn Voice was geliefert hat, klappt das Advanced-Toggle auf damit
     // der Nutzer alle Felder sieht.
     setAdvancedOpen(true);
@@ -227,6 +262,18 @@ export function QuickAddForm({ error }: { error?: string }) {
           </div>
         </Field>
 
+        {/* — Tags + Leidenschaften + Kreise (V3 Cluster-Editor) — */}
+        <DraftClusterEditor
+          state={cluster}
+          onChange={setCluster}
+          existingCircles={existingCircles}
+        />
+        <input
+          type="hidden"
+          name="cluster_state"
+          value={JSON.stringify(cluster)}
+        />
+
         {/* — Advanced-Toggle — */}
         <div>
           <button
@@ -322,19 +369,6 @@ export function QuickAddForm({ error }: { error?: string }) {
             </div>
 
             <SectionLabel>Über</SectionLabel>
-            <Field
-              label="Tags"
-              hint={`Komma-separiert. Cluster „Interessen" als Default — auf Detail-Seite re-klassifizierbar.`}
-            >
-              <input
-                name="tags"
-                type="text"
-                placeholder="z.B. tennis, münchen, kunde"
-                value={state.tags}
-                onChange={(e) => patch("tags", e.target.value)}
-                className={inputClass}
-              />
-            </Field>
             <Field label="Notizen">
               <textarea
                 name="notes"

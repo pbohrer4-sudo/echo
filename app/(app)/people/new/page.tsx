@@ -1,10 +1,10 @@
 import { QuickAddForm } from "./quick-add-form";
 import { APP_CONFIG } from "@/lib/config";
+import { listAllCircles } from "@/lib/circles";
 
-// Quick-Add Person — 4 Pflicht-Felder (Name, how_we_met, purpose, depth)
-// + Advanced-Toggle mit 7 Zusatz-Feldern (Briefing 5.1, Phase C2).
-// Die alte 30-Felder-Form (lib PersonForm) bleibt für die Edit-Page,
-// hier kommt das Minimal-Quick-Add zum Einsatz.
+// Quick-Add Person — nur Name ist Pflicht, Rest optional. Voice-Capture
+// vorbefüllt das Formular. Cluster-Block (Tags/Passions/Circles) wird
+// als Draft erfasst und beim Submit zusammen mit der Person angelegt.
 
 export default async function NewPersonPage({
   searchParams,
@@ -12,6 +12,7 @@ export default async function NewPersonPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
+  const existingCircles = await listAllCircles();
 
   return (
     <div className="px-8 py-10">
@@ -22,11 +23,14 @@ export default async function NewPersonPage({
             Person anlegen
           </h1>
           <p className="text-sm text-ink-3">
-            Vier Felder. Den Rest entdeckt {APP_CONFIG.PUBLIC_NAME} über die Zeit — oder du
-            füllst nach auf der Detail-Seite.
+            Nur Name ist Pflicht. Den Rest entdeckt {APP_CONFIG.PUBLIC_NAME} über
+            die Zeit — oder du füllst nach auf der Detail-Seite.
           </p>
         </header>
-        <QuickAddForm error={error ? decodeURIComponent(error) : undefined} />
+        <QuickAddForm
+          error={error ? decodeURIComponent(error) : undefined}
+          existingCircles={existingCircles}
+        />
       </div>
     </div>
   );
