@@ -101,7 +101,8 @@ export async function createPersonQuick(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // — 4 Pflichtfelder —
+  // Einziges Pflichtfeld: Name. Alles andere optional damit Quick-Add
+  // wirklich quick ist — Detail-Page erlaubt nachträgliches Ergänzen.
   const name = trimOrNull(formData.get("name"));
   const howWeMet = trimOrNull(formData.get("how_we_met"));
   const purposeRaw = formData.get("purpose");
@@ -110,18 +111,10 @@ export async function createPersonQuick(formData: FormData) {
   if (!name) {
     redirect(`/people/new?error=${encodeURIComponent("Name fehlt")}`);
   }
-  if (!howWeMet) {
-    redirect(
-      `/people/new?error=${encodeURIComponent("Wie wir uns kennengelernt haben fehlt")}`,
-    );
-  }
   const purpose: Purpose | null =
     typeof purposeRaw === "string" && PURPOSE_VALUES.includes(purposeRaw as Purpose)
       ? (purposeRaw as Purpose)
       : null;
-  if (!purpose) {
-    redirect(`/people/new?error=${encodeURIComponent("Zweck fehlt")}`);
-  }
 
   // Depth: "auto" → null + depth_source='auto', spezifischer Wert →
   // value + depth_source='manual_override'.
@@ -139,7 +132,12 @@ export async function createPersonQuick(formData: FormData) {
   const role = trimOrNull(formData.get("role"));
   const phoneValue = trimOrNull(formData.get("phone"));
   const emailValue = trimOrNull(formData.get("email"));
+  const linkedinValue = trimOrNull(formData.get("linkedin_url"));
+  const websiteValue = trimOrNull(formData.get("website"));
   const tagInput = trimOrNull(formData.get("tags"));
+  const notes = trimOrNull(formData.get("notes"));
+  const birthday = dateOrNull(formData.get("birthday"));
+  const photoUrl = trimOrNull(formData.get("photo_url"));
   const metDate = dateOrNull(formData.get("met_date"));
   const metLocation = trimOrNull(formData.get("met_location"));
   const metLocationGeo = parseLocationGeo(formData.get("met_location_geo"));
@@ -149,6 +147,12 @@ export async function createPersonQuick(formData: FormData) {
   );
   const homeLocation = trimOrNull(formData.get("home_location"));
   const homeLocationGeo = parseLocationGeo(formData.get("home_location_geo"));
+
+  // Geburtstag → important_dates JSONB-Array.
+  const importantDates: ImportantDate[] = [];
+  if (birthday) {
+    importantDates.push({ label: "Geburtstag", date: birthday, remind: true });
+  }
 
   // Phone/Email als JSONB-Single-Entry-Array (Echo-Format).
   const phones: PhoneEntry[] = phoneValue
@@ -177,9 +181,14 @@ export async function createPersonQuick(formData: FormData) {
       phones,
       emails,
       addresses: [],
-      socials: [],
-      important_dates: [] as ImportantDate[],
+      socials: websiteValue
+        ? [{ platform: "Website", handle_or_url: websiteValue }]
+        : [],
+      important_dates: importantDates,
       relationships: [],
+      notes,
+      linkedin_url: linkedinValue,
+      photo_url: photoUrl,
       // Briefing-v3-Schema (Legacy-Spalten weg seit 0025).
       how_we_met: howWeMet,
       met_date: metDate,
@@ -224,6 +233,26 @@ export async function createPersonQuick(formData: FormData) {
       channel: "email",
       subtype: "persönlich",
       value: emailValue,
+      is_primary: true,
+      source: "manual",
+    });
+  }
+  if (linkedinValue) {
+    await supabase.from("person_contacts").insert({
+      user_id: user.id,
+      person_id: newPerson.id,
+      channel: "linkedin",
+      value: linkedinValue,
+      is_primary: true,
+      source: "manual",
+    });
+  }
+  if (websiteValue) {
+    await supabase.from("person_contacts").insert({
+      user_id: user.id,
+      person_id: newPerson.id,
+      channel: "website",
+      value: websiteValue,
       is_primary: true,
       source: "manual",
     });
