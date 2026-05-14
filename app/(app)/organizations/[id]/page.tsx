@@ -5,6 +5,7 @@ import {
   listPeopleForOrganization,
 } from "@/lib/organizations";
 import { DeleteOrganizationButton } from "./delete-button";
+import { OrgEnrichButton } from "./enrich-button";
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
@@ -89,6 +90,12 @@ export default async function OrganizationDetailPage({
             <DeleteOrganizationButton id={org.id} name={org.name} />
           </div>
         </div>
+
+        <OrgEnrichButton
+          orgId={org.id}
+          name={org.name}
+          domain={org.domain}
+        />
 
         <section>
           <div className="section-head">
