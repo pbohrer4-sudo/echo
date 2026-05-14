@@ -194,27 +194,51 @@ export function DatesRepeater({
       {dates.length === 0 && (
         <p className="text-[11px] italic text-ink-4">Keine Daten hinterlegt.</p>
       )}
-      {dates.map((d, i) => (
+      {dates.map((d, i) => {
+        // Custom-Mode: wenn das Label nicht in der Preset-Liste steht
+        // ODER explizit „andere" gewählt wurde, zeigen wir ein Text-
+        // Input statt nur dem Dropdown.
+        const isCustom =
+          !DATE_LABELS.includes(d.label as (typeof DATE_LABELS)[number]) ||
+          d.label === "andere";
+        const dropdownValue = DATE_LABELS.includes(
+          d.label as (typeof DATE_LABELS)[number],
+        )
+          ? d.label
+          : "andere";
+        return (
         <div
           key={i}
-          className="grid grid-cols-[140px_minmax(0,150px)_minmax(0,1fr)_auto] gap-2 items-center"
+          className="grid grid-cols-[140px_minmax(0,150px)_minmax(0,1fr)_auto] gap-2 items-start"
         >
-          <select
-            value={DATE_LABELS.includes(d.label as (typeof DATE_LABELS)[number])
-              ? d.label
-              : "andere"}
-            onChange={(e) => {
-              const v = e.target.value;
-              update(i, { label: v === "andere" ? d.label || "" : v });
-            }}
-            className={inputClass}
-          >
-            {DATE_LABELS.map((l) => (
-              <option key={l} value={l}>
-                {l}
-              </option>
-            ))}
-          </select>
+          <div className="space-y-1">
+            <select
+              value={dropdownValue}
+              onChange={(e) => {
+                const v = e.target.value;
+                // Bei Wechsel auf „andere" Label leer lassen — User
+                // tippt ihn unten ins Custom-Input. Bei Wechsel auf
+                // einen Preset den Preset-Wert übernehmen.
+                update(i, { label: v === "andere" ? "" : v });
+              }}
+              className={inputClass}
+            >
+              {DATE_LABELS.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+            {isCustom && (
+              <input
+                type="text"
+                value={d.label === "andere" ? "" : d.label}
+                onChange={(e) => update(i, { label: e.target.value })}
+                placeholder="z.B. Kennenlern-Tag"
+                className={inputClass}
+              />
+            )}
+          </div>
           <input
             type="date"
             value={d.date}
@@ -237,7 +261,8 @@ export function DatesRepeater({
             ×
           </button>
         </div>
-      ))}
+        );
+      })}
       <button
         type="button"
         onClick={add}

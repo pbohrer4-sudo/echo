@@ -108,13 +108,17 @@ function AddDateForm({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [label, setLabel] = useState<string>(DATE_LABELS[0]);
+  const [customLabel, setCustomLabel] = useState("");
   const [date, setDate] = useState("");
   const [remind, setRemind] = useState(true);
+
+  const isCustom = label === "andere";
+  const effectiveLabel = isCustom ? customLabel.trim() || "andere" : label;
 
   function submit() {
     const fd = new FormData();
     fd.set("person_id", personId);
-    fd.set("label", label);
+    fd.set("label", effectiveLabel);
     fd.set("date", date);
     if (remind) fd.set("remind", "on");
     startTransition(async () => {
@@ -151,6 +155,18 @@ function AddDateForm({
           />
         </label>
       </div>
+      {isCustom && (
+        <label className="space-y-1 block">
+          <Label>Eigener Anlass</Label>
+          <input
+            type="text"
+            value={customLabel}
+            onChange={(e) => setCustomLabel(e.target.value)}
+            placeholder="z.B. Kennenlern-Tag"
+            className={inputClass}
+          />
+        </label>
+      )}
       <label className="flex items-center gap-2 text-xs text-ink-2">
         <input
           type="checkbox"
