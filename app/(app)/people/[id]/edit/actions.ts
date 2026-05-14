@@ -208,13 +208,20 @@ export async function updatePerson(personId: string, formData: FormData) {
     );
   }
 
-  // Cluster-Diff: aktueller DB-Stand vs gewünschter Form-Stand →
-  // add / remove. Tags wandern in den Cluster den die Form sagt.
-  const desired = parseClusterState(formData.get("cluster_state"));
-  await reconcileCluster(supabase, user.id, personId, desired);
-
-  // person_contacts: replace-all (simple + bulletproof bei Form-Submit).
-  await reconcileContacts(supabase, user.id, personId, desiredContacts);
+  // Cluster + Contacts: jeder Schritt kann scheitern. Statt silent
+  // zu schlucken (was am 2026-05-14 zu duplicate person_contacts-
+  // Rows geführt hat — User sah keine Änderung, retry → 2 Rows)
+  // jetzt error → redirect mit ?error=… damit der User es sieht.
+  try {
+    const desired = parseClusterState(formData.get("cluster_state"));
+    await reconcileCluster(supabase, user.id, personId, desired);
+    await reconcileContacts(supabase, user.id, personId, desiredContacts);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    redirect(
+      `/people/${personId}/edit?error=${encodeURIComponent(message)}`,
+    );
+  }
 
   revalidatePath(`/people/${personId}`);
   revalidatePath("/people");
@@ -505,7 +512,19 @@ async function reconcileContacts(
   personId: string,
   desired: ContactInput[],
 ): Promise<void> {
-  await supabase.from("person_contacts").delete().eq("person_id", personId);
+  // Errors hier wurden früher silently geschluckt — wenn DELETE oder
+  // INSERT fehlschlägt sieht der User die alten Daten unverändert
+  // wieder, denkt der Save war ein no-op und probiert es nochmal.
+  // Beim zweiten Versuch werden dann Duplikate erzeugt (klassischer
+  // Fall am 2026-05-14 in production beobachtet). Jetzt werfen wir,
+  // der Caller redirect't mit ?error=…
+  const { error: delErr } = await supabase
+    .from("person_contacts")
+    .delete()
+    .eq("person_id", personId);
+  if (delErr) {
+    throw new Error(`reconcileContacts.delete: ${delErr.message}`);
+  }
   if (desired.length === 0) return;
   const rows = desired.map((c) => ({
     user_id: userId,
@@ -528,5 +547,10 @@ async function reconcileContacts(
       primarySeen.add(row.channel);
     }
   }
-  await supabase.from("person_contacts").insert(rows);
+  const { error: insErr } = await supabase
+    .from("person_contacts")
+    .insert(rows);
+  if (insErr) {
+    throw new Error(`reconcileContacts.insert: ${insErr.message}`);
+  }
 }
