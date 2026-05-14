@@ -1,12 +1,16 @@
 // Geographies-Block auf Person-Detail (Phase 2 V3-Migration, 0030).
 //
 // Mehrere Geo-Einträge pro Person gruppiert nach geo_type. Inaktive
-// (historisch) werden separat unter „Frühere Orte" angezeigt.
+// (historisch) werden separat unter „Frühere Orte" angezeigt. Optional
+// rendert ein „+ Ort"-Slot rechts im Section-Header (durchgereicht
+// vom Parent — die Server-Action lebt in app/, die Komponente in components/).
 
+import type { ReactNode } from "react";
 import { GEO_TYPE_LABELS, type GeoType, type PersonGeography } from "@/lib/types";
 
 interface Props {
   geographies: PersonGeography[];
+  addSlot?: ReactNode;
 }
 
 const GROUP_ORDER: GeoType[] = [
@@ -18,8 +22,10 @@ const GROUP_ORDER: GeoType[] = [
   "custom",
 ];
 
-export function GeographiesList({ geographies }: Props) {
-  if (geographies.length === 0) return null;
+export function GeographiesList({ geographies, addSlot }: Props) {
+  // Auch wenn leer: Sektion rendern wenn ein addSlot da ist, damit
+  // der „+ Ort"-Button sichtbar bleibt.
+  if (geographies.length === 0 && !addSlot) return null;
 
   const active = geographies.filter((g) => g.is_active);
   const inactive = geographies.filter((g) => !g.is_active);
@@ -35,7 +41,13 @@ export function GeographiesList({ geographies }: Props) {
       <div className="section-head">
         <span className="t-label">Orte</span>
         <span className="rule" />
+        {addSlot}
       </div>
+      {geographies.length === 0 && (
+        <p className="text-[11px] italic text-ink-4">
+          Noch keine Orte hinterlegt.
+        </p>
+      )}
       <div className="space-y-3">
         {GROUP_ORDER.filter((t) => grouped.has(t)).map((type) => (
           <div key={type} className="space-y-1.5">

@@ -13,6 +13,14 @@ import { listContactsForPerson } from "@/lib/person-contacts";
 import { listGeographiesForPerson } from "@/lib/person-geographies";
 import { listRelationshipsForPerson } from "@/lib/person-relationships";
 import { GeographiesList } from "@/components/geographies-list";
+import {
+  AddDateButton,
+  AddGeographyButton,
+  AddRelationshipButton,
+  AddReminderButton,
+  AddTodoButton,
+} from "./inline-section-buttons";
+import { listPeople } from "@/lib/people";
 import { getProfileDepth } from "@/lib/profile-depth";
 import { AxisBadges } from "@/components/axis-badges";
 import { ActionBar } from "@/components/action-bar";
@@ -114,7 +122,7 @@ export default async function PersonDetailPage({
   ]);
   const relatedIds = relationships.map((r) => r.related_person_id);
 
-  const [interactions, notes, reminders, todos, peopleMap, similar] =
+  const [interactions, notes, reminders, todos, peopleMap, similar, allPeople] =
     await Promise.all([
       listInteractionsForPerson(id),
       listNotesForPerson(id),
@@ -122,7 +130,13 @@ export default async function PersonDetailPage({
       listTodosForPerson(id),
       getPeopleMap(relatedIds),
       findSimilarPeople(id, []),
+      // Für die +Beziehung-Inline-Form brauchen wir die Liste der
+      // anderen Personen für den Picker. Self ist eh ausgefiltert.
+      listPeople(),
     ]);
+  const candidateRelationshipPeople = allPeople
+    .filter((p) => p.id !== id)
+    .map((p) => ({ id: p.id, name: p.name }));
 
   // Sub-flags so the JSX stays readable. For non-self people, every
   // section renders as before. For self, sections are scoped to the
@@ -324,7 +338,12 @@ export default async function PersonDetailPage({
           />
         )}
 
-        {!person.is_self && <GeographiesList geographies={geographies} />}
+        {!person.is_self && (
+          <GeographiesList
+            geographies={geographies}
+            addSlot={<AddGeographyButton personId={person.id} />}
+          />
+        )}
 
         {!person.is_self && <LifeEventsBlock personId={person.id} />}
 
@@ -344,6 +363,7 @@ export default async function PersonDetailPage({
               <div className="section-head">
                 <span className="t-label">Wichtige Daten</span>
                 <span className="rule" />
+                {!person.is_self && <AddDateButton personId={person.id} />}
               </div>
               <DateList
                 dates={person.important_dates ?? []}
@@ -355,6 +375,12 @@ export default async function PersonDetailPage({
               <div className="section-head">
                 <span className="t-label">Beziehungen</span>
                 <span className="rule" />
+                {!person.is_self && (
+                  <AddRelationshipButton
+                    personId={person.id}
+                    candidatePeople={candidateRelationshipPeople}
+                  />
+                )}
               </div>
               <RelationshipList
                 relationships={relationships}
@@ -398,6 +424,7 @@ export default async function PersonDetailPage({
               <div className="section-head">
                 <span className="t-label">Erinnerungen</span>
                 <span className="rule" />
+                {!person.is_self && <AddReminderButton personId={person.id} />}
               </div>
               <PersonReminders reminders={reminders} />
             </section>
@@ -406,6 +433,7 @@ export default async function PersonDetailPage({
               <div className="section-head">
                 <span className="t-label">Aufgaben</span>
                 <span className="rule" />
+                {!person.is_self && <AddTodoButton personId={person.id} />}
               </div>
               <PersonTodos todos={todos} />
             </section>
