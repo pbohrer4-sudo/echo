@@ -408,6 +408,11 @@ export const EXTRACTION_TOOLS: Anthropic.Tool[] = [
           description:
             "Tag-Cluster der die Person mindestens ein Tag haben muss.",
         },
+        tag: {
+          type: "string",
+          description:
+            "Exakter Tag-Name (case-insensitive). Z.B. 'padel', 'q3-follow-up', 'stammtisch'.",
+        },
         passion: {
           type: "string",
           description:

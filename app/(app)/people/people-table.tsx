@@ -231,6 +231,9 @@ export function PeopleTable({
   const [clusterFilter, setClusterFilter] = useState<"all" | TagCluster>(
     initialFilter?.cluster ?? "all",
   );
+  const [tagFilter, setTagFilter] = useState<string>(
+    initialFilter?.tag ?? "all",
+  );
   const [passionFilter, setPassionFilter] = useState<string>(
     initialFilter?.passion ?? "all",
   );
@@ -259,6 +262,7 @@ export function PeopleTable({
     if (purposeFilter !== "all") spec.purpose = purposeFilter;
     if (depthFilter !== "all") spec.depth = depthFilter;
     if (clusterFilter !== "all") spec.cluster = clusterFilter;
+    if (tagFilter !== "all") spec.tag = tagFilter;
     if (passionFilter !== "all") spec.passion = passionFilter;
     if (circleFilter !== "all") spec.circle = circleFilter;
     if (locationFilter !== "all") spec.location = locationFilter;
@@ -273,6 +277,7 @@ export function PeopleTable({
     purposeFilter,
     depthFilter,
     clusterFilter,
+    tagFilter,
     passionFilter,
     circleFilter,
     locationFilter,
@@ -300,6 +305,7 @@ export function PeopleTable({
     (purposeFilter !== "all" ? 1 : 0) +
     (depthFilter !== "all" ? 1 : 0) +
     (clusterFilter !== "all" ? 1 : 0) +
+    (tagFilter !== "all" ? 1 : 0) +
     (passionFilter !== "all" ? 1 : 0) +
     (circleFilter !== "all" ? 1 : 0) +
     (locationFilter !== "all" ? 1 : 0) +
@@ -314,6 +320,12 @@ export function PeopleTable({
       if (depthFilter !== "all" && p.depth !== depthFilter) return false;
       if (clusterFilter !== "all" && !r.clusters.includes(clusterFilter))
         return false;
+      if (tagFilter !== "all") {
+        // case-insensitive Match gegen alle Tag-Namen aller Cluster
+        const allTagNames = Object.values(r.tagsByCluster).flat();
+        const wanted = tagFilter.toLowerCase();
+        if (!allTagNames.some((n) => n.toLowerCase() === wanted)) return false;
+      }
       if (passionFilter !== "all" && !r.passions.includes(passionFilter))
         return false;
       if (circleFilter !== "all" && !r.circleIds.includes(circleFilter))
@@ -383,6 +395,7 @@ export function PeopleTable({
     purposeFilter,
     depthFilter,
     clusterFilter,
+    tagFilter,
     passionFilter,
     circleFilter,
     locationFilter,
@@ -416,6 +429,7 @@ export function PeopleTable({
     setPurposeFilter("all");
     setDepthFilter("all");
     setClusterFilter("all");
+    setTagFilter("all");
     setPassionFilter("all");
     setCircleFilter("all");
     setLocationFilter("all");
@@ -538,6 +552,19 @@ export function PeopleTable({
             { value: "has_linkedin", label: "Hat LinkedIn" },
           ]}
         />
+
+        {tagFilter !== "all" && (
+          <button
+            type="button"
+            onClick={() => setTagFilter("all")}
+            className="inline-flex h-9 items-center gap-1 rounded border border-action bg-action-soft px-2.5 text-xs text-ink-1 transition hover:border-bad hover:text-bad"
+            title="Tag-Filter entfernen"
+          >
+            <span className="t-label">Tag</span>
+            <span>{tagFilter}</span>
+            <span aria-hidden>×</span>
+          </button>
+        )}
 
         {activeFilterCount > 0 && (
           <button

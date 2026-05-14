@@ -48,6 +48,11 @@ export async function executeQueryPeople(
     if (spec.depth && p.depth !== spec.depth) return false;
     if (spec.cluster && !Object.keys(r.tagsByCluster).includes(spec.cluster))
       return false;
+    if (spec.tag) {
+      const wanted = spec.tag.toLowerCase();
+      const allTagNames = Object.values(r.tagsByCluster).flat();
+      if (!allTagNames.some((n) => n.toLowerCase() === wanted)) return false;
+    }
     if (spec.passion) {
       const wanted = spec.passion.toLowerCase();
       if (!r.passions.has(wanted)) return false;

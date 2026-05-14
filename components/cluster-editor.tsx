@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 // Cluster-Editor (Phase C6 + 0028 Notes).
 //
 // Drei Subsections auf der Person-Detail-Page:
@@ -192,6 +194,7 @@ function TagClusterRow({
             onRemove={() => commitRemove(t.id)}
             onNoteChange={(n) => commitNote(t.id, n)}
             disabled={pending}
+            href={`/people?tag=${encodeURIComponent(t.name)}`}
           />
         ))}
         {adding && (
@@ -298,6 +301,7 @@ function PassionsBlock({
             onRemove={() => commitRemove(p.id)}
             onNoteChange={(n) => commitNote(p.id, n)}
             disabled={pending}
+            href={`/people?passion=${encodeURIComponent(p.name.toLowerCase())}`}
           />
         ))}
         {adding && (
@@ -414,6 +418,7 @@ function CirclesBlock({
             onRemove={() => commitRemove(c.id)}
             onNoteChange={(n) => commitNote(c.id, n)}
             disabled={pending}
+            href={`/people?circle=${encodeURIComponent(c.name)}`}
           />
         ))}
         {!adding && (
@@ -485,6 +490,7 @@ function PillWithNote({
   onRemove,
   onNoteChange,
   disabled,
+  href,
 }: {
   label: string;
   note: string | null;
@@ -493,6 +499,10 @@ function PillWithNote({
   onRemove: () => void;
   onNoteChange: (note: string | null) => void;
   disabled: boolean;
+  // Optional — wenn gesetzt wird der Label-Text zum Link.
+  // Geht typischerweise auf /people?tag=... bzw. /people?passion=...
+  // /people?circle=... damit Klick die Liste filtert.
+  href?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(note ?? "");
@@ -542,7 +552,18 @@ function PillWithNote({
       }}
       onMouseLeave={() => setTooltipOpen(false)}
     >
-      <span>{label}</span>
+      {href ? (
+        <Link
+          href={href}
+          className="transition hover:underline"
+          style={{ color: fg }}
+          title={`Personen mit „${label}" zeigen`}
+        >
+          {label}
+        </Link>
+      ) : (
+        <span>{label}</span>
+      )}
 
       {/* Info/Add Glyph — klein, dezent. „i" wenn Note vorhanden,
           sonst „+" das nur on-hover erscheint. */}
