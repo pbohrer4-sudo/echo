@@ -175,7 +175,7 @@ export const EXTRACTION_TOOLS: Anthropic.Tool[] = [
   {
     name: "update_person",
     description:
-      "Ergänze oder aktualisiere eine EXISTIERENDE Person. Nutze das, wenn der Nutzer neue Infos zu jemandem im CRM hinzufügt — z.B. neue Telefonnummer, Tag/Hobby, Firma. Skalare Felder (company, role, scope, notes) werden ersetzt; Array-Felder (add_tags, add_phones, …) werden ANGEHÄNGT statt ersetzt — der Nutzer verliert nie etwas durch Update. Setze nur die Felder, die der Nutzer tatsächlich erwähnt.",
+      "Ergänze eine EXISTIERENDE Person. Nutze das, wenn der Nutzer neue Infos zu jemandem im CRM hinzufügt — z.B. neue Telefonnummer, Tag/Hobby, Firma. WICHTIG: Skalare Felder (company, role, notes, how_we_met, met_date, met_location) überschreiben NICHT mehr — sie werden nur gesetzt wenn das Feld noch leer ist. Array-Felder (add_tags, add_phones, …) werden immer ANGEHÄNGT. Der Nutzer verliert NIE etwas durch ein Voice-Update — destruktive Edits laufen ausschließlich über die UI. Setze nur die Felder, die der Nutzer tatsächlich erwähnt.",
     input_schema: {
       type: "object",
       properties: {
@@ -192,7 +192,7 @@ export const EXTRACTION_TOOLS: Anthropic.Tool[] = [
         notes: {
           type: "string",
           description:
-            "Letzte Wahl. ERSETZT das gesamte Notizen-Feld. Beziehungen, wer-stellt-mich-vor, wann-getroffen, wo-getroffen, Telefonnummern, Geburtstage usw. gehoeren IMMER in die strukturierten Felder (how_we_met, met_date, met_location, add_relationships, add_important_dates, add_phones, add_emails) - NIE in notes.",
+            "Letzte Wahl. Wird nur gesetzt wenn das Notizen-Feld noch leer ist — existierende Notes werden NIE überschrieben. Beziehungen, wer-stellt-mich-vor, wann-getroffen, wo-getroffen, Telefonnummern, Geburtstage usw. gehoeren IMMER in die strukturierten Felder (how_we_met, met_date, met_location, add_relationships, add_important_dates, add_phones, add_emails) - NIE in notes.",
         },
         how_we_met: {
           type: "string",

@@ -343,7 +343,7 @@ export async function POST(request: Request) {
     const existingRes = await supabase
       .from("people")
       .select(
-        "tags, phones, emails, addresses, socials, important_dates",
+        "company, organization_id, role, notes, how_we_met, met_date, met_location, tags, phones, emails, addresses, socials, important_dates",
       )
       .eq("id", id)
       .eq("user_id", user.id)
@@ -352,6 +352,13 @@ export async function POST(request: Request) {
 
     if (existingRes.error || !existingRes.data) continue;
     const existing = existingRes.data as {
+      company: string | null;
+      organization_id: string | null;
+      role: string | null;
+      notes: string | null;
+      how_we_met: string | null;
+      met_date: string | null;
+      met_location: string | null;
       tags: string[] | null;
       phones: unknown;
       emails: unknown;
@@ -360,29 +367,47 @@ export async function POST(request: Request) {
       important_dates: unknown;
     };
 
+    // Skalare Text-Felder: fill-if-empty. Voice-Turns dürfen NIE etwas
+    // überschreiben was der Nutzer schon hat — er hat das einmal
+    // bewusst eingetragen oder bestätigt. Wenn das Feld leer ist und
+    // der LLM-Extract was sinnvolles geliefert hat, schreiben wir
+    // rein; sonst lassen wir die existing-Daten in Ruhe. Destruktive
+    // Edits müssen explizit über die UI laufen.
     const update: Record<string, unknown> = {};
-    if (typeof input.company === "string") {
+    if (typeof input.company === "string" && !existing.company) {
       const companyText = stringOrNull(input.company);
-      update.company = companyText;
-      // Bei Firmen-Änderung auch organization_id neu auflösen — sonst
-      // bleibt der alte FK-Pointer hängen oder fehlt komplett.
-      update.organization_id = await resolveOrCreateOrganization(
-        companyText,
-        user.id,
-      );
+      if (companyText) {
+        update.company = companyText;
+        // Bei Erst-Befüllung auch organization_id setzen — sonst
+        // fehlt der FK-Pointer und die Org taucht nicht im Org-Tab auf.
+        update.organization_id = await resolveOrCreateOrganization(
+          companyText,
+          user.id,
+        );
+      }
     }
-    if (typeof input.role === "string")
-      update.role = stringOrNull(input.role);
+    if (typeof input.role === "string" && !existing.role) {
+      const v = stringOrNull(input.role);
+      if (v) update.role = v;
+    }
     if (typeof input.scope === "string")
       update.scope = scopeOr(input.scope, "both");
-    if (typeof input.notes === "string")
-      update.notes = stringOrNull(input.notes);
-    if (typeof input.how_we_met === "string")
-      update.how_we_met = stringOrNull(input.how_we_met);
-    if (typeof input.met_date === "string")
-      update.met_date = stringOrNull(input.met_date);
-    if (typeof input.met_location === "string")
-      update.met_location = stringOrNull(input.met_location);
+    if (typeof input.notes === "string" && !existing.notes) {
+      const v = stringOrNull(input.notes);
+      if (v) update.notes = v;
+    }
+    if (typeof input.how_we_met === "string" && !existing.how_we_met) {
+      const v = stringOrNull(input.how_we_met);
+      if (v) update.how_we_met = v;
+    }
+    if (typeof input.met_date === "string" && !existing.met_date) {
+      const v = stringOrNull(input.met_date);
+      if (v) update.met_date = v;
+    }
+    if (typeof input.met_location === "string" && !existing.met_location) {
+      const v = stringOrNull(input.met_location);
+      if (v) update.met_location = v;
+    }
 
     const addTags = stringArray(input.add_tags);
     if (addTags.length) {
