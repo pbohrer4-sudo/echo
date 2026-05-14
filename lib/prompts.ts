@@ -6,12 +6,35 @@ export interface PersonContext {
   name: string;
   company: string | null;
   role: string | null;
+  organization_id: string | null;
   // Skalare Felder für „was hast du über X?"-Fragen. gift_idea ist
   // explizit drin damit Geschenk-Suchen nicht mit „nichts hinterlegt"
   // abgewiesen werden obwohl der User schon was eingetragen hat.
   gift_idea: string | null;
   notes: string | null;
   how_we_met: string | null;
+  met_date: string | null;
+  met_location: string | null;
+  current_location: string | null;
+  home_location: string | null;
+  linkedin_url: string | null;
+  // 3-Achsen-Modell (Briefing 4.1-4.3)
+  depth: string | null;
+  purpose: string | null;
+  mode: string | null;
+  cadence_days: number | null;
+  last_contact_at: string | null;
+  next_nudge_at: string | null;
+  // JSONB-Aggregate auf people (legacy aber noch genutzt)
+  addresses: {
+    label: string | null;
+    street: string | null;
+    city: string | null;
+    postal_code: string | null;
+    country: string | null;
+  }[];
+  socials: { platform: string; handle_or_url: string }[];
+  important_dates: { label: string; date: string }[];
   // Aggregations aus Joined-Tabellen (siehe lib/llm-people-context.ts).
   // Können leer-Array sein wenn die Person nichts in dem Cluster hat
   // ODER wenn die Tabelle auf der Remote-DB noch fehlt (Migration-Drift).
@@ -20,6 +43,24 @@ export interface PersonContext {
   contacts: { channel: string; value: string; subtype: string | null }[];
   relationships: { label: string; related_name: string | null }[];
   life_events: { title: string; date: string; kind: string }[];
+  geographies: { kind: string; place: string }[];
+}
+
+export interface OrganizationContext {
+  id: string;
+  name: string;
+  domain: string | null;
+  website: string | null;
+  industry: string | null;
+  size: string | null;
+  hq: string | null;
+  description: string | null;
+  notes: string | null;
+  tags: string[];
+  // Anzahl Personen die mit dieser Org verlinkt sind — gibt dem LLM
+  // ein Gefühl wie wichtig die Firma im CRM ist ohne den vollen Personen-
+  // Liste pro Org rausschießen zu müssen.
+  people_count: number;
 }
 
 function truncate(s: string, n: number): string {
@@ -68,6 +109,59 @@ function renderLifeEvents(events: PersonContext["life_events"]): string {
     .join(" · ");
 }
 
+function renderAddresses(addrs: PersonContext["addresses"]): string {
+  return addrs
+    .map((a) => {
+      const parts = [a.street, [a.postal_code, a.city].filter(Boolean).join(" "), a.country]
+        .filter(Boolean)
+        .join(", ");
+      return a.label ? `${a.label}: ${parts}` : parts;
+    })
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function renderSocials(socials: PersonContext["socials"]): string {
+  return socials.map((s) => `${s.platform}: ${s.handle_or_url}`).join(" · ");
+}
+
+function renderDates(dates: PersonContext["important_dates"]): string {
+  return dates.map((d) => `${d.label} ${d.date}`).join(" · ");
+}
+
+function renderGeographies(geos: PersonContext["geographies"]): string {
+  return geos.map((g) => `${g.kind}: ${g.place}`).join(" · ");
+}
+
+function renderAxes(p: PersonContext): string {
+  const parts: string[] = [];
+  if (p.depth) parts.push(`Tiefe=${p.depth}`);
+  if (p.purpose) parts.push(`Zweck=${p.purpose}`);
+  if (p.mode) parts.push(`Modus=${p.mode}`);
+  if (p.cadence_days != null) parts.push(`Cadence=${p.cadence_days}d`);
+  return parts.join(" · ");
+}
+
+function renderTouchpoints(p: PersonContext): string {
+  const parts: string[] = [];
+  if (p.last_contact_at)
+    parts.push(`Letzter Kontakt=${p.last_contact_at.slice(0, 10)}`);
+  if (p.next_nudge_at)
+    parts.push(`Next-Nudge=${p.next_nudge_at.slice(0, 10)}`);
+  return parts.join(" · ");
+}
+
+function renderLocations(p: PersonContext): string {
+  const parts: string[] = [];
+  if (p.current_location) parts.push(`aktuell: ${p.current_location}`);
+  if (p.home_location) parts.push(`Heimat: ${p.home_location}`);
+  if (p.met_location) {
+    const date = p.met_date ? ` ${p.met_date}` : "";
+    parts.push(`getroffen: ${p.met_location}${date}`);
+  }
+  return parts.join(" · ");
+}
+
 function renderPeopleSection(people: PersonContext[]): string {
   if (people.length === 0) return "(keine bisher angelegt)";
   return people
@@ -81,6 +175,12 @@ function renderPeopleSection(people: PersonContext[]): string {
         .filter(Boolean)
         .join(" ");
       const details: string[] = [];
+      const axes = renderAxes(p);
+      if (axes) details.push(`    Axis: ${axes}`);
+      const tp = renderTouchpoints(p);
+      if (tp) details.push(`    Touchpoints: ${tp}`);
+      const locs = renderLocations(p);
+      if (locs) details.push(`    Orte: ${locs}`);
       if (p.gift_idea) details.push(`    Gifts: ${truncate(p.gift_idea, 200)}`);
       const tagsLine = renderTags(p.tags);
       if (tagsLine) details.push(`    Tags: ${tagsLine}`);
@@ -88,13 +188,52 @@ function renderPeopleSection(people: PersonContext[]): string {
         details.push(`    Passions: ${p.passions.join(", ")}`);
       if (p.contacts.length > 0)
         details.push(`    Kontakte: ${renderContacts(p.contacts)}`);
+      if (p.linkedin_url) details.push(`    LinkedIn: ${p.linkedin_url}`);
+      if (p.socials.length > 0)
+        details.push(`    Socials: ${renderSocials(p.socials)}`);
+      if (p.addresses.length > 0)
+        details.push(`    Adressen: ${renderAddresses(p.addresses)}`);
+      if (p.geographies.length > 0)
+        details.push(`    Geographien: ${renderGeographies(p.geographies)}`);
+      if (p.important_dates.length > 0)
+        details.push(`    Wichtige Daten: ${renderDates(p.important_dates)}`);
       if (p.relationships.length > 0)
         details.push(`    Beziehungen: ${renderRelationships(p.relationships)}`);
       if (p.life_events.length > 0)
         details.push(`    Life-Events: ${renderLifeEvents(p.life_events)}`);
       if (p.how_we_met)
         details.push(`    Kennengelernt: ${truncate(p.how_we_met, 160)}`);
-      if (p.notes) details.push(`    Notes: ${truncate(p.notes, 240)}`);
+      if (p.notes) details.push(`    Notes: ${truncate(p.notes, 280)}`);
+      return [head, ...details].join("\n");
+    })
+    .join("\n");
+}
+
+function renderOrgsSection(orgs: OrganizationContext[]): string {
+  if (orgs.length === 0) return "(keine Organisationen angelegt)";
+  return orgs
+    .map((o) => {
+      const head = [
+        `- ${o.id} → ${o.name}`,
+        o.industry ? `[${o.industry}]` : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const details: string[] = [];
+      if (o.people_count > 0)
+        details.push(`    Verlinkt: ${o.people_count} Personen`);
+      if (o.website || o.domain) {
+        details.push(
+          `    Web: ${[o.website, o.domain].filter(Boolean).join(" · ")}`,
+        );
+      }
+      if (o.hq) details.push(`    HQ: ${o.hq}`);
+      if (o.size) details.push(`    Größe: ${o.size}`);
+      if (o.tags.length > 0)
+        details.push(`    Tags: ${o.tags.slice(0, 8).join(", ")}`);
+      if (o.description)
+        details.push(`    Über: ${truncate(o.description, 240)}`);
+      if (o.notes) details.push(`    Notes: ${truncate(o.notes, 240)}`);
       return [head, ...details].join("\n");
     })
     .join("\n");
@@ -103,9 +242,11 @@ function renderPeopleSection(people: PersonContext[]): string {
 export function buildVoiceSystemPrompt({
   displayName,
   people,
+  organizations,
 }: {
   displayName: string;
   people: PersonContext[];
+  organizations: OrganizationContext[];
 }): string {
   return `Du bist ECHO, der persönliche Beziehungs-Assistent von ${displayName}.
 Du sprichst Deutsch, knapp und warm. Keine Floskeln, keine Fragen ohne Grund.
@@ -116,16 +257,20 @@ zu pflegen — beruflich und privat. Du hörst zu, strukturierst, und erinnerst.
 Wenn ${displayName} über eine Person spricht, extrahiere strukturierte
 Daten via Tool-Use. Verifiziere niemals durch unnötige Rückfragen, was offensichtlich ist.
 
-WICHTIG — Wenn ${displayName} nach Informationen zu einer Person fragt
-(„was hast du über X", „suche Geschenk für Y", „was mag Z gerne"),
-LIES ZUERST die Existierende-Personen-Liste unten durch und nutze die
-vorhandenen Daten (Gifts, Notes, Kennengelernt) bevor du sagst „nichts
-hinterlegt" oder „lass mich nachsehen". Antworte basierend auf dem was
-da steht — wenn ein Gifts-Feld gefüllt ist, NENNE die Geschenkidee
-direkt statt zu fragen.
+WICHTIG — Wenn ${displayName} nach Informationen zu einer Person oder
+Firma fragt („was hast du über X", „suche Geschenk für Y", „was mag Z
+gerne", „wer arbeitet bei Stripe"), LIES ZUERST die beiden Listen unten
+durch und nutze die vorhandenen Daten (Gifts, Tags, Passions, Kontakte,
+Beziehungen, Life-Events, Notes, Orte, Daten, Achsen, Touchpoints)
+bevor du sagst „nichts hinterlegt" oder „lass mich nachsehen". Antworte
+basierend auf dem was da steht — wenn ein Feld gefüllt ist, NENNE den
+Wert direkt statt zu fragen.
 
 Existierende Personen (UUID → Name + Kontext-Details):
 ${renderPeopleSection(people)}
+
+Existierende Organisationen (UUID → Name + Kontext-Details):
+${renderOrgsSection(organizations)}
 
 WICHTIG — Output-Format:
 - Reiner Text. Keine Markdown-Formatierung (kein **, kein *, keine Listen mit
@@ -140,13 +285,16 @@ WICHTIG — Output-Format:
 export function buildExtractionSystemPrompt({
   displayName,
   people,
+  organizations,
   now,
 }: {
   displayName: string;
   people: PersonContext[];
+  organizations: OrganizationContext[];
   now: Date;
 }): string {
   const peopleList = renderPeopleSection(people);
+  const orgsList = renderOrgsSection(organizations);
 
   const todayIso = now.toISOString();
   const weekday = now.toLocaleDateString("de-DE", { weekday: "long" });
@@ -159,8 +307,11 @@ was ${displayName} sagt. Nutze dafür die bereitgestellten Tools.
 Lege keine Duplikate an — wenn ein erwähnter Name auf eine bekannte
 Person passt (auch leicht abweichend / Spitzname), nutze deren UUID.
 
-Existierende Personen (UUID → Name):
+Existierende Personen (UUID → Name + Kontext-Details):
 ${peopleList}
+
+Existierende Organisationen (UUID → Name + Kontext-Details):
+${orgsList}
 
 Datums-Regeln:
 - Aktuelles Datum/Zeit: ${todayIso} (${weekday})

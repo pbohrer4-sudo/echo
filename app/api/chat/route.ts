@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { CLAUDE_MODEL, chat, type ChatMessage } from "@/lib/claude";
 import { buildVoiceSystemPrompt } from "@/lib/prompts";
-import { loadPeopleContext } from "@/lib/llm-people-context";
+import {
+  loadOrganizationsContext,
+  loadPeopleContext,
+} from "@/lib/llm-people-context";
 import { getUserContext } from "@/lib/user-context";
 import { createClient } from "@/lib/supabase/server";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
@@ -14,6 +17,7 @@ export const runtime = "nodejs";
 // last_contact_at-DESC damit aktuelle Kontakte priorisiert werden —
 // alte Bekannte landen außen vor wenn der CRM wächst.
 const PEOPLE_CONTEXT_LIMIT = 60;
+const ORGS_CONTEXT_LIMIT = 40;
 
 interface ChatRequestBody {
   messages: ChatMessage[];
@@ -55,13 +59,20 @@ export async function POST(request: Request) {
   // life_events via batched IN-Queries — der LLM hat damit alles um
   // „was hast du über X?"-Fragen direkt zu beantworten ohne zu
   // halluzinieren oder „nichts hinterlegt" zu sagen.
-  const people = await loadPeopleContext(supabase, PEOPLE_CONTEXT_LIMIT);
+  const [people, organizations] = await Promise.all([
+    loadPeopleContext(supabase, PEOPLE_CONTEXT_LIMIT),
+    loadOrganizationsContext(supabase, ORGS_CONTEXT_LIMIT),
+  ]);
 
   const startMs = Date.now();
   try {
     const { text, usage } = await chat({
       messages: body.messages,
-      system: buildVoiceSystemPrompt({ displayName: ctx.display_name, people }),
+      system: buildVoiceSystemPrompt({
+        displayName: ctx.display_name,
+        people,
+        organizations,
+      }),
       apiKey: ctx.claude_key,
     });
     void logAnthropic({

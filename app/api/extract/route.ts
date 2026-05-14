@@ -7,7 +7,10 @@ import {
   type ChatMessage,
 } from "@/lib/claude";
 import { buildExtractionSystemPrompt } from "@/lib/prompts";
-import { loadPeopleContext } from "@/lib/llm-people-context";
+import {
+  loadOrganizationsContext,
+  loadPeopleContext,
+} from "@/lib/llm-people-context";
 import { EXTRACTION_TOOLS } from "@/lib/tools";
 import { getUserContext } from "@/lib/user-context";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
@@ -28,6 +31,7 @@ interface ExtractRequest {
 // PII surface to the LLM grows unnecessarily — Claude can ask the
 // user to disambiguate by name in the rare case the cap matters.
 const PEOPLE_PROMPT_LIMIT = 500;
+const ORGS_PROMPT_LIMIT = 200;
 
 export async function POST(request: Request) {
   const ctx = await getUserContext();
@@ -61,13 +65,18 @@ export async function POST(request: Request) {
 
   const supabase = await createClient();
   // Rich-Context: people-Skalare + tags + passions + contacts +
-  // relationships + life_events. Verhindert „nichts hinterlegt"-
-  // Halluzinationen wenn der User nach Daten fragt die im CRM stehen.
-  const people = await loadPeopleContext(supabase, PEOPLE_PROMPT_LIMIT);
+  // relationships + life_events + geographies + organisationen.
+  // Verhindert „nichts hinterlegt"-Halluzinationen wenn der User nach
+  // Daten fragt die im CRM stehen.
+  const [people, organizations] = await Promise.all([
+    loadPeopleContext(supabase, PEOPLE_PROMPT_LIMIT),
+    loadOrganizationsContext(supabase, ORGS_PROMPT_LIMIT),
+  ]);
 
   const system = buildExtractionSystemPrompt({
     displayName: ctx.display_name,
     people,
+    organizations,
     now: new Date(),
   });
 
