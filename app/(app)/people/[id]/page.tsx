@@ -260,6 +260,10 @@ export default async function PersonDetailPage({
           </div>
         </div>
 
+        {!person.is_self && (person.phones ?? []).length > 0 && (
+          <ActionBar phones={person.phones} />
+        )}
+
         {person.is_self && (
           <SelfProfileTabs personId={person.id} activeTab={activeTab} />
         )}

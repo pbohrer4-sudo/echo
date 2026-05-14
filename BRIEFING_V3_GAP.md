@@ -313,3 +313,4 @@ Dinge die v3 verlangt, die Echo schon hat (manchmal anders, aber funktional):
    - (c) Tag-Cluster-Migration v3-Style (B.3) — wenn ja, dann sehr früh weil noch wenig Tag-Daten
 
 Sag mir Antworten auf 1-5, dann passe ich die Migration-Plan-Reihenfolge an und gehe weiter.
+
