@@ -1,11 +1,17 @@
 import { notFound } from "next/navigation";
 import { getPersonById } from "@/lib/people";
+import { listTagsWithNotesForPerson } from "@/lib/tags";
+import { listPassionsForPerson } from "@/lib/passions";
+import {
+  listAllCircles,
+  listCirclesForPerson,
+} from "@/lib/circles";
 import { EditPersonForm } from "./edit-form";
 
-// Schlanke Edit-Form für die scalar Felder auf people. Arrays/JSONB
-// (phones/emails/relationships/important_dates/etc.) werden direkt
-// auf der Detail-Page via inline-Forms gepflegt, nicht hier — das
-// hält diese Form fokussiert.
+// Edit-Page mit allen scalar + Cluster-Feldern. Multi-Row-Sachen
+// (phones/emails/relationships/reminders/todos/multiple-Geographies/
+// multiple important_dates beyond Birthday) bleiben den Inline-Buttons
+// auf der Detail-Seite vorbehalten — sonst wird die Form unhandlich.
 
 export default async function EditPersonPage({
   params,
@@ -16,7 +22,16 @@ export default async function EditPersonPage({
 }) {
   const { id } = await params;
   const { error } = await searchParams;
-  const person = await getPersonById(id);
+
+  const [person, tags, passions, personCircles, allCircles] = await Promise.all(
+    [
+      getPersonById(id),
+      listTagsWithNotesForPerson(id),
+      listPassionsForPerson(id),
+      listCirclesForPerson(id),
+      listAllCircles(),
+    ],
+  );
   if (!person) notFound();
 
   return (
@@ -28,14 +43,18 @@ export default async function EditPersonPage({
             {person.name}
           </h1>
           <p className="text-sm text-ink-3">
-            Grunddaten. Tags, Leidenschaften, Kreise, Telefon, Email,
-            Beziehungen, wichtige Daten, Erinnerungen, Aufgaben, Orte,
-            Notes pflegst du direkt auf der Detail-Seite per Inline-Buttons.
+            Hier alle Kernfelder. Mehrere Telefonnummern / Emails / Adressen /
+            Beziehungen / Reminders / Aufgaben pflegst du via Inline-Buttons
+            auf der Detail-Seite.
           </p>
         </header>
 
         <EditPersonForm
           person={person}
+          tags={tags}
+          passions={passions}
+          personCircles={personCircles}
+          allCircles={allCircles}
           error={error ? decodeURIComponent(error) : undefined}
         />
       </div>
