@@ -280,6 +280,10 @@ export async function POST(request: Request) {
         organization_id,
         role: stringOrNull(input.role),
         notes: stringOrNull(input.notes),
+        // Goldfeld + Met-Kontext aus Voice-Extraction.
+        how_we_met: stringOrNull(input.how_we_met),
+        met_date: stringOrNull(input.met_date),
+        met_location: stringOrNull(input.met_location),
         phones,
         emails,
         addresses,
@@ -373,6 +377,12 @@ export async function POST(request: Request) {
       update.scope = scopeOr(input.scope, "both");
     if (typeof input.notes === "string")
       update.notes = stringOrNull(input.notes);
+    if (typeof input.how_we_met === "string")
+      update.how_we_met = stringOrNull(input.how_we_met);
+    if (typeof input.met_date === "string")
+      update.met_date = stringOrNull(input.met_date);
+    if (typeof input.met_location === "string")
+      update.met_location = stringOrNull(input.met_location);
 
     const addTags = stringArray(input.add_tags);
     if (addTags.length) {

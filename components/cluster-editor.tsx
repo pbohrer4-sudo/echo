@@ -101,7 +101,9 @@ function TagsBlock({
         <span className="t-label">Tags ({totalCount}/7)</span>
         <span className="rule" />
       </div>
-      <div className="space-y-3">
+      {/* 2×2-Grid: Signals + Interests links, Potential + Origin
+          rechts. Spart Höhe, jede Spalte kann eigene Pills wrap'en. */}
+      <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
         {CLUSTER_ORDER.map((cluster) => (
           <TagClusterRow
             key={cluster}

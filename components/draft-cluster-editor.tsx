@@ -117,7 +117,7 @@ export function DraftClusterEditor({ state, onChange, existingCircles }: Props) 
           <span className="t-label">Tags ({totalTags}/7)</span>
           <span className="rule" />
         </div>
-        <div className="space-y-3">
+        <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
           {CLUSTER_ORDER.map((cluster) => (
             <DraftTagRow
               key={cluster}
