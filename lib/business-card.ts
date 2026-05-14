@@ -126,9 +126,29 @@ export async function extractBusinessCard({
   apiKey,
 }: {
   imageBase64: string;
-  mediaType: SupportedMediaType;
+  // PDFs werden via document-content geschickt; alles andere als image.
+  mediaType: SupportedMediaType | "application/pdf";
   apiKey?: string | null;
 }): Promise<BusinessCardResult> {
+  const mediaBlock: Anthropic.ContentBlockParam =
+    mediaType === "application/pdf"
+      ? {
+          type: "document",
+          source: {
+            type: "base64",
+            media_type: "application/pdf",
+            data: imageBase64,
+          },
+        }
+      : {
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: mediaType,
+            data: imageBase64,
+          },
+        };
+
   const response = await getClient(apiKey).messages.create({
     model: CLAUDE_MODEL,
     max_tokens: 1024,
@@ -138,17 +158,10 @@ export async function extractBusinessCard({
       {
         role: "user",
         content: [
-          {
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: mediaType,
-              data: imageBase64,
-            },
-          },
+          mediaBlock,
           {
             type: "text",
-            text: "Das ist ein Foto einer Visitenkarte. Extrahiere die Kontaktdaten via Tool. Bei mehrsprachigen Karten: die Felder so übernehmen wie sie auf der Karte stehen.",
+            text: "Das ist ein Foto / Scan / PDF einer Visitenkarte. Extrahiere die Kontaktdaten via Tool. Bei mehrsprachigen Karten: die Felder so übernehmen wie sie auf der Karte stehen.",
           },
         ],
       },

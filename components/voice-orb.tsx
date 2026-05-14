@@ -608,13 +608,21 @@ export function VoiceOrb() {
   // ein Voice-Extract behandeln (ExtractionConfirmation öffnet sich).
   // Default-Scope ist "work" weil Visitenkarten meist Business sind.
   async function handleScanFile(file: File) {
-    if (!file.type.startsWith("image/")) {
-      setError("Nur Bilder erlaubt");
+    // Akzeptierte Formate: alle Bilder (image/*) inkl. HEIC/HEIF/AVIF
+    // sowie PDF. Manche Browser melden HEIC mit leerem type oder
+    // "application/octet-stream" — deshalb fallback auf Dateiendung.
+    const ext = file.name.toLowerCase().split(".").pop() ?? "";
+    const looksValid =
+      file.type.startsWith("image/") ||
+      file.type === "application/pdf" ||
+      ["heic", "heif", "avif", "tiff", "tif", "pdf"].includes(ext);
+    if (!looksValid) {
+      setError("Bild oder PDF auswählen");
       setOrbState("error");
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setError("Bild zu groß (max. 5 MB)");
+    if (file.size > 10 * 1024 * 1024) {
+      setError("Datei zu groß (max. 10 MB)");
       setOrbState("error");
       return;
     }
@@ -1037,7 +1045,7 @@ export function VoiceOrb() {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
+              accept="image/*,application/pdf,.heic,.heif,.avif,.tiff,.tif"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];

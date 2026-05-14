@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import sharp from "sharp";
 import { getUserContext } from "@/lib/user-context";
 import {
   extractBusinessCard,
@@ -12,47 +13,67 @@ import { logAnthropic } from "@/lib/llm-usage";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-const MAX_BYTES = 5 * 1024 * 1024; // Anthropic vision limit
-const ACCEPTED: SupportedMediaType[] = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-];
+const MAX_BYTES = 10 * 1024 * 1024; // sharp converts HEIC/TIFF/etc — raw can be bigger than the JPEG we send up.
 
-// Magic-byte signatures for the formats above. file.type comes from
-// the browser and is trivially spoofable; Anthropic would reject the
-// payload either way, but checking magic bytes here saves a round trip
-// and a billable token spend.
-function sniffMediaType(buf: Buffer): SupportedMediaType | null {
-  if (buf.length < 12) return null;
-  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
-  if (
-    buf[0] === 0x89 &&
+// PDF magic: "%PDF".
+function isPdf(buf: Buffer): boolean {
+  return (
+    buf.length >= 4 &&
+    buf[0] === 0x25 &&
     buf[1] === 0x50 &&
-    buf[2] === 0x4e &&
-    buf[3] === 0x47
-  )
-    return "image/png";
-  if (
-    buf[0] === 0x47 &&
-    buf[1] === 0x49 &&
-    buf[2] === 0x46 &&
-    buf[3] === 0x38
-  )
-    return "image/gif";
-  if (
-    buf[0] === 0x52 &&
-    buf[1] === 0x49 &&
-    buf[2] === 0x46 &&
-    buf[3] === 0x46 &&
-    buf[8] === 0x57 &&
-    buf[9] === 0x45 &&
-    buf[10] === 0x42 &&
-    buf[11] === 0x50
-  )
-    return "image/webp";
-  return null;
+    buf[2] === 0x44 &&
+    buf[3] === 0x46
+  );
+}
+
+// Map sharp's format strings → Anthropic media types. Anything not in
+// this map (heif/heic/avif/tiff/raw/svg/…) gets re-encoded as JPEG.
+const SHARP_TO_MEDIA: Record<string, SupportedMediaType | undefined> = {
+  jpeg: "image/jpeg",
+  jpg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+};
+
+interface PreparedMedia {
+  base64: string;
+  mediaType: SupportedMediaType | "application/pdf";
+}
+
+// Akzeptiert alles was sharp lesen kann (HEIC, HEIF, AVIF, TIFF, …) und
+// konvertiert nach JPEG wenn das Format nicht direkt von Anthropic
+// unterstützt wird. PDFs werden unverändert durchgereicht — der Caller
+// schickt sie als document-content statt image-content.
+async function prepareMedia(buf: Buffer): Promise<PreparedMedia | null> {
+  if (isPdf(buf)) {
+    return { base64: buf.toString("base64"), mediaType: "application/pdf" };
+  }
+
+  let metadata: sharp.Metadata;
+  try {
+    metadata = await sharp(buf).metadata();
+  } catch {
+    return null;
+  }
+
+  const direct = metadata.format ? SHARP_TO_MEDIA[metadata.format] : undefined;
+  if (direct) {
+    return { base64: buf.toString("base64"), mediaType: direct };
+  }
+
+  // Fremdformat (HEIC, AVIF, TIFF, …) — nach JPEG re-encoden. EXIF wird
+  // entfernt damit Orientation korrekt gerendert wird; rotate() ohne
+  // Argument wendet die Orientation auf die Pixel an.
+  try {
+    const jpeg = await sharp(buf)
+      .rotate()
+      .jpeg({ quality: 88 })
+      .toBuffer();
+    return { base64: jpeg.toString("base64"), mediaType: "image/jpeg" };
+  } catch {
+    return null;
+  }
 }
 
 export async function POST(request: Request) {
@@ -90,27 +111,27 @@ export async function POST(request: Request) {
 
   if (file.size > MAX_BYTES) {
     return NextResponse.json(
-      { error: "Bild zu groß (max. 5MB)" },
+      { error: "Datei zu groß (max. 10MB)" },
       { status: 400 },
     );
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const sniffed = sniffMediaType(buffer);
-  if (!sniffed || !ACCEPTED.includes(sniffed)) {
+  const prepared = await prepareMedia(buffer);
+  if (!prepared) {
     return NextResponse.json(
-      { error: `Format nicht unterstützt: ${file.type}` },
+      {
+        error: `Format nicht erkannt (${file.type || "unbekannt"}) — unterstützt: JPG, PNG, WebP, GIF, HEIC, HEIF, AVIF, TIFF, PDF`,
+      },
       { status: 400 },
     );
   }
-
-  const imageBase64 = buffer.toString("base64");
   const supabase = await createClient();
   const startMs = Date.now();
   try {
     const { data, usage, model } = await extractBusinessCard({
-      imageBase64,
-      mediaType: sniffed,
+      imageBase64: prepared.base64,
+      mediaType: prepared.mediaType,
       apiKey: ctx.claude_key,
     });
     void logAnthropic({
