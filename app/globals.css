@@ -47,7 +47,7 @@
 
 @layer base {
   html {
-    font-family: var(--font-geist-sans), system-ui, sans-serif;
+    font-family: var(--font-jakarta-sans), system-ui, sans-serif;
     font-feature-settings: "ss01", "cv11";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -66,7 +66,7 @@
 
 /* Mono micro-label — used everywhere for small uppercase metadata */
 .t-label {
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-dm-mono), ui-monospace, monospace;
   font-size: 10px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -91,7 +91,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-dm-mono), ui-monospace, monospace;
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -115,7 +115,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-dm-mono), ui-monospace, monospace;
   font-size: 11px;
   letter-spacing: 0.04em;
   color: var(--ink-1);
@@ -142,7 +142,7 @@
   align-items: baseline;
 }
 .kv dt {
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-dm-mono), ui-monospace, monospace;
   font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -154,7 +154,7 @@
   font-size: 13px;
 }
 .kv dd.mono {
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-dm-mono), ui-monospace, monospace;
   font-size: 12px;
   letter-spacing: 0.02em;
 }
@@ -176,7 +176,7 @@
   border-bottom: 0;
 }
 .tl-date {
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-dm-mono), ui-monospace, monospace;
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -222,7 +222,7 @@
   border-color: var(--ink-4);
 }
 .tl-kind {
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-dm-mono), ui-monospace, monospace;
   font-size: 10px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -236,7 +236,7 @@
 }
 .tl-meta {
   margin-top: 4px;
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-dm-mono), ui-monospace, monospace;
   font-size: 10px;
   color: var(--ink-4);
 }

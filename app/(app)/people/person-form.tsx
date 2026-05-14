@@ -22,7 +22,8 @@ import {
   PHONE_LABELS,
   PRIORITY_BUCKETS,
   PRIORITY_LETTERS,
-  RELATIONSHIP_DEPTHS,
+  DEPTH_LABELS,
+  DEPTH_LEVELS,
   RELATIONSHIP_LABELS,
   REMIND_LEAD_OPTIONS,
   SOCIAL_PLATFORMS,
@@ -141,7 +142,7 @@ export function PersonForm({
   );
   const [interestInput, setInterestInput] = useState("");
   const [depthOverride, setDepthOverride] = useState<string>(
-    initial?.depth_override ?? "",
+    initial?.depth ?? "",
   );
 
   function commitInterest() {
@@ -326,7 +327,7 @@ export function PersonForm({
         name="interests"
         value={JSON.stringify(interests)}
       />
-      <input type="hidden" name="depth_override" value={depthOverride} />
+      <input type="hidden" name="depth" value={depthOverride} />
 
       <div className="rounded border border-rule bg-paper-2 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1194,7 +1195,7 @@ export function PersonForm({
           >
             Auto
           </button>
-          {RELATIONSHIP_DEPTHS.map((d) => (
+          {DEPTH_LEVELS.map((d) => (
             <button
               key={d}
               type="button"
@@ -1205,7 +1206,7 @@ export function PersonForm({
                   : "text-ink-3 hover:text-ink-1"
               }`}
             >
-              {d}
+              {DEPTH_LABELS[d]}
             </button>
           ))}
         </div>

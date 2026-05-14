@@ -6,21 +6,21 @@ import { createClient } from "@/lib/supabase/server";
 import { resolveOrCreateOrganization } from "@/lib/organizations";
 import type {
   AddressEntry,
+  DepthLevel,
   EmailEntry,
   GeographyEntry,
   ImportantDate,
   PhoneEntry,
   PriorityBucket,
   PriorityLetter,
-  RelationshipDepth,
   RelationshipEntry,
   Scope,
   SocialEntry,
 } from "@/lib/types";
 import {
+  DEPTH_LEVELS,
   PRIORITY_BUCKETS,
   PRIORITY_LETTERS,
-  RELATIONSHIP_DEPTHS,
 } from "@/lib/types";
 import {
   parseAddresses as parseAddressesShared,
@@ -71,7 +71,7 @@ interface PersonInput {
   priority: PriorityLetter | null;
   priority_bucket: PriorityBucket | null;
   interests: string[];
-  depth_override: RelationshipDepth | null;
+  depth: DepthLevel | null;
 }
 
 function parseFormData(formData: FormData): PersonInput | { error: string } {
@@ -133,11 +133,9 @@ function parseFormData(formData: FormData): PersonInput | { error: string } {
     ? (bucketRaw as PriorityBucket)
     : null;
 
-  const depthRaw = String(formData.get("depth_override") ?? "");
-  const depth_override = (RELATIONSHIP_DEPTHS as readonly string[]).includes(
-    depthRaw,
-  )
-    ? (depthRaw as RelationshipDepth)
+  const depthRaw = String(formData.get("depth") ?? "");
+  const depth = (DEPTH_LEVELS as readonly string[]).includes(depthRaw)
+    ? (depthRaw as DepthLevel)
     : null;
 
   const ctaExpiresRaw = String(formData.get("cta_expires_at") ?? "").trim();
@@ -184,7 +182,7 @@ function parseFormData(formData: FormData): PersonInput | { error: string } {
     priority,
     priority_bucket,
     interests,
-    depth_override,
+    depth,
   };
 }
 

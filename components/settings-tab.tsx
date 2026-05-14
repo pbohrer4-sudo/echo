@@ -8,6 +8,7 @@ interface ProfileRow {
   language: string | null;
   claude_key_byo: string | null;
   elevenlabs_key_byo: string | null;
+  message_style: string | null;
 }
 
 const inputClass =
@@ -39,7 +40,7 @@ export async function SettingsTab({
   const { data } = await supabase
     .from("profiles")
     .select(
-      "display_name, voice_id, debrief_time, language, claude_key_byo, elevenlabs_key_byo",
+      "display_name, voice_id, debrief_time, language, claude_key_byo, elevenlabs_key_byo, message_style",
     )
     .eq("id", user!.id)
     .maybeSingle();
@@ -51,6 +52,7 @@ export async function SettingsTab({
     language: null,
     claude_key_byo: null,
     elevenlabs_key_byo: null,
+    message_style: null,
   }) as ProfileRow;
 
   const debriefTime = profile.debrief_time?.slice(0, 5) ?? "21:30";
@@ -121,6 +123,42 @@ export async function SettingsTab({
               className={inputClass}
             />
           </Field>
+        </Section>
+
+        <Section
+          label="Schreibstil"
+          hint="Bestimmt den Standard-Ton für KI-generierte WhatsApp-Entwürfe."
+        >
+          <div className="flex gap-3">
+            {(
+              [
+                { value: "locker", label: "Locker", desc: "Hey, wie läuft's? 😊" },
+                { value: "professionell", label: "Professionell", desc: "Guten Tag, ich würde gerne…" },
+              ] as const
+            ).map((opt) => {
+              const checked = (profile.message_style ?? "locker") === opt.value;
+              return (
+                <label
+                  key={opt.value}
+                  className={`flex flex-1 cursor-pointer flex-col gap-1 rounded border px-3 py-2.5 transition-colors ${
+                    checked
+                      ? "border-action bg-action-soft"
+                      : "border-rule bg-paper hover:border-ink-3"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="message_style"
+                    value={opt.value}
+                    defaultChecked={checked}
+                    className="sr-only"
+                  />
+                  <span className="text-xs font-medium text-ink-1">{opt.label}</span>
+                  <span className="font-mono text-[10px] text-ink-4">{opt.desc}</span>
+                </label>
+              );
+            })}
+          </div>
         </Section>
 
         <Section
