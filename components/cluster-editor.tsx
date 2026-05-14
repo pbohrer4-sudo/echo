@@ -41,9 +41,11 @@ import {
   updatePassionNote,
   updateCircleNote,
 } from "@/app/(app)/people/[id]/cluster-actions";
+import { createSignalReminders } from "@/app/(app)/heute/signal-actions";
 
 interface Props {
   personId: string;
+  personName: string;
   tags: TagWithNote[];
   passions: PassionRow[];
   personCircles: CircleWithNote[];
@@ -59,6 +61,7 @@ const CLUSTER_ORDER: TagCluster[] = [
 
 export function ClusterEditor({
   personId,
+  personName,
   tags,
   passions,
   personCircles,
@@ -66,7 +69,7 @@ export function ClusterEditor({
 }: Props) {
   return (
     <div className="space-y-4">
-      <TagsBlock personId={personId} tags={tags} />
+      <TagsBlock personId={personId} personName={personName} tags={tags} />
       <PassionsBlock personId={personId} passions={passions} />
       <CirclesBlock
         personId={personId}
@@ -81,9 +84,11 @@ export function ClusterEditor({
 
 function TagsBlock({
   personId,
+  personName,
   tags,
 }: {
   personId: string;
+  personName: string;
   tags: TagWithNote[];
 }) {
   const grouped = new Map<TagCluster, TagWithNote[]>();
@@ -110,6 +115,7 @@ function TagsBlock({
             cluster={cluster}
             tags={grouped.get(cluster) ?? []}
             personId={personId}
+            personName={personName}
             disabled={atLimit}
           />
         ))}
@@ -127,11 +133,13 @@ function TagClusterRow({
   cluster,
   tags,
   personId,
+  personName,
   disabled,
 }: {
   cluster: TagCluster;
   tags: TagWithNote[];
   personId: string;
+  personName: string;
   disabled: boolean;
 }) {
   const [adding, setAdding] = useState(false);
@@ -197,6 +205,11 @@ function TagClusterRow({
             onNoteChange={(n) => commitNote(t.id, n)}
             disabled={pending}
             href={`/people?tag=${encodeURIComponent(t.name)}`}
+            signalContext={
+              cluster === "reminders"
+                ? { personId, personName, signalName: t.name }
+                : undefined
+            }
           />
         ))}
         {adding && (
@@ -493,6 +506,7 @@ function PillWithNote({
   onNoteChange,
   disabled,
   href,
+  signalContext,
 }: {
   label: string;
   note: string | null;
@@ -505,6 +519,13 @@ function PillWithNote({
   // Geht typischerweise auf /people?tag=... bzw. /people?passion=...
   // /people?circle=... damit Klick die Liste filtert.
   href?: string;
+  // Für Signal-Cluster-Pills: aktiviert die Reminder-Anlage im Popover.
+  // Wird nur von der Reminders/Signals-Sektion durchgereicht.
+  signalContext?: {
+    personId: string;
+    personName: string;
+    signalName: string;
+  };
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(note ?? "");
@@ -615,7 +636,9 @@ function PillWithNote({
       {editing && (
         <div
           ref={popoverRef}
-          className="absolute left-0 top-full z-50 mt-1 w-64 rounded border border-rule bg-paper p-2 shadow-[0_4px_14px_rgba(20,17,13,0.08)]"
+          className={`absolute left-0 top-full z-50 mt-1 rounded border border-rule bg-paper p-2 shadow-[0_4px_14px_rgba(20,17,13,0.08)] ${
+            signalContext ? "w-80" : "w-64"
+          }`}
         >
           <div className="t-label mb-1.5 text-ink-4">Note · {label}</div>
           <textarea
@@ -655,10 +678,205 @@ function PillWithNote({
               </button>
             )}
           </div>
+
+          {/* Reminder-Sektion nur für Signal-Cluster-Pills. */}
+          {signalContext && (
+            <SignalReminderSection
+              personId={signalContext.personId}
+              personName={signalContext.personName}
+              signalName={signalContext.signalName}
+            />
+          )}
         </div>
       )}
     </span>
   );
+}
+
+// Inline-Formular für „Erinnerung anlegen aus Signal". Erscheint im
+// Note-Popover wenn der Pill aus dem Signals-Cluster kommt. Parst
+// das Datum aus dem Signal-Namen als Default, schreibt 1-2 Reminder-
+// Rows (Vorlauf + Tag selbst).
+
+function SignalReminderSection({
+  personId,
+  personName,
+  signalName,
+}: {
+  personId: string;
+  personName: string;
+  signalName: string;
+}) {
+  const parsedDate = parseDateFromSignalName(signalName);
+  const [pending, startTransition] = useTransition();
+  const [open, setOpen] = useState(false);
+  const [date, setDate] = useState(parsedDate);
+  const [leadDays, setLeadDays] = useState(7);
+  const [alsoOnDay, setAlsoOnDay] = useState(true);
+  const [recurrence, setRecurrence] = useState<
+    "once" | "weekly" | "monthly" | "yearly"
+  >(parsedDate ? "yearly" : "once");
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  function submit() {
+    if (!date) {
+      setFeedback("Datum fehlt");
+      return;
+    }
+    const fd = new FormData();
+    fd.set("person_id", personId);
+    fd.set("person_name", personName);
+    fd.set("signal_name", signalName);
+    fd.set("remind_at", date);
+    fd.set("recurrence", recurrence);
+    fd.set("lead_days", String(leadDays));
+    if (alsoOnDay) fd.set("also_on_day", "on");
+    startTransition(async () => {
+      const res = await createSignalReminders(fd);
+      if (!res.ok) {
+        setFeedback(res.error ?? "Fehler");
+      } else {
+        setFeedback(
+          `${res.created} Erinnerung${res.created === 1 ? "" : "en"} angelegt.`,
+        );
+        setTimeout(() => setOpen(false), 1500);
+      }
+    });
+  }
+
+  if (!open) {
+    return (
+      <div className="mt-2 border-t border-rule-soft pt-2">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="text-[10px] text-action transition hover:underline"
+        >
+          + Erinnerung aus diesem Signal anlegen
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 space-y-2 border-t border-rule-soft pt-2">
+      <span className="t-label text-ink-4">Erinnerung anlegen</span>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="space-y-1">
+          <span className="t-label">Datum</span>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="h-8 w-full rounded border border-rule bg-paper px-2 text-xs outline-none focus:border-action focus:ring-2 focus:ring-action/20"
+          />
+        </label>
+        <label className="space-y-1">
+          <span className="t-label">Wiederholung</span>
+          <select
+            value={recurrence}
+            onChange={(e) =>
+              setRecurrence(
+                e.target.value as "once" | "weekly" | "monthly" | "yearly",
+              )
+            }
+            className="h-8 w-full rounded border border-rule bg-paper px-2 text-xs outline-none focus:border-action focus:ring-2 focus:ring-action/20"
+          >
+            <option value="once">Einmalig</option>
+            <option value="weekly">Wöchentlich</option>
+            <option value="monthly">Monatlich</option>
+            <option value="yearly">Jährlich</option>
+          </select>
+        </label>
+      </div>
+      <div className="grid grid-cols-[auto_1fr] items-center gap-2">
+        <label className="t-label">Vorlauf</label>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={0}
+            max={365}
+            value={leadDays}
+            onChange={(e) => setLeadDays(Math.max(0, parseInt(e.target.value, 10) || 0))}
+            className="h-8 w-16 rounded border border-rule bg-paper px-2 text-xs outline-none focus:border-action focus:ring-2 focus:ring-action/20"
+          />
+          <span className="text-[10px] text-ink-3">Tage vorher</span>
+        </div>
+      </div>
+      <label className="flex items-center gap-2 text-[11px] text-ink-2">
+        <input
+          type="checkbox"
+          checked={alsoOnDay}
+          onChange={(e) => setAlsoOnDay(e.target.checked)}
+          className="h-3.5 w-3.5 accent-[var(--action)]"
+        />
+        Auch am Tag selbst erinnern
+      </label>
+      {feedback && (
+        <p
+          className={`text-[10px] ${
+            feedback.includes("Fehler") || feedback.includes("fehlt")
+              ? "text-bad"
+              : "text-good"
+          }`}
+        >
+          {feedback}
+        </p>
+      )}
+      <div className="flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="text-[10px] text-ink-3 transition hover:text-ink-1"
+        >
+          Abbrechen
+        </button>
+        <button
+          type="button"
+          onClick={submit}
+          disabled={pending || !date}
+          className="rounded border border-action bg-action px-3 py-1 text-[10px] font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)] disabled:opacity-50"
+        >
+          {pending ? "…" : "Anlegen"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Best-effort Datums-Parser aus einem Signal-Tag-Namen. Spiegel der
+// Logik in lib/signals.ts — bewusst dupliziert weil signals.ts ein
+// server-only Lib ist (Supabase-Client-Import) und PillWithNote
+// client-side rendert. Bei Bedarf späteren Refactor in pure helper.
+function parseDateFromSignalName(name: string): string {
+  // ISO komplett
+  const iso = /(\d{4})-(\d{2})-(\d{2})/.exec(name);
+  if (iso) return iso[0];
+  // dd.mm.yyyy
+  const dot = /(\d{1,2})[.](\d{1,2})[.](\d{4})/.exec(name);
+  if (dot) {
+    return `${dot[3]}-${dot[2].padStart(2, "0")}-${dot[1].padStart(2, "0")}`;
+  }
+  // dd-month-name oder dd month name
+  const MONTHS_DE: Record<string, number> = {
+    januar: 1, jan: 1, februar: 2, feb: 2, märz: 3, maerz: 3, mar: 3,
+    april: 4, apr: 4, mai: 5, juni: 6, jun: 6, juli: 7, jul: 7,
+    august: 8, aug: 8, september: 9, sep: 9, sept: 9, oktober: 10,
+    okt: 10, oct: 10, november: 11, nov: 11, dezember: 12, dez: 12, dec: 12,
+  };
+  const dayMonth = /(\d{1,2})[\s\-_./](january|jan|februar|feb|märz|maerz|mar|mrz|april|apr|may|mai|june|juni|jun|july|juli|jul|august|aug|september|sept|sep|october|oktober|okt|oct|november|nov|december|dezember|dez|dec)/i.exec(name.toLowerCase());
+  if (dayMonth) {
+    const day = parseInt(dayMonth[1], 10);
+    const mon = MONTHS_DE[dayMonth[2].toLowerCase()];
+    if (mon && day >= 1 && day <= 31) {
+      const now = new Date();
+      let year = now.getFullYear();
+      const next = new Date(year, mon - 1, day);
+      if (next < new Date(year, now.getMonth(), now.getDate())) year += 1;
+      return `${year}-${String(mon).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+  return "";
 }
 
 function InlineAddInput({

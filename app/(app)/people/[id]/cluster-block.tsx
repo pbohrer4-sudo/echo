@@ -8,10 +8,12 @@ import {
   listAllCircles,
   listCirclesWithNotesForPerson,
 } from "@/lib/circles";
+import { getPersonById } from "@/lib/people";
 import { ClusterEditor } from "@/components/cluster-editor";
 
 export async function ClusterBlock({ personId }: { personId: string }) {
-  const [tags, passions, personCircles, allCircles] = await Promise.all([
+  const [person, tags, passions, personCircles, allCircles] = await Promise.all([
+    getPersonById(personId),
     listTagsWithNotesForPerson(personId),
     listPassionsForPerson(personId),
     listCirclesWithNotesForPerson(personId),
@@ -21,6 +23,7 @@ export async function ClusterBlock({ personId }: { personId: string }) {
   return (
     <ClusterEditor
       personId={personId}
+      personName={person?.name ?? ""}
       tags={tags}
       passions={passions}
       personCircles={personCircles}
