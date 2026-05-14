@@ -19,15 +19,22 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import type { ReactNode } from "react";
 import type { ColumnConfigApi, DataTableColumn, SortDir } from "@/hooks/use-column-config";
 import { GripIcon } from "./grip-icon";
 
 interface Props<K extends string, S extends string> {
   api: ColumnConfigApi<K, S>;
+  // Consumer kann pro Pinned-Column ein Custom-Element für den Header
+  // mitgeben (z. B. eine Select-All-Checkbox). Wenn gesetzt, ersetzt es
+  // die Default-Label-Darstellung. Nur pinned-Spalten — middle-Spalten
+  // bleiben drag-bar mit Default-Header.
+  customHeaderCells?: Partial<Record<K, ReactNode>>;
 }
 
 export function SortableHeaderRow<K extends string, S extends string>({
   api,
+  customHeaderCells,
 }: Props<K, S>) {
   const {
     activeColumns,
@@ -72,6 +79,7 @@ export function SortableHeaderRow<K extends string, S extends string>({
               sortKey={sortKey}
               sortDir={sortDir}
               onSort={toggleSort}
+              custom={customHeaderCells?.[c.key]}
             />
           ))}
         <SortableContext
@@ -97,6 +105,7 @@ export function SortableHeaderRow<K extends string, S extends string>({
               sortKey={sortKey}
               sortDir={sortDir}
               onSort={toggleSort}
+              custom={customHeaderCells?.[c.key]}
             />
           ))}
       </div>
@@ -109,12 +118,15 @@ function StaticHeaderCell<K extends string, S extends string>({
   sortKey,
   sortDir,
   onSort,
+  custom,
 }: {
   column: DataTableColumn<K, S>;
   sortKey: S | undefined;
   sortDir: SortDir;
   onSort: (k: S) => void;
+  custom?: ReactNode;
 }) {
+  if (custom !== undefined) return <>{custom}</>;
   const alignClass = column.align === "right" ? "text-right" : "text-left";
   if (column.key === "avatar") return <span className="t-label" />;
   if (column.sortKey) {

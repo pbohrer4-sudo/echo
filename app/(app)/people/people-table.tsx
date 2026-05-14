@@ -9,7 +9,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { bulkDeletePeopleAction } from "./bulk-actions";
 import {
   isEmptyFilter,
   serializeFilterToParams,
@@ -75,6 +76,7 @@ interface Props {
 
 // ───────── Column Registry ─────────
 type ColumnKey =
+  | "select"      // always (bulk-delete checkbox)
   | "avatar"      // always
   | "name"        // always
   | "company"
@@ -96,6 +98,7 @@ type ColumnKey =
 type ColumnDef = DataTableColumn<ColumnKey, SortKey>;
 
 const COLUMNS: ColumnDef[] = [
+  { key: "select", label: "", always: true, default: true, gridCol: "32px", pinned: "start" },
   { key: "avatar", label: "Avatar", always: true, default: true, gridCol: "40px", pinned: "start" },
   { key: "name", label: "Name", always: true, default: true, sortKey: "name", gridCol: "minmax(180px,1.6fr)", pinned: "start" },
   { key: "company", label: "Firma · Rolle", default: true, sortKey: "company", gridCol: "minmax(140px,1fr)" },
@@ -219,6 +222,9 @@ export function PeopleTable({
   }, [initialFilter?.location, locations]);
 
   const [search, setSearch] = useState(initialFilter?.q ?? "");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkPending, startBulkTransition] = useTransition();
+  const [bulkError, setBulkError] = useState<string | null>(null);
   const [modeFilter, setModeFilter] = useState<"all" | Mode>(
     initialFilter?.mode ?? "all",
   );
@@ -595,10 +601,64 @@ export function PeopleTable({
         </div>
       </div>
 
+      {/* Bulk-Action-Bar — sichtbar wenn mindestens eine Zeile ausgewählt. */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 rounded border border-action bg-action-soft px-3 py-2">
+          <span className="t-label text-action">{selected.size} ausgewählt</span>
+          <button
+            type="button"
+            onClick={() => setSelected(new Set())}
+            className="text-xs text-ink-3 transition hover:text-ink-1"
+          >
+            Auswahl aufheben
+          </button>
+          <div className="ml-auto flex items-center gap-2">
+            {bulkError && (
+              <span className="text-[11px] text-bad">{bulkError}</span>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                const ids = Array.from(selected);
+                if (
+                  !confirm(`${ids.length} Person${ids.length > 1 ? "en" : ""} löschen?`)
+                ) {
+                  return;
+                }
+                setBulkError(null);
+                startBulkTransition(async () => {
+                  const res = await bulkDeletePeopleAction(ids);
+                  if (!res.ok) {
+                    setBulkError(res.error ?? "Fehler beim Löschen");
+                    return;
+                  }
+                  setSelected(new Set());
+                });
+              }}
+              disabled={bulkPending}
+              className="rounded border border-bad bg-bad/10 px-3 py-1 text-xs font-medium text-bad transition hover:bg-bad hover:text-paper disabled:opacity-50"
+            >
+              {bulkPending ? "Lösche…" : `Löschen (${selected.size})`}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       <div className="overflow-x-auto rounded border border-rule bg-paper">
         <div className="min-w-max">
-          <SortableHeaderRow api={cols} />
+          <SortableHeaderRow
+            api={cols}
+            customHeaderCells={{
+              select: (
+                <SelectAllCheckbox
+                  visibleIds={sorted.map((r) => r.person.id)}
+                  selected={selected}
+                  onChange={setSelected}
+                />
+              ),
+            }}
+          />
 
           {sorted.length === 0 ? (
             <div className="px-4 py-12 text-center text-sm italic text-ink-3">
@@ -614,6 +674,15 @@ export function PeopleTable({
                 activeColumns={cols.activeColumns}
                 gridTemplate={cols.gridTemplate}
                 circles={circles}
+                selected={selected.has(r.person.id)}
+                onToggleSelect={() => {
+                  setSelected((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(r.person.id)) next.delete(r.person.id);
+                    else next.add(r.person.id);
+                    return next;
+                  });
+                }}
               />
             ))
           )}
@@ -676,16 +745,22 @@ function PersonTableRow({
   activeColumns,
   gridTemplate,
   circles,
+  selected,
+  onToggleSelect,
 }: {
   row: Row;
   activeColumns: ColumnDef[];
   gridTemplate: string;
   circles: CircleRow[];
+  selected: boolean;
+  onToggleSelect: () => void;
 }) {
   const person = row.person;
   return (
     <div
-      className="grid items-start gap-3 border-b border-rule-soft px-4 py-3 transition last:border-0 hover:bg-paper-2"
+      className={`grid items-start gap-3 border-b border-rule-soft px-4 py-3 transition last:border-0 ${
+        selected ? "bg-action-soft" : "hover:bg-paper-2"
+      }`}
       style={{ gridTemplateColumns: gridTemplate }}
     >
       {activeColumns.map((c) => (
@@ -695,9 +770,54 @@ function PersonTableRow({
           person={person}
           row={row}
           circles={circles}
+          selected={selected}
+          onToggleSelect={onToggleSelect}
         />
       ))}
     </div>
+  );
+}
+
+// Select-All-Checkbox im Header. Wird checked wenn ALLE sichtbaren
+// Personen ausgewählt sind; indeterminate wenn nur einige.
+function SelectAllCheckbox({
+  visibleIds,
+  selected,
+  onChange,
+}: {
+  visibleIds: string[];
+  selected: Set<string>;
+  onChange: (next: Set<string>) => void;
+}) {
+  const visibleCount = visibleIds.length;
+  const selectedVisible = visibleIds.filter((id) => selected.has(id)).length;
+  const allSelected = visibleCount > 0 && selectedVisible === visibleCount;
+  const someSelected = selectedVisible > 0 && selectedVisible < visibleCount;
+
+  return (
+    <span className="flex items-center justify-center">
+      <input
+        type="checkbox"
+        checked={allSelected}
+        ref={(el) => {
+          if (el) el.indeterminate = someSelected;
+        }}
+        onChange={() => {
+          if (allSelected || someSelected) {
+            // Auswahl auf nicht-sichtbare reduzieren
+            const next = new Set(selected);
+            for (const id of visibleIds) next.delete(id);
+            onChange(next);
+          } else {
+            const next = new Set(selected);
+            for (const id of visibleIds) next.add(id);
+            onChange(next);
+          }
+        }}
+        className="h-3.5 w-3.5 accent-[var(--action)]"
+        aria-label="Alle sichtbaren auswählen"
+      />
+    </span>
   );
 }
 
@@ -706,13 +826,30 @@ function Cell({
   person,
   row,
   circles,
+  selected,
+  onToggleSelect,
 }: {
   column: ColumnDef;
   person: Person;
   row: Row;
   circles: CircleRow[];
+  selected: boolean;
+  onToggleSelect: () => void;
 }) {
   switch (column.key) {
+    case "select":
+      return (
+        <span className="flex items-center justify-center">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            onClick={(e) => e.stopPropagation()}
+            className="h-3.5 w-3.5 accent-[var(--action)]"
+            aria-label={`${person.name} auswählen`}
+          />
+        </span>
+      );
     case "avatar":
       return (
         <Link
