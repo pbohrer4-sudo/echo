@@ -20,6 +20,7 @@ import {
   AddRelationshipButton,
   AddReminderButton,
   AddTodoButton,
+  EditGiftButton,
 } from "./inline-section-buttons";
 import { listPeople } from "@/lib/people";
 import { getProfileDepth } from "@/lib/profile-depth";
@@ -407,15 +408,26 @@ export default async function PersonDetailPage({
           </section>
         )}
 
-        {showProfileBody && person.gift_idea && (
+        {showProfileBody && !person.is_self && (
           <section>
             <div className="section-head">
               <span className="t-label">Gifts</span>
               <span className="rule" />
+              <EditGiftButton
+                personId={person.id}
+                current={person.gift_idea}
+              />
             </div>
-            <p className="text-sm leading-relaxed text-ink-1">
-              {person.gift_idea}
-            </p>
+            {person.gift_idea ? (
+              <p className="text-sm leading-relaxed text-ink-1">
+                {person.gift_idea}
+              </p>
+            ) : (
+              <p className="text-xs italic text-ink-4">
+                Noch keine Geschenkidee — was würdest du dieser Person zum
+                nächsten Anlass schenken?
+              </p>
+            )}
           </section>
         )}
 

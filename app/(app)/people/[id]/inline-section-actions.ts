@@ -93,6 +93,34 @@ export async function addRelationshipAction(
   return { ok: true };
 }
 
+// ───────── Gifts (gift_idea) ─────────
+// UI-Pfad → REPLACE, weil der User manuell editiert. Voice-Pfad in
+// /api/extract/commit appendet weiterhin; die zwei Pfade haben
+// bewusst unterschiedliche Semantik (Briefing-Diskussion 2026-05-14).
+
+export async function setGiftIdeaAction(formData: FormData): Promise<Result> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "unauth" };
+
+  const personId = String(formData.get("person_id") ?? "").trim();
+  const value = String(formData.get("value") ?? "").trim();
+  if (!personId) return { ok: false, error: "person_id fehlt" };
+
+  const { error } = await supabase
+    .from("people")
+    .update({ gift_idea: value || null })
+    .eq("id", personId)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/people/${personId}`);
+  return { ok: true };
+}
+
 // ───────── Timeline-Events (interactions) ─────────
 // Manuell hinzugefügte Ereignisse landen in derselben interactions-
 // Tabelle wie Voice-/Debrief-Logs, source='manual' damit man später

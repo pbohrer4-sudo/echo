@@ -23,6 +23,7 @@ import {
   addRelationshipAction,
   addReminderAction,
   addTodoAction,
+  setGiftIdeaAction,
 } from "./inline-section-actions";
 
 const inputClass =
@@ -448,6 +449,83 @@ function AddTodoForm({
         onSubmit={submit}
         onCancel={onDone}
         disabled={!text.trim()}
+      />
+    </div>
+  );
+}
+
+// ───────── Gifts (replace / edit) ─────────
+// Anders als die anderen +Buttons macht der hier REPLACE statt
+// APPEND, weil der User explizit ein einzelnes Feld bearbeitet.
+// Voice-Pfad in /api/extract/commit appendet weiterhin mit ' · '.
+
+export function EditGiftButton({
+  personId,
+  current,
+}: {
+  personId: string;
+  current: string | null;
+}) {
+  const label = current ? "Gift" : "Gift";
+  return (
+    <InlineAddShell label={label}>
+      {(close) => (
+        <EditGiftForm
+          personId={personId}
+          initialValue={current ?? ""}
+          onDone={close}
+        />
+      )}
+    </InlineAddShell>
+  );
+}
+
+function EditGiftForm({
+  personId,
+  initialValue,
+  onDone,
+}: {
+  personId: string;
+  initialValue: string;
+  onDone: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [value, setValue] = useState(initialValue);
+
+  function submit() {
+    const fd = new FormData();
+    fd.set("person_id", personId);
+    fd.set("value", value);
+    startTransition(async () => {
+      const res = await setGiftIdeaAction(fd);
+      if (!res.ok) setError(res.error ?? "Fehler");
+      else onDone();
+    });
+  }
+
+  return (
+    <div className="space-y-2">
+      <label className="space-y-1 block">
+        <Label>Geschenkidee</Label>
+        <textarea
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="z.B. Whisky 1990 · Buch über Bauhaus"
+          rows={2}
+          autoFocus
+          className={`${inputClass} h-auto py-1.5`}
+        />
+      </label>
+      <p className="text-[10px] text-ink-4">
+        Mehrere Ideen mit „ · " trennen. Leer = entfernen.
+      </p>
+      <ErrorRow message={error} />
+      <SubmitRow
+        pending={pending}
+        onSubmit={submit}
+        onCancel={onDone}
+        disabled={false}
       />
     </div>
   );
