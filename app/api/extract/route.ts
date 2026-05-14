@@ -61,7 +61,7 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   const { data: peopleData, error: peopleError } = await supabase
     .from("people")
-    .select("id, name, company")
+    .select("id, name, company, role, gift_idea, notes, how_we_met")
     .is("deleted_at", null)
     .eq("is_self", false)
     .order("last_contact_at", { ascending: false, nullsFirst: false })

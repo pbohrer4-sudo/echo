@@ -1,7 +1,54 @@
 // Cached, stable across requests — change rarely. The user_display_name is
 // substituted at call time so the cache stays warm; everything else is fixed.
 
-export function buildVoiceSystemPrompt(displayName: string): string {
+export interface PersonContext {
+  id: string;
+  name: string;
+  company: string | null;
+  role: string | null;
+  // Felder die der LLM zur Beantwortung von „was hast du über X?"-Fragen
+  // braucht. gift_idea ist explizit drin damit Geschenk-Suchen nicht
+  // mit „nichts hinterlegt" abgewiesen werden obwohl der User schon
+  // was eingetragen hat.
+  gift_idea: string | null;
+  notes: string | null;
+  how_we_met: string | null;
+}
+
+function truncate(s: string, n: number): string {
+  if (s.length <= n) return s;
+  return `${s.slice(0, n - 1).trim()}…`;
+}
+
+function renderPeopleSection(people: PersonContext[]): string {
+  if (people.length === 0) return "(keine bisher angelegt)";
+  return people
+    .map((p) => {
+      const head = [
+        `- ${p.id} → ${p.name}`,
+        p.role || p.company
+          ? `(${[p.role, p.company].filter(Boolean).join(" @ ")})`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const details: string[] = [];
+      if (p.gift_idea) details.push(`    Gifts: ${truncate(p.gift_idea, 200)}`);
+      if (p.how_we_met)
+        details.push(`    Kennengelernt: ${truncate(p.how_we_met, 160)}`);
+      if (p.notes) details.push(`    Notes: ${truncate(p.notes, 200)}`);
+      return [head, ...details].join("\n");
+    })
+    .join("\n");
+}
+
+export function buildVoiceSystemPrompt({
+  displayName,
+  people,
+}: {
+  displayName: string;
+  people: PersonContext[];
+}): string {
   return `Du bist ECHO, der persönliche Beziehungs-Assistent von ${displayName}.
 Du sprichst Deutsch, knapp und warm. Keine Floskeln, keine Fragen ohne Grund.
 
@@ -11,17 +58,22 @@ zu pflegen — beruflich und privat. Du hörst zu, strukturierst, und erinnerst.
 Wenn ${displayName} über eine Person spricht, extrahiere strukturierte
 Daten via Tool-Use. Verifiziere niemals durch unnötige Rückfragen, was offensichtlich ist.
 
+WICHTIG — Wenn ${displayName} nach Informationen zu einer Person fragt
+(„was hast du über X", „suche Geschenk für Y", „was mag Z gerne"),
+LIES ZUERST die Existierende-Personen-Liste unten durch und nutze die
+vorhandenen Daten (Gifts, Notes, Kennengelernt) bevor du sagst „nichts
+hinterlegt" oder „lass mich nachsehen". Antworte basierend auf dem was
+da steht — wenn ein Gifts-Feld gefüllt ist, NENNE die Geschenkidee
+direkt statt zu fragen.
+
+Existierende Personen (UUID → Name + Kontext-Details):
+${renderPeopleSection(people)}
+
 WICHTIG — Output-Format:
 - Reiner Text. Keine Markdown-Formatierung (kein **, kein *, keine Listen mit
   Bullet-Points, keine Backticks). Sarah Eve liest das wörtlich vor.
 - Maximal 2 Sätze, außer es wird explizit mehr verlangt.
 - Stelle EINE Frage gleichzeitig, niemals mehrere auf einmal.`;
-}
-
-interface PersonContext {
-  id: string;
-  name: string;
-  company: string | null;
 }
 
 // Used by /api/extract — adds tool-use rules and existing-people context.
@@ -36,14 +88,7 @@ export function buildExtractionSystemPrompt({
   people: PersonContext[];
   now: Date;
 }): string {
-  const peopleList = people.length
-    ? people
-        .map(
-          (p) =>
-            `- ${p.id} → ${p.name}${p.company ? ` (${p.company})` : ""}`,
-        )
-        .join("\n")
-    : "(keine bisher angelegt)";
+  const peopleList = renderPeopleSection(people);
 
   const todayIso = now.toISOString();
   const weekday = now.toLocaleDateString("de-DE", { weekday: "long" });

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { CLAUDE_MODEL, chat, type ChatMessage } from "@/lib/claude";
-import { buildVoiceSystemPrompt } from "@/lib/prompts";
+import { buildVoiceSystemPrompt, type PersonContext } from "@/lib/prompts";
 import { getUserContext } from "@/lib/user-context";
 import { createClient } from "@/lib/supabase/server";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
@@ -8,6 +8,11 @@ import { mapAnthropicError } from "@/lib/anthropic-error";
 import { logAnthropic } from "@/lib/llm-usage";
 
 export const runtime = "nodejs";
+
+// Wieviele Personen wir Claude pro Chat-Turn mitgeben. Sortiert nach
+// last_contact_at-DESC damit aktuelle Kontakte priorisiert werden —
+// alte Bekannte landen außen vor wenn der CRM wächst.
+const PEOPLE_CONTEXT_LIMIT = 60;
 
 interface ChatRequestBody {
   messages: ChatMessage[];
@@ -43,11 +48,27 @@ export async function POST(request: Request) {
   }
 
   const supabase = await createClient();
+
+  // Personen-Kontext für den System-Prompt. Ohne das hier weiß der LLM
+  // NICHTS über die Leute in Patricks CRM — Fragen wie „suche Geschenk
+  // für Hannes" landeten am 14. Mai in einem „keine Geschenkidee
+  // hinterlegt" obwohl Hannes' gift_idea voll war. Wir laden die
+  // wichtigsten Skalare (gift_idea / notes / how_we_met) damit der LLM
+  // direkt antworten kann statt zu raten.
+  const { data: peopleData } = await supabase
+    .from("people")
+    .select("id, name, company, role, gift_idea, notes, how_we_met")
+    .is("deleted_at", null)
+    .eq("is_self", false)
+    .order("last_contact_at", { ascending: false, nullsFirst: false })
+    .limit(PEOPLE_CONTEXT_LIMIT);
+  const people = (peopleData ?? []) as PersonContext[];
+
   const startMs = Date.now();
   try {
     const { text, usage } = await chat({
       messages: body.messages,
-      system: buildVoiceSystemPrompt(ctx.display_name),
+      system: buildVoiceSystemPrompt({ displayName: ctx.display_name, people }),
       apiKey: ctx.claude_key,
     });
     void logAnthropic({
