@@ -11,12 +11,15 @@ import { createClient } from "@/lib/supabase/server";
 import { resolveOrCreateOrganization } from "@/lib/organizations";
 import { parseLocationGeo } from "@/lib/location-geo-parse";
 import type {
+  AddressEntry,
+  ContactChannel,
   Depth,
   ImportantDate,
   Mode,
   Purpose,
   TagCluster,
 } from "@/lib/types";
+import { CONTACT_CHANNELS } from "@/lib/types";
 
 const PURPOSE_VALUES: Purpose[] = [
   "personal",
@@ -124,7 +127,11 @@ export async function updatePerson(personId: string, formData: FormData) {
   );
   const homeLocation = trimOrNull(formData.get("home_location"));
   const homeLocationGeo = parseLocationGeo(formData.get("home_location_geo"));
-  const birthday = dateOrNull(formData.get("birthday"));
+
+  // Multi-Row-State aus den hidden JSONs.
+  const desiredContacts = parseContactList(formData.get("contacts_state"));
+  const desiredDates = parseDateList(formData.get("dates_state"));
+  const desiredAddresses = parseAddressList(formData.get("addresses_state"));
 
   // Axes
   const purposeRaw = formData.get("purpose");
@@ -155,23 +162,10 @@ export async function updatePerson(personId: string, formData: FormData) {
   // Org neu auflösen wenn Firma sich ändert.
   const organization_id = await resolveOrCreateOrganization(company, user.id);
 
-  // Existing-Person für important_dates-Merge holen.
-  const { data: existing } = await supabase
-    .from("people")
-    .select("important_dates")
-    .eq("id", personId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  const existingDates = (existing?.important_dates ?? []) as ImportantDate[];
-  const datesWithoutBirthday = existingDates.filter(
-    (d) => !d.label.toLowerCase().includes("geburt"),
-  );
-  const importantDates: ImportantDate[] = birthday
-    ? [
-        ...datesWithoutBirthday,
-        { label: "Geburtstag", date: birthday, remind: true },
-      ]
-    : datesWithoutBirthday;
+  // important_dates kommen jetzt als komplette Liste vom Repeater —
+  // wir überschreiben das JSONB komplett. Adressen analog.
+  const importantDates = desiredDates;
+  const addresses = desiredAddresses;
 
   const update: Record<string, unknown> = {
     name,
@@ -195,6 +189,7 @@ export async function updatePerson(personId: string, formData: FormData) {
     mode,
     cadence_days: cadenceDays,
     important_dates: importantDates,
+    addresses,
     updated_at: new Date().toISOString(),
   };
 
@@ -215,6 +210,9 @@ export async function updatePerson(personId: string, formData: FormData) {
   // add / remove. Tags wandern in den Cluster den die Form sagt.
   const desired = parseClusterState(formData.get("cluster_state"));
   await reconcileCluster(supabase, user.id, personId, desired);
+
+  // person_contacts: replace-all (simple + bulletproof bei Form-Submit).
+  await reconcileContacts(supabase, user.id, personId, desiredContacts);
 
   revalidatePath(`/people/${personId}`);
   revalidatePath("/people");
@@ -401,4 +399,132 @@ async function reconcileCluster(
       .eq("person_id", personId)
       .eq("circle_id", row.circle_id);
   }
+}
+
+// ─────────── Multi-Row-State-Parser ───────────
+
+interface ContactInput {
+  channel: ContactChannel;
+  subtype: string | null;
+  value: string;
+  is_primary: boolean;
+}
+
+function parseContactList(raw: FormDataEntryValue | null): ContactInput[] {
+  if (typeof raw !== "string" || !raw.trim()) return [];
+  try {
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    const out: ContactInput[] = [];
+    for (const item of arr) {
+      if (!item || typeof item !== "object") continue;
+      const c = item as Record<string, unknown>;
+      const channelRaw = typeof c.channel === "string" ? c.channel : "";
+      if (!(CONTACT_CHANNELS as readonly string[]).includes(channelRaw)) continue;
+      const value = typeof c.value === "string" ? c.value.trim() : "";
+      if (!value) continue;
+      out.push({
+        channel: channelRaw as ContactChannel,
+        subtype: typeof c.subtype === "string" && c.subtype.trim() ? c.subtype.trim() : null,
+        value,
+        is_primary: Boolean(c.is_primary),
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+function parseDateList(raw: FormDataEntryValue | null): ImportantDate[] {
+  if (typeof raw !== "string" || !raw.trim()) return [];
+  try {
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    const out: ImportantDate[] = [];
+    for (const item of arr) {
+      if (!item || typeof item !== "object") continue;
+      const d = item as Record<string, unknown>;
+      const label = typeof d.label === "string" ? d.label.trim() : "";
+      const date = typeof d.date === "string" ? d.date.trim() : "";
+      if (!label || !date) continue;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+      out.push({
+        label,
+        date,
+        remind: Boolean(d.remind),
+        remind_lead_days: typeof d.remind_lead_days === "number" ? d.remind_lead_days : undefined,
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+function parseAddressList(raw: FormDataEntryValue | null): AddressEntry[] {
+  if (typeof raw !== "string" || !raw.trim()) return [];
+  try {
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    const out: AddressEntry[] = [];
+    for (const item of arr) {
+      if (!item || typeof item !== "object") continue;
+      const a = item as Record<string, unknown>;
+      const label = typeof a.label === "string" ? a.label : "andere";
+      const street = typeof a.street === "string" ? a.street.trim() : "";
+      const city = typeof a.city === "string" ? a.city.trim() : "";
+      const postal = typeof a.postal_code === "string" ? a.postal_code.trim() : "";
+      const country = typeof a.country === "string" ? a.country.trim() : "";
+      // Adresse nur behalten wenn mindestens ein Feld gefüllt ist.
+      if (!street && !city && !postal && !country) continue;
+      out.push({
+        label,
+        street: street || null,
+        city: city || null,
+        postal_code: postal || null,
+        country: country || null,
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+// ─────────── Contacts-Reconcile ───────────
+// Replace-all: delete alle bestehenden person_contacts + reinsert.
+// Bei einer Edit-Form Submission ist das günstiger als per-Row-Diff
+// und garantiert Konsistenz wenn der User Channels reordert.
+
+async function reconcileContacts(
+  supabase: SupabaseLike,
+  userId: string,
+  personId: string,
+  desired: ContactInput[],
+): Promise<void> {
+  await supabase.from("person_contacts").delete().eq("person_id", personId);
+  if (desired.length === 0) return;
+  const rows = desired.map((c) => ({
+    user_id: userId,
+    person_id: personId,
+    channel: c.channel,
+    subtype: c.subtype,
+    value: c.value,
+    is_primary: c.is_primary,
+    source: "manual",
+  }));
+  // Sicherstellen dass pro (person, channel) max einmal primary = true.
+  // Wenn User mehrere als primary markiert (UI verhindert das, aber
+  // hier defensiv), wird der ERSTE als primary behalten.
+  const primarySeen = new Set<string>();
+  for (const row of rows) {
+    if (!row.is_primary) continue;
+    if (primarySeen.has(row.channel)) {
+      row.is_primary = false;
+    } else {
+      primarySeen.add(row.channel);
+    }
+  }
+  await supabase.from("person_contacts").insert(rows);
 }

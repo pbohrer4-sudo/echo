@@ -6,6 +6,7 @@ import {
   listAllCircles,
   listCirclesForPerson,
 } from "@/lib/circles";
+import { listContactsForPerson } from "@/lib/person-contacts";
 import { EditPersonForm } from "./edit-form";
 
 // Edit-Page mit allen scalar + Cluster-Feldern. Multi-Row-Sachen
@@ -23,15 +24,15 @@ export default async function EditPersonPage({
   const { id } = await params;
   const { error } = await searchParams;
 
-  const [person, tags, passions, personCircles, allCircles] = await Promise.all(
-    [
+  const [person, tags, passions, personCircles, allCircles, contacts] =
+    await Promise.all([
       getPersonById(id),
       listTagsWithNotesForPerson(id),
       listPassionsForPerson(id),
       listCirclesForPerson(id),
       listAllCircles(),
-    ],
-  );
+      listContactsForPerson(id),
+    ]);
   if (!person) notFound();
 
   return (
@@ -43,9 +44,9 @@ export default async function EditPersonPage({
             {person.name}
           </h1>
           <p className="text-sm text-ink-3">
-            Hier alle Kernfelder. Mehrere Telefonnummern / Emails / Adressen /
-            Beziehungen / Reminders / Aufgaben pflegst du via Inline-Buttons
-            auf der Detail-Seite.
+            Alle Felder dieser Person editierbar. Beziehungen, Reminders,
+            Aufgaben, Life Events und mehrere Orte (Wohnsitz-Historie) pflegst
+            du via Inline-Buttons auf der Detail-Seite.
           </p>
         </header>
 
@@ -55,6 +56,7 @@ export default async function EditPersonPage({
           passions={passions}
           personCircles={personCircles}
           allCircles={allCircles}
+          contacts={contacts}
           error={error ? decodeURIComponent(error) : undefined}
         />
       </div>

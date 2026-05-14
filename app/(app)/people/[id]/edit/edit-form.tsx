@@ -15,12 +15,14 @@ import {
   DEPTH_LABELS,
   MODE_LABELS,
   PURPOSE_LABELS,
+  type AddressEntry,
   type CircleRow,
   type Depth,
   type ImportantDate,
   type Mode,
   type PassionRow,
   type Person,
+  type PersonContact,
   type Purpose,
   type TagCluster,
   type TagWithNote,
@@ -31,6 +33,12 @@ import {
   type DraftClusterState,
 } from "@/components/draft-cluster-editor";
 import { VoiceCapture, type VoiceExtractedFields } from "@/app/(app)/people/new/voice-capture";
+import {
+  AddressesRepeater,
+  ContactsRepeater,
+  DatesRepeater,
+  type ContactDraft,
+} from "./repeaters";
 import { updatePerson } from "./actions";
 
 const inputClass =
@@ -64,13 +72,8 @@ interface Props {
   passions: PassionRow[];
   personCircles: CircleRow[];
   allCircles: CircleRow[];
+  contacts: PersonContact[];
   error?: string;
-}
-
-function findBirthdayFromDates(dates: ImportantDate[] | null | undefined): string {
-  if (!dates) return "";
-  const hit = dates.find((d) => d.label.toLowerCase().includes("geburt"));
-  return hit?.date ?? "";
 }
 
 function buildInitialCluster(
@@ -98,6 +101,7 @@ export function EditPersonForm({
   passions,
   personCircles,
   allCircles,
+  contacts,
   error,
 }: Props) {
   const [name, setName] = useState(person.name);
@@ -116,9 +120,6 @@ export function EditPersonForm({
   const [cadenceDays, setCadenceDays] = useState<string>(
     person.cadence_days != null ? String(person.cadence_days) : "",
   );
-  const [birthday, setBirthday] = useState(
-    findBirthdayFromDates(person.important_dates),
-  );
 
   const initialCluster = useMemo(
     () => buildInitialCluster(tags, passions, personCircles),
@@ -126,13 +127,98 @@ export function EditPersonForm({
   );
   const [cluster, setCluster] = useState<DraftClusterState>(initialCluster);
 
+  // Multi-Row-Listen für Kontakte / Adressen / Daten.
+  const [contactList, setContactList] = useState<ContactDraft[]>(
+    contacts.map((c) => ({
+      id: c.id,
+      channel: c.channel,
+      subtype: c.subtype ?? "",
+      value: c.value,
+      is_primary: c.is_primary,
+    })),
+  );
+  const [addressList, setAddressList] = useState<AddressEntry[]>(
+    person.addresses ?? [],
+  );
+  const [dateList, setDateList] = useState<ImportantDate[]>(
+    person.important_dates ?? [],
+  );
+
   function applyVoice(fields: VoiceExtractedFields) {
     if (fields.name) setName(fields.name);
     if (fields.company) setCompany(fields.company);
     if (fields.role) setRole(fields.role);
     if (fields.linkedin_url) setLinkedinUrl(fields.linkedin_url);
     if (fields.notes) setNotes(fields.notes);
-    if (fields.birthday) setBirthday(fields.birthday);
+    // Voice-Phone/Email/LinkedIn an Contact-Liste anhängen wenn noch nicht da.
+    const additions: ContactDraft[] = [];
+    if (fields.phone) {
+      const exists = contactList.some(
+        (c) => c.channel === "phone" && c.value === fields.phone,
+      );
+      if (!exists) {
+        additions.push({
+          channel: "phone",
+          subtype: "mobile",
+          value: fields.phone,
+          is_primary: !contactList.some((c) => c.channel === "phone"),
+        });
+      }
+    }
+    if (fields.email) {
+      const exists = contactList.some(
+        (c) => c.channel === "email" && c.value === fields.email,
+      );
+      if (!exists) {
+        additions.push({
+          channel: "email",
+          subtype: "persönlich",
+          value: fields.email,
+          is_primary: !contactList.some((c) => c.channel === "email"),
+        });
+      }
+    }
+    if (fields.linkedin_url) {
+      const exists = contactList.some(
+        (c) => c.channel === "linkedin" && c.value === fields.linkedin_url,
+      );
+      if (!exists) {
+        additions.push({
+          channel: "linkedin",
+          subtype: "",
+          value: fields.linkedin_url,
+          is_primary: !contactList.some((c) => c.channel === "linkedin"),
+        });
+      }
+    }
+    if (fields.website) {
+      const exists = contactList.some(
+        (c) => c.channel === "website" && c.value === fields.website,
+      );
+      if (!exists) {
+        additions.push({
+          channel: "website",
+          subtype: "",
+          value: fields.website,
+          is_primary: !contactList.some((c) => c.channel === "website"),
+        });
+      }
+    }
+    if (additions.length > 0) {
+      setContactList((prev) => [...prev, ...additions]);
+    }
+    // Geburtstag an Date-Liste anhängen wenn noch nicht da.
+    if (fields.birthday) {
+      const has = dateList.some(
+        (d) => d.label.toLowerCase().includes("geburt") && d.date === fields.birthday,
+      );
+      if (!has) {
+        setDateList((prev) => [
+          ...prev,
+          { label: "Geburtstag", date: fields.birthday!, remind: true },
+        ]);
+      }
+    }
     // Voice-extracted Tags → in interests-Cluster mergen (Default).
     if (fields.tags) {
       const incoming = fields.tags
@@ -378,32 +464,69 @@ export function EditPersonForm({
           </Field>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Geburtstag">
-            <input
-              type="date"
-              name="birthday"
-              value={birthday}
-              onChange={(e) => setBirthday(e.target.value)}
-              className={inputClass}
-            />
-          </Field>
-          <Field
-            label="Cadence (Tage)"
-            hint="Wie oft soll Kontakt sein? Leer = AI rechnet."
-          >
-            <input
-              type="number"
-              name="cadence_days"
-              min={1}
-              max={365}
-              placeholder="z.B. 30"
-              value={cadenceDays}
-              onChange={(e) => setCadenceDays(e.target.value)}
-              className={inputClass}
-            />
-          </Field>
-        </div>
+        <Field
+          label="Cadence (Tage)"
+          hint="Wie oft soll Kontakt sein? Leer = AI rechnet."
+        >
+          <input
+            type="number"
+            name="cadence_days"
+            min={1}
+            max={365}
+            placeholder="z.B. 30"
+            value={cadenceDays}
+            onChange={(e) => setCadenceDays(e.target.value)}
+            className={inputClass}
+          />
+        </Field>
+
+        {/* — Kontakte (alle person_contacts in einer Liste) — */}
+        <section className="space-y-3">
+          <div className="section-head">
+            <span className="t-label">Kontakte</span>
+            <span className="rule" />
+          </div>
+          <ContactsRepeater
+            contacts={contactList}
+            onChange={setContactList}
+          />
+          <input
+            type="hidden"
+            name="contacts_state"
+            value={JSON.stringify(contactList)}
+          />
+        </section>
+
+        {/* — Wichtige Daten (mehrere Einträge) — */}
+        <section className="space-y-3">
+          <div className="section-head">
+            <span className="t-label">Wichtige Daten</span>
+            <span className="rule" />
+          </div>
+          <DatesRepeater dates={dateList} onChange={setDateList} />
+          <input
+            type="hidden"
+            name="dates_state"
+            value={JSON.stringify(dateList)}
+          />
+        </section>
+
+        {/* — Adressen (mehrere Einträge) — */}
+        <section className="space-y-3">
+          <div className="section-head">
+            <span className="t-label">Adressen</span>
+            <span className="rule" />
+          </div>
+          <AddressesRepeater
+            addresses={addressList}
+            onChange={setAddressList}
+          />
+          <input
+            type="hidden"
+            name="addresses_state"
+            value={JSON.stringify(addressList)}
+          />
+        </section>
 
         <Field label="Notizen">
           <textarea
