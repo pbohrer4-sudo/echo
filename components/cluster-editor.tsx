@@ -632,7 +632,11 @@ function PillWithNote({
         </span>
       )}
 
-      {/* Inline-Editor — Popover unter dem Pill */}
+      {/* Inline-Editor — Popover unter dem Pill.
+          Für Signal-Pills: nur Reminder-Formular, keine Note (Reminder
+          ist der eigentliche Wert, freie Notes lenken vom Fokus ab).
+          Andere Pills (Interests/Potential/Origin/Passions/Circles):
+          Note-Editor wie bisher. */}
       {editing && (
         <div
           ref={popoverRef}
@@ -640,52 +644,54 @@ function PillWithNote({
             signalContext ? "w-80" : "w-64"
           }`}
         >
-          <div className="t-label mb-1.5 text-ink-4">Note · {label}</div>
-          <textarea
-            autoFocus
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                commitNote();
-                setEditing(false);
-              } else if (e.key === "Escape") {
-                e.preventDefault();
-                setDraft(note ?? "");
-                setEditing(false);
-              }
-            }}
-            rows={3}
-            placeholder="Was bedeutet das hier speziell für diese Person?"
-            className="w-full resize-none rounded border border-rule bg-paper px-2 py-1.5 text-xs text-ink-1 outline-none transition placeholder:text-ink-4 focus:border-action focus:ring-2 focus:ring-action/20"
-          />
-          <div className="mt-1.5 flex items-center justify-between">
-            <span className="font-mono text-[9px] uppercase tracking-wider text-ink-4">
-              ⌘↵ speichern · Esc verwerfen
-            </span>
-            {hasNote && (
-              <button
-                type="button"
-                onClick={() => {
-                  setDraft("");
-                  onNoteChange(null);
-                  setEditing(false);
-                }}
-                className="text-[10px] text-ink-4 transition hover:text-bad"
-              >
-                löschen
-              </button>
-            )}
-          </div>
-
-          {/* Reminder-Sektion nur für Signal-Cluster-Pills. */}
-          {signalContext && (
+          {signalContext ? (
             <SignalReminderSection
               personId={signalContext.personId}
               personName={signalContext.personName}
               signalName={signalContext.signalName}
+              onClose={() => setEditing(false)}
             />
+          ) : (
+            <>
+              <div className="t-label mb-1.5 text-ink-4">Note · {label}</div>
+              <textarea
+                autoFocus
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    commitNote();
+                    setEditing(false);
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    setDraft(note ?? "");
+                    setEditing(false);
+                  }
+                }}
+                rows={3}
+                placeholder="Was bedeutet das hier speziell für diese Person?"
+                className="w-full resize-none rounded border border-rule bg-paper px-2 py-1.5 text-xs text-ink-1 outline-none transition placeholder:text-ink-4 focus:border-action focus:ring-2 focus:ring-action/20"
+              />
+              <div className="mt-1.5 flex items-center justify-between">
+                <span className="font-mono text-[9px] uppercase tracking-wider text-ink-4">
+                  ⌘↵ speichern · Esc verwerfen
+                </span>
+                {hasNote && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDraft("");
+                      onNoteChange(null);
+                      setEditing(false);
+                    }}
+                    className="text-[10px] text-ink-4 transition hover:text-bad"
+                  >
+                    löschen
+                  </button>
+                )}
+              </div>
+            </>
           )}
         </div>
       )}
@@ -702,14 +708,15 @@ function SignalReminderSection({
   personId,
   personName,
   signalName,
+  onClose,
 }: {
   personId: string;
   personName: string;
   signalName: string;
+  onClose: () => void;
 }) {
   const parsedDate = parseDateFromSignalName(signalName);
   const [pending, startTransition] = useTransition();
-  const [open, setOpen] = useState(false);
   const [date, setDate] = useState(parsedDate);
   const [leadDays, setLeadDays] = useState(7);
   const [alsoOnDay, setAlsoOnDay] = useState(true);
@@ -739,28 +746,14 @@ function SignalReminderSection({
         setFeedback(
           `${res.created} Erinnerung${res.created === 1 ? "" : "en"} angelegt.`,
         );
-        setTimeout(() => setOpen(false), 1500);
+        setTimeout(() => onClose(), 1500);
       }
     });
   }
 
-  if (!open) {
-    return (
-      <div className="mt-2 border-t border-rule-soft pt-2">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="text-[10px] text-action transition hover:underline"
-        >
-          + Erinnerung aus diesem Signal anlegen
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className="mt-2 space-y-2 border-t border-rule-soft pt-2">
-      <span className="t-label text-ink-4">Erinnerung anlegen</span>
+    <div className="space-y-2">
+      <div className="t-label mb-1.5 text-ink-4">Erinnerung · {signalName}</div>
       <div className="grid grid-cols-2 gap-2">
         <label className="space-y-1">
           <span className="t-label">Datum</span>
@@ -826,7 +819,7 @@ function SignalReminderSection({
       <div className="flex items-center justify-end gap-2">
         <button
           type="button"
-          onClick={() => setOpen(false)}
+          onClick={onClose}
           className="text-[10px] text-ink-3 transition hover:text-ink-1"
         >
           Abbrechen
