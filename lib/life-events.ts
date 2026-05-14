@@ -147,6 +147,59 @@ export async function listAllLifeEvents(): Promise<
   }));
 }
 
+interface UpdateInput {
+  title: string;
+  description?: string | null;
+  event_type: LifeEventType;
+  occurred_at: string; // ISO
+  file_path?: string | null;
+  file_size_bytes?: number | null;
+  mime_type?: string | null;
+  thumbnail_path?: string | null;
+  location_name?: string | null;
+  google_place_id?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+export async function updateLifeEvent(
+  id: string,
+  input: UpdateInput,
+): Promise<LifeEventRow | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase
+    .from("life_events")
+    .update({
+      title: input.title.trim(),
+      description: input.description ?? null,
+      event_type: input.event_type,
+      occurred_at: input.occurred_at,
+      file_path: input.file_path ?? null,
+      file_size_bytes: input.file_size_bytes ?? null,
+      mime_type: input.mime_type ?? null,
+      thumbnail_path: input.thumbnail_path ?? null,
+      location_name: input.location_name ?? null,
+      google_place_id: input.google_place_id ?? null,
+      latitude: input.latitude ?? null,
+      longitude: input.longitude ?? null,
+    })
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    console.error("[life-events] update failed", error);
+    return null;
+  }
+  return data as LifeEventRow;
+}
+
 export async function deleteLifeEvent(id: string): Promise<boolean> {
   const supabase = await createClient();
   const { error } = await supabase

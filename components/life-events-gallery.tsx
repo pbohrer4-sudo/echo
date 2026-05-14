@@ -18,6 +18,7 @@ import {
 import {
   createLifeEventForPerson,
   deleteLifeEventAction,
+  updateLifeEventForPerson,
 } from "@/app/(app)/people/[id]/life-event-actions";
 import { LocationAutocomplete } from "@/components/location-autocomplete";
 
@@ -73,6 +74,8 @@ function eventGlyph(type: LifeEventType): string {
 export function LifeEventsGallery({ personId, events }: Props) {
   const [showAdd, setShowAdd] = useState(false);
   const [openEvent, setOpenEvent] = useState<LifeEventWithUrls | null>(null);
+  const [editingEvent, setEditingEvent] =
+    useState<LifeEventWithUrls | null>(null);
 
   return (
     <section className="space-y-3">
@@ -152,13 +155,25 @@ export function LifeEventsGallery({ personId, events }: Props) {
       )}
 
       {showAdd && (
-        <AddModal personId={personId} onClose={() => setShowAdd(false)} />
+        <EventModal personId={personId} onClose={() => setShowAdd(false)} />
+      )}
+
+      {editingEvent && (
+        <EventModal
+          personId={personId}
+          initialEvent={editingEvent}
+          onClose={() => setEditingEvent(null)}
+        />
       )}
 
       {openEvent && (
         <DetailModal
           event={openEvent}
           personId={personId}
+          onEdit={() => {
+            setEditingEvent(openEvent);
+            setOpenEvent(null);
+          }}
           onClose={() => setOpenEvent(null)}
         />
       )}
@@ -166,32 +181,61 @@ export function LifeEventsGallery({ personId, events }: Props) {
   );
 }
 
-// ────── Add-Modal ──────
+// ────── Event-Modal (Create + Edit) ──────
 
-function AddModal({
+function EventModal({
   personId,
+  initialEvent,
   onClose,
 }: {
   personId: string;
+  initialEvent?: LifeEventWithUrls;
   onClose: () => void;
 }) {
+  const isEdit = !!initialEvent;
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [eventType, setEventType] = useState<LifeEventType>("note");
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [eventType, setEventType] = useState<LifeEventType>(
+    initialEvent?.event_type ?? "note",
+  );
+  const [title, setTitle] = useState(initialEvent?.title ?? "");
+  const [description, setDescription] = useState(
+    initialEvent?.description ?? "",
+  );
   const [occurredAt, setOccurredAt] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const source = initialEvent?.occurred_at
+      ? new Date(initialEvent.occurred_at)
+      : new Date();
+    return `${source.getFullYear()}-${String(source.getMonth() + 1).padStart(2, "0")}-${String(source.getDate()).padStart(2, "0")}`;
   });
-  const [locationName, setLocationName] = useState("");
-  const [locationGeo, setLocationGeo] = useState<LocationGeo | null>(null);
+  const [locationName, setLocationName] = useState(
+    initialEvent?.location_name ?? "",
+  );
+  const [locationGeo, setLocationGeo] = useState<LocationGeo | null>(
+    initialEvent?.latitude != null && initialEvent?.longitude != null
+      ? {
+          lat: initialEvent.latitude,
+          lng: initialEvent.longitude,
+          place_id: initialEvent.google_place_id ?? "",
+          display_name: initialEvent.location_name ?? "",
+        }
+      : null,
+  );
   const [uploadedFile, setUploadedFile] = useState<{
     path: string;
     size: number;
     mime: string;
     name: string;
-  } | null>(null);
+  } | null>(
+    initialEvent?.file_path
+      ? {
+          path: initialEvent.file_path,
+          size: initialEvent.file_size_bytes ?? 0,
+          mime: initialEvent.mime_type ?? "",
+          name: initialEvent.file_path.split("/").pop() ?? "Datei",
+        }
+      : null,
+  );
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -258,7 +302,10 @@ function AddModal({
     }
 
     startTransition(async () => {
-      const res = await createLifeEventForPerson(fd);
+      const res =
+        isEdit && initialEvent
+          ? await updateLifeEventForPerson(initialEvent.id, personId, fd)
+          : await createLifeEventForPerson(fd);
       if (!res.ok) {
         setError(res.error ?? "Fehler");
         return;
@@ -279,7 +326,9 @@ function AddModal({
       >
         <header className="flex items-center justify-between border-b border-rule-soft bg-paper-2 px-5 py-3">
           <div>
-            <p className="t-label">Life Event hinzufügen</p>
+            <p className="t-label">
+              {isEdit ? "Life Event bearbeiten" : "Life Event hinzufügen"}
+            </p>
           </div>
           <button
             type="button"
@@ -445,10 +494,12 @@ function AddModal({
 function DetailModal({
   event,
   personId,
+  onEdit,
   onClose,
 }: {
   event: LifeEventWithUrls;
   personId: string;
+  onEdit: () => void;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -568,13 +619,22 @@ function DetailModal({
               </button>
             </>
           ) : (
-            <button
-              type="button"
-              onClick={() => setConfirming(true)}
-              className="rounded border border-rule px-3 py-1.5 text-xs text-ink-3 transition hover:border-bad hover:text-bad"
-            >
-              Löschen
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setConfirming(true)}
+                className="rounded border border-rule px-3 py-1.5 text-xs text-ink-3 transition hover:border-bad hover:text-bad"
+              >
+                Löschen
+              </button>
+              <button
+                type="button"
+                onClick={onEdit}
+                className="rounded border border-action bg-action px-3 py-1.5 text-xs font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)]"
+              >
+                Bearbeiten
+              </button>
+            </>
           )}
         </footer>
       </div>
