@@ -7,6 +7,8 @@ import { NODE_CATALOG, findTemplate } from "@/lib/workflow-catalog";
 import type { WorkflowEdge, WorkflowNode } from "@/lib/types";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { mapAnthropicError } from "@/lib/anthropic-error";
+import { createClient } from "@/lib/supabase/server";
+import { logAnthropic } from "@/lib/llm-usage";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -152,6 +154,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "prompt required" }, { status: 400 });
   }
 
+  const supabase = await createClient();
+  const startMs = Date.now();
   try {
     const response = await getClient(ctx.claude_key).messages.create({
       model: CLAUDE_MODEL,
@@ -160,6 +164,14 @@ export async function POST(request: Request) {
       tool_choice: { type: "tool", name: "compose_workflow" },
       system: buildSystemPrompt(),
       messages: [{ role: "user", content: prompt }],
+    });
+    void logAnthropic({
+      supabase,
+      userId: ctx.user_id,
+      endpoint: "/api/workflows/generate",
+      model: CLAUDE_MODEL,
+      usage: response.usage,
+      latencyMs: Date.now() - startMs,
     });
 
     const toolUse = response.content.find(
@@ -179,6 +191,15 @@ export async function POST(request: Request) {
     }
     return NextResponse.json(result);
   } catch (err) {
+    void logAnthropic({
+      supabase,
+      userId: ctx.user_id,
+      endpoint: "/api/workflows/generate",
+      model: CLAUDE_MODEL,
+      usage: null,
+      latencyMs: Date.now() - startMs,
+      status: "error",
+    });
     const { status, message } = mapAnthropicError(err);
     return NextResponse.json({ error: message }, { status });
   }

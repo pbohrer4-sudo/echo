@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { APP_CONFIG } from "@/lib/config";
 
 // localStorage shape — kept tiny on purpose. ringingTargetAt is the
 // absolute unix-ms moment we should ring; recomputed when the user
@@ -386,7 +387,7 @@ export function AlarmClock() {
               <span aria-hidden>🔔</span> Sound testen
             </button>
             <p className="max-w-xs text-right text-[10px] uppercase tracking-wider text-ink-4">
-              Klingelt nur wenn ECHO offen bleibt
+              Klingelt nur wenn {APP_CONFIG.PUBLIC_NAME} offen bleibt
             </p>
           </div>
         </div>
@@ -467,7 +468,7 @@ function RingingOverlay({
         className="absolute inset-x-0 top-6 text-center text-xs text-ink-3 motion-safe:animate-pulse"
         aria-live="polite"
       >
-        🔔 ECHO weckt dich
+        🔔 {APP_CONFIG.PUBLIC_NAME} weckt dich
       </p>
     </div>
   );

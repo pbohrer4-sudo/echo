@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { getUserContext } from "@/lib/user-context";
 import { generateRecap } from "@/lib/recap";
+import { createClient } from "@/lib/supabase/server";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { mapAnthropicError } from "@/lib/anthropic-error";
+import { logAnthropic } from "@/lib/llm-usage";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -64,10 +66,29 @@ export async function POST(request: Request) {
     });
   }
 
+  const supabase = await createClient();
+  const startMs = Date.now();
   try {
     const result = await generateRecap({ ctx, from, to, periodLabel });
-    return NextResponse.json(result);
+    void logAnthropic({
+      supabase,
+      userId: ctx.user_id,
+      endpoint: "/api/recap",
+      model: result.model,
+      usage: result.usage,
+      latencyMs: Date.now() - startMs,
+    });
+    return NextResponse.json({ text: result.text, stats: result.stats });
   } catch (err) {
+    void logAnthropic({
+      supabase,
+      userId: ctx.user_id,
+      endpoint: "/api/recap",
+      model: "claude-sonnet-4-6",
+      usage: null,
+      latencyMs: Date.now() - startMs,
+      status: "error",
+    });
     const { status, message } = mapAnthropicError(err);
     return NextResponse.json({ error: message }, { status });
   }

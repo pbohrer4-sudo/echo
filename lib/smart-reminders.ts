@@ -77,7 +77,7 @@ export async function listSmartSuggestions(): Promise<SmartSuggestion[]> {
     return `- ${c.person.id} | ${c.person.name}${
       c.person.company ? ` (${c.person.company})` : ""
     } | ${c.daysSince ?? "?"} Tage her | Soll ${
-      c.person.expected_cadence_days ?? "?"
+      c.person.cadence_days ?? "?"
     }d${last ? ` | letzter ${last.type}: ${last.summary.slice(0, 120)}` : ""}`;
   });
 
@@ -105,7 +105,7 @@ Antworte ausschließlich mit JSON nach diesem Schema:
 
   let parsed: AiReply | null = null;
   try {
-    const raw = await chatForTask({
+    const { text: raw } = await chatForTask({
       ctx,
       task: "extract", // reuses the user's preferred extraction model
       messages: [{ role: "user", content: user }],

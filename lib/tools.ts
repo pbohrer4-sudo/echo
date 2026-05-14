@@ -10,6 +10,7 @@ export const TOOL_NAMES = [
   "create_reminder",
   "create_todo",
   "suggest_replies",
+  "query_people",
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -40,7 +41,22 @@ export const EXTRACTION_TOOLS: Anthropic.Tool[] = [
         notes: {
           type: "string",
           description:
-            "Freier Text, falls der Nutzer Hintergrund-Infos gibt, die zu keinem strukturierten Feld passen.",
+            "Letzte Wahl. Nur Hintergrund-Infos die ZU KEINEM strukturierten Feld passen. Beziehungen, wer-stellt-mich-vor, wann-getroffen, wo-getroffen, Geburtstage, Telefonnummern usw. gehören IMMER in die entsprechenden Felder (how_we_met, met_date, met_location, relationships, important_dates, phones, emails).",
+        },
+        how_we_met: {
+          type: "string",
+          description:
+            "1-3 Saetze: Ort, Anlass, gemeinsame Bekannte. Z.B. 'Ueber Nick Rendino, auf der Bauma 2014 kennengelernt'. Wenn der Nutzer 'durch X' oder 'kennengelernt vor N Jahren' sagt, IMMER hier reinpacken - NIE in notes.",
+        },
+        met_date: {
+          type: "string",
+          description:
+            "ISO-Datum YYYY-MM-DD wann ihr euch zum ersten Mal getroffen habt. Bei 'vor N Jahren' rechne current_year - N und setze 01-01 als Default-Tag, sofern kein genaues Datum gegeben.",
+        },
+        met_location: {
+          type: "string",
+          description:
+            "Ort des ersten Treffens. Stadt oder Event-Name. Z.B. 'Muenchen', 'Bauma 2024', 'TUM Campus'.",
         },
         phones: {
           type: "array",
@@ -175,7 +191,22 @@ export const EXTRACTION_TOOLS: Anthropic.Tool[] = [
         },
         notes: {
           type: "string",
-          description: "Ersetzt das gesamte Notizen-Feld.",
+          description:
+            "Letzte Wahl. ERSETZT das gesamte Notizen-Feld. Beziehungen, wer-stellt-mich-vor, wann-getroffen, wo-getroffen, Telefonnummern, Geburtstage usw. gehoeren IMMER in die strukturierten Felder (how_we_met, met_date, met_location, add_relationships, add_important_dates, add_phones, add_emails) - NIE in notes.",
+        },
+        how_we_met: {
+          type: "string",
+          description:
+            "Wenn neu - wie ihr euch kennengelernt habt. Z.B. 'Durch Nick Rendino' oder 'Auf der Bauma 2014'. Bei 'durch X' oder 'ueber X' als Vermittler-Pattern IMMER hier reinpacken UND zusaetzlich eine add_relationships-Entry mit label='Vermittelt durch' und related_person_name='X' anlegen.",
+        },
+        met_date: {
+          type: "string",
+          description:
+            "ISO YYYY-MM-DD. Bei 'vor N Jahren' rechne current_year - N und setze 01-01.",
+        },
+        met_location: {
+          type: "string",
+          description: "Ort des ersten Treffens.",
         },
         add_tags: {
           type: "array",
@@ -369,6 +400,71 @@ export const EXTRACTION_TOOLS: Anthropic.Tool[] = [
         },
       },
       required: ["text"],
+    },
+  },
+  {
+    name: "query_people",
+    description:
+      "Filtere oder suche Personen in der People-Tabelle. Nutze, wenn der Nutzer eine Such-/Filterfrage stellt — z.B. 'zeig mir alle in München mit Padel', 'wer ist im Inneren Kreis', 'finde Geburtstage diese Woche', 'wer hat keinen Kontakt seit 6 Monaten'. Alle Felder sind optional — nur die ausfüllen, die der Nutzer wirklich genannt hat. Der Nutzer wird zur /people-Liste mit gesetzten Filtern navigiert und du bekommst die Trefferzahl + ersten Namen als Kontext zurück um zu antworten.",
+    input_schema: {
+      type: "object",
+      properties: {
+        free_text: {
+          type: "string",
+          description:
+            "Freitext-Suche über Name, Firma, Rolle, Notizen, Locations, Tag-Namen, Passion-Namen, Circle-Namen. Z.B. 'Müller', 'Bauma', 'vegetarisch'.",
+        },
+        mode: {
+          type: "string",
+          enum: ["active", "nurture", "dormant", "reconnect", "archive"],
+          description:
+            "Kontakt-Modus. active = laufender Austausch, nurture = pflegen, dormant = schläft, reconnect = wieder anknüpfen, archive = stillgelegt.",
+        },
+        purpose: {
+          type: "string",
+          enum: ["personal", "family", "business_active", "business_latent", "aspirational"],
+          description:
+            "Zweck der Beziehung. personal = privat, family = Familie, business_active = aktives Business, business_latent = potenzielles Business, aspirational = Vorbild/Lernen-von.",
+        },
+        depth: {
+          type: "string",
+          enum: ["inner_5", "trusted_15", "active_50", "network_150", "periphery_500"],
+          description:
+            "Dunbar-Tiefenstufe. inner_5 = Innerer Kreis, trusted_15 = Vertrauter Kreis, active_50 = Aktiver Kreis, network_150 = Netzwerk, periphery_500 = Peripherie.",
+        },
+        cluster: {
+          type: "string",
+          enum: ["reminders", "interests", "potential", "origin"],
+          description:
+            "Tag-Cluster der die Person mindestens ein Tag haben muss.",
+        },
+        tag: {
+          type: "string",
+          description:
+            "Exakter Tag-Name (case-insensitive). Z.B. 'padel', 'q3-follow-up', 'stammtisch'.",
+        },
+        passion: {
+          type: "string",
+          description:
+            "Passion-Name (case-insensitive). Z.B. 'padel', 'klassik', 'klettern'.",
+        },
+        circle: {
+          type: "string",
+          description:
+            "Circle-Name (case-insensitive Substring-Match). Z.B. 'Bauma', 'YC W22', 'Munich Founder'.",
+        },
+        location: {
+          type: "string",
+          description:
+            "Stadt- oder Ortsname. Matched gegen current_location, home_location und met_location. Case-insensitive Substring-Match.",
+        },
+        channel: {
+          type: "string",
+          enum: ["has_phone", "has_email", "has_linkedin"],
+          description:
+            "Nur Personen mit hinterlegtem Kommunikationskanal anzeigen.",
+        },
+      },
     },
   },
   {

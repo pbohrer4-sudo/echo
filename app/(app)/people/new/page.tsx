@@ -1,7 +1,10 @@
-import { listAllTags, listPeople } from "@/lib/people";
-import { listOrganizations } from "@/lib/organizations";
-import { createPerson } from "../actions";
-import { PersonForm } from "../person-form";
+import { QuickAddForm } from "./quick-add-form";
+import { APP_CONFIG } from "@/lib/config";
+import { listAllCircles } from "@/lib/circles";
+
+// Quick-Add Person — nur Name ist Pflicht, Rest optional. Voice-Capture
+// vorbefüllt das Formular. Cluster-Block (Tags/Passions/Circles) wird
+// als Draft erfasst und beim Submit zusammen mit der Person angelegt.
 
 export default async function NewPersonPage({
   searchParams,
@@ -9,13 +12,7 @@ export default async function NewPersonPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
-  const [people, existingTags, orgs] = await Promise.all([
-    listPeople(),
-    listAllTags(),
-    listOrganizations(),
-  ]);
-  const peopleOptions = people.map((p) => ({ id: p.id, name: p.name }));
-  const existingOrgs = orgs.map((o) => o.name);
+  const existingCircles = await listAllCircles();
 
   return (
     <div className="px-8 py-10">
@@ -26,16 +23,13 @@ export default async function NewPersonPage({
             Person anlegen
           </h1>
           <p className="text-sm text-ink-3">
-            Füll aus was du weißt — den Rest sammelt ECHO über die Zeit.
+            Nur Name ist Pflicht. Den Rest entdeckt {APP_CONFIG.PUBLIC_NAME} über
+            die Zeit — oder du füllst nach auf der Detail-Seite.
           </p>
         </header>
-        <PersonForm
-          action={createPerson}
-          cancelHref="/people"
-          peopleOptions={peopleOptions}
-          existingTags={existingTags}
-          existingOrgs={existingOrgs}
+        <QuickAddForm
           error={error ? decodeURIComponent(error) : undefined}
+          existingCircles={existingCircles}
         />
       </div>
     </div>

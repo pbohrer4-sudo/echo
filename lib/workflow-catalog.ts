@@ -218,7 +218,7 @@ export const NODE_CATALOG: NodeTemplate[] = [
         key: "input_field",
         label: "Eingabefeld",
         type: "text",
-        placeholder: "person.last_interaction_at",
+        placeholder: "person.last_contact_at",
         required: true,
       },
       {

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, DM_Mono } from "next/font/google";
 import "./globals.css";
+import { APP_CONFIG } from "@/lib/config";
 
 const jakartaSans = Plus_Jakarta_Sans({
   variable: "--font-jakarta-sans",
@@ -17,7 +18,7 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ECHO",
+  title: APP_CONFIG.PUBLIC_NAME,
   description: "Beziehungs-Intelligenz für deinen Tag.",
 };
 

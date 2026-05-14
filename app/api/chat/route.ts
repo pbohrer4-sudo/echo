@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
-import { chat, type ChatMessage } from "@/lib/claude";
+import { CLAUDE_MODEL, chat, type ChatMessage } from "@/lib/claude";
 import { buildVoiceSystemPrompt } from "@/lib/prompts";
 import { getUserContext } from "@/lib/user-context";
+import { createClient } from "@/lib/supabase/server";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { mapAnthropicError } from "@/lib/anthropic-error";
+import { logAnthropic } from "@/lib/llm-usage";
 
 export const runtime = "nodejs";
 
@@ -40,14 +42,33 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "messages required" }, { status: 400 });
   }
 
+  const supabase = await createClient();
+  const startMs = Date.now();
   try {
-    const text = await chat({
+    const { text, usage } = await chat({
       messages: body.messages,
       system: buildVoiceSystemPrompt(ctx.display_name),
       apiKey: ctx.claude_key,
     });
+    void logAnthropic({
+      supabase,
+      userId: ctx.user_id,
+      endpoint: "/api/chat",
+      model: CLAUDE_MODEL,
+      usage,
+      latencyMs: Date.now() - startMs,
+    });
     return NextResponse.json({ text });
   } catch (err) {
+    void logAnthropic({
+      supabase,
+      userId: ctx.user_id,
+      endpoint: "/api/chat",
+      model: CLAUDE_MODEL,
+      usage: null,
+      latencyMs: Date.now() - startMs,
+      status: "error",
+    });
     const { status, message } = mapAnthropicError(err);
     return NextResponse.json({ error: message }, { status });
   }

@@ -32,7 +32,7 @@ export async function getProfileTabStatus(self: Person): Promise<TabStatus> {
   // ── Drifting + due-soon people: relationship-debt signal.
   const { data: cadencePeople } = await supabase
     .from("people")
-    .select("id, name, last_interaction_at, expected_cadence_days")
+    .select("id, name, last_contact_at, cadence_days")
     .is("deleted_at", null)
     .eq("is_self", false);
   let drifting = 0;
@@ -40,19 +40,19 @@ export async function getProfileTabStatus(self: Person): Promise<TabStatus> {
   let withoutCadence = 0;
   const now = Date.now();
   for (const p of (cadencePeople ?? []) as Array<{
-    last_interaction_at: string | null;
-    expected_cadence_days: number | null;
+    last_contact_at: string | null;
+    cadence_days: number | null;
   }>) {
-    if (p.expected_cadence_days == null) {
+    if (p.cadence_days == null) {
       withoutCadence += 1;
       continue;
     }
-    if (!p.last_interaction_at) continue;
+    if (!p.last_contact_at) continue;
     const days =
-      (now - new Date(p.last_interaction_at).getTime()) /
+      (now - new Date(p.last_contact_at).getTime()) /
       (1000 * 60 * 60 * 24);
-    if (days > p.expected_cadence_days * 1.5) drifting += 1;
-    else if (days > p.expected_cadence_days) dueSoon += 1;
+    if (days > p.cadence_days * 1.5) drifting += 1;
+    else if (days > p.cadence_days) dueSoon += 1;
   }
   if (drifting > 0) {
     problems.push({

@@ -21,6 +21,7 @@ import {
   type Integration,
   type IntegrationStatus,
 } from "@/lib/integrations";
+import { APP_CONFIG } from "@/lib/config";
 
 // ───────── colour map ─────────
 // connected = green (data is flowing). planned/available = gray.
@@ -64,7 +65,7 @@ function EchoHubNode() {
       />
       <div className="relative flex h-44 w-44 flex-col items-center justify-center rounded-full border-2 border-action bg-action-soft text-center shadow-[0_0_0_8px_oklch(95%_0.012_250)]">
         <span className="font-serif text-2xl font-semibold tracking-tight text-ink-1">
-          ECHO
+          {APP_CONFIG.PUBLIC_NAME}
         </span>
         <span className="t-label mt-1">Personal CRM</span>
         <span
@@ -561,7 +562,7 @@ function DetailPanel({
         ) : (
           <ul className="overflow-hidden rounded border border-rule">
             <li className="grid grid-cols-[1fr_60px_1fr] gap-3 border-b border-rule bg-paper-2 px-3 py-2">
-              <span className="t-label">ECHO</span>
+              <span className="t-label">{APP_CONFIG.PUBLIC_NAME}</span>
               <span className="t-label text-center">Richtung</span>
               <span className="t-label">{i.vendor}</span>
             </li>

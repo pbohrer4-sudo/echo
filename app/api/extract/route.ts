@@ -1,11 +1,19 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { chatWithTools, type ChatMessage } from "@/lib/claude";
+import {
+  CLAUDE_MODEL,
+  chatToolResultFollowup,
+  chatWithTools,
+  type ChatMessage,
+} from "@/lib/claude";
 import { buildExtractionSystemPrompt } from "@/lib/prompts";
 import { EXTRACTION_TOOLS } from "@/lib/tools";
 import { getUserContext } from "@/lib/user-context";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { mapAnthropicError } from "@/lib/anthropic-error";
+import { logAnthropic } from "@/lib/llm-usage";
+import { executeQueryPeople } from "@/lib/people-query";
+import type { PeopleFilterSpec } from "@/lib/people-filter";
 
 export const runtime = "nodejs";
 
@@ -56,7 +64,7 @@ export async function POST(request: Request) {
     .select("id, name, company")
     .is("deleted_at", null)
     .eq("is_self", false)
-    .order("last_interaction_at", { ascending: false, nullsFirst: false })
+    .order("last_contact_at", { ascending: false, nullsFirst: false })
     .limit(PEOPLE_PROMPT_LIMIT);
 
   if (peopleError) {
@@ -77,13 +85,67 @@ export async function POST(request: Request) {
     { role: "user", content: transcript },
   ];
 
+  const startMs = Date.now();
   try {
-    const { text, toolCalls } = await chatWithTools({
+    const initial = await chatWithTools({
       messages,
       system,
       tools: EXTRACTION_TOOLS,
       apiKey: ctx.claude_key,
     });
+    let { text, toolCalls } = initial;
+    const { rawContent, usage } = initial;
+    void logAnthropic({
+      supabase,
+      userId: ctx.user_id,
+      endpoint: "/api/extract",
+      model: CLAUDE_MODEL,
+      usage,
+      latencyMs: Date.now() - startMs,
+    });
+
+    // 0028-Voice-Roundtrip: wenn query_people aufgerufen wurde, führe die
+    // Query server-side aus und gib Claude die Zahlen via tool_result
+    // zurück damit es eine konkrete spoken-Antwort formulieren kann
+    // („47 in München, darunter Mara und Tobias.").
+    const queryCalls = toolCalls.filter((c) => c.name === "query_people");
+    if (queryCalls.length > 0) {
+      const results = await Promise.all(
+        queryCalls.map(async (c) => {
+          const spec = c.input as PeopleFilterSpec;
+          const res = await executeQueryPeople(spec);
+          return {
+            tool_use_id: c.id,
+            content: JSON.stringify({
+              count: res.count,
+              sample_names: res.sample,
+              total_people: res.total_people,
+              filter_summary: res.filter_summary,
+              instruction:
+                "Antworte in EINEM kurzen deutschen Satz mit Zahl + bis zu 2-3 Sample-Namen. Beispiel: '47 Personen in München, darunter Mara und Tobias.' Wenn count=0: 'Keine Treffer für [filter_summary].'",
+            }),
+          };
+        }),
+      );
+      const followupStart = Date.now();
+      const followup = await chatToolResultFollowup({
+        messages,
+        system,
+        assistantContent: rawContent,
+        toolResults: results,
+        tools: EXTRACTION_TOOLS,
+        apiKey: ctx.claude_key,
+      });
+      void logAnthropic({
+        supabase,
+        userId: ctx.user_id,
+        endpoint: "/api/extract:followup",
+        model: CLAUDE_MODEL,
+        usage: followup.usage,
+        latencyMs: Date.now() - followupStart,
+      });
+      text = followup.text || text;
+    }
 
     const peopleMap = new Map<string, string>(
       (peopleData ?? []).map((p) => [p.id as string, p.name as string]),
@@ -102,6 +164,15 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ text, toolCalls: enrichedCalls });
   } catch (err) {
+    void logAnthropic({
+      supabase,
+      userId: ctx.user_id,
+      endpoint: "/api/extract",
+      model: CLAUDE_MODEL,
+      usage: null,
+      latencyMs: Date.now() - startMs,
+      status: "error",
+    });
     const { status, message } = mapAnthropicError(err);
     return NextResponse.json({ error: message }, { status });
   }

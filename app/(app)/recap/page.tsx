@@ -1,4 +1,5 @@
 import { RecapRunner } from "@/components/recap-runner";
+import { APP_CONFIG } from "@/lib/config";
 
 export default function RecapPage() {
   return (
@@ -11,7 +12,7 @@ export default function RecapPage() {
           </h1>
           <p className="text-sm text-ink-3">
             Monats- oder Jahresrückblick — Zahlen plus eine ruhige
-            Zusammenfassung von ECHO.
+            Zusammenfassung von {APP_CONFIG.PUBLIC_NAME}.
           </p>
         </header>
 

@@ -1,526 +1,316 @@
-# Briefing v3 vs Current Echo - Discrepancy Report
+# Briefing v3 - Gap Analysis
 
-> Compares `ECHO_FINAL_UI_BRIEFING.md v3` (uploaded) against the current Echo codebase
-> (documented in `APP_ARCHITECTURE.md` + `ECHO_INVENTORY.md`).
-> Organized by severity. Use this to decide what to adopt from the new briefing.
+Stand: 13. Mai 2026 · Vergleich `ECHO_FINAL_UI_BRIEFING.md` (v3, neu erhalten) gegen aktuellen `refactor/3-axis-model` Branch.
 
 ---
 
-## Severity Key
+## TL;DR
 
-- **CRITICAL** - blocks a production launch or causes data loss
-- **HIGH** - significant missing feature or wrong architectural direction
-- **MEDIUM** - refinement / partial implementation gap
-- **ECHO-ONLY** - exists in Echo but briefing explicitly excludes it
+Briefing v3 ist eine wesentlich umfangreichere Vision als unsere bisherige Migration. Drei Lager:
+
+- **A — In v3 anders gewollt als in unserer aktuellen Umsetzung** (4 direkte Konflikte): erst klären, dann Migration fortsetzen.
+- **B — Komplett neue Features in v3** (16 Punkte): pro Punkt entscheiden ob jetzt, später, oder nie.
+- **C — Bereits in Echo abgedeckt** (8 Punkte): kein Action nötig.
 
 ---
 
-## 1. Platform Architecture
+## A. DIREKTE KONFLIKTE zu Phase A3-A8 (4 Punkte)
 
-### CRITICAL - No Capacitor (No Native iOS/Android)
+Diese Punkte stehen in **direktem Widerspruch** zu dem was wir bereits in 0023 gebaut haben.
 
-| | Briefing v3 | Echo Today |
+### A.1 `mode`-Spalte: v3 sagt RAUS, wir haben sie GERADE ERST hinzugefügt
+
+**Briefing v3 Section 24 #2**: „Mode-Feld raus - Active/Dormant live berechnet"
+
+**Echo aktuell**: `mode` Spalte mit 5 Enum-Werten (active/nurture/dormant/reconnect/archive) + `next_nudge_at` + 2 partial-Indizes + ModeBadge-Component (C1). Das ganze 3-Achsen-Modell, das wir gerade gebaut haben.
+
+**Konflikt-Tiefe**: Maximum. Phase A3 + C1 sind quasi obsolet falls wir Briefing v3 folgen.
+
+**Meine Empfehlung**: **Mode behalten**.
+- Live-Berechnung kollabiert mode + cadence + last_contact_at zu einer Logik. Klingt elegant, ist aber starr — kein manueller Override für „diese Person ist im Sabbatical, also dormant" möglich.
+- Mode als Spalte ist 30 Sekunden DB, ein paar Server-Cron-Lines. Live-Berechnung ist überall Code wo wir den Status brauchen.
+- Briefing v3 widerspricht sich selbst: Section 5 enthält `depth_source` und `purpose` als Spalten — warum ist mode anders?
+
+**Was tun**: Mode bleibt. v3-Logik („active/dormant live berechnet") nehmen wir als Cron-Job auf, der den Mode auf der Spalte AKTUALISIERT, nicht ersetzt.
+
+### A.2 `first_name`/`last_name`: v3 sagt RAUS, wir haben sie GERADE ERST hinzugefügt
+
+**Briefing v3 Section 24 #3**: „first_name, last_name raus"
+
+**Echo aktuell**: In 0023 hinzugefügt, daneben behalten das alte `name`-Feld.
+
+**Meine Empfehlung**: **first_name/last_name droppen**.
+- Briefing-konsistent („Name als ein Feld") spart UI-Komplexität (kein Split-Form, keine „first or full name?"-Frage)
+- Wir haben in 0023 first_name + last_name DAZUGEFÜGT, nicht ersetzt. Das alte `name` lebt weiter. Daten-Schaden = null.
+- Drop in Phase F mit dem Rest der Legacy-Reinigung.
+
+**Was tun**: Drop in Phase F (nicht jetzt), entferne aus dem types.ts-Wrapper.
+
+### A.3 `met_date`/`met_location` auf people: v3 sagt RAUS
+
+**Briefing v3 Section 24 #4**: „met_date, met_location, notes raus"
+
+**Echo aktuell**: Beide Felder in 0023 hinzugefügt + im Quick-Add-Form sichtbar.
+
+**Aber**: Briefing v3 Section 5 SQL für `persons` Tabelle hat `how_we_met` drin (behalten). Die met_date/met_location-Drops referenzieren wohl die alte Version mit eigenen Spalten.
+
+**Meine Empfehlung**: **met_date + met_location behalten, met_event aber droppen**.
+- Briefing nennt diese Felder nirgendwo positiv. Section 24 ist gegen sie.
+- ABER: Praktischer Nutzen ist da. „Kennengelernt am 14.06.2024 auf der Bauma" ist konkreter als das im how_we_met-Freitext zu verstecken.
+- Kompromiss: zwei Felder behalten, das dritte (met_event) ist redundant zum how_we_met-Text.
+
+**Was tun**: met_event droppen. met_date + met_location bleiben. Patrick entscheidet bei nächstem Sync.
+
+### A.4 `archived` boolean vs `deleted_at` timestamptz
+
+**Briefing v3 Section 5 Konventionen**: „Soft-Delete via `archived` Boolean"
+
+**Echo aktuell**: `deleted_at timestamptz` durchgängig.
+
+**Discovery-Decision Q10**: deleted_at behalten (Echo-Konvention).
+
+**Konflikt-Tiefe**: Niedrig. Beide Patterns funktionieren. Unterschied: deleted_at gibt Timestamp, archived nicht.
+
+**Meine Empfehlung**: **`deleted_at` behalten**. Wie bei Discovery entschieden. Briefing-Text als CLAUDE.md-Korrektur dokumentieren (haben wir).
+
+---
+
+## B. NEUE FEATURES in v3 (16 Punkte)
+
+Pro Punkt: was Briefing fordert, was Echo aktuell hat, Empfehlung.
+
+### B.1 APP_CONFIG + Kindra-Branding
+
+**v3**: `lib/config.ts` mit `APP_CONFIG.PUBLIC_NAME` aus ENV. Code-Name bleibt "echo", Public-Name = "Kindra" via Env-Variable, Domain = "mykindra.ai".
+
+**Echo aktuell**: Keine APP_CONFIG. Strings hardcoded ("ECHO" im Sidebar, "ECHO" im Voice-Orb, "Echo" in Mails).
+
+**Empfehlung**: **ADOPT** — sehr niedrige Migration-Kosten (1 File anlegen + ~30 String-Substitutionen), riesiger Hebel falls Patrick rebrand will. Auch wenn der finale Name unklar ist, ist die ENV-Abstraktion future-proofing.
+
+**Aufwand**: 2-3h. **Priorität**: hoch (bevor mehr UI-Code geschrieben wird).
+
+### B.2 Design Tokens + Plus Jakarta Sans + DM Mono
+
+**v3**: `lib/design-tokens.ts` als Single Source of Truth, Plus Jakarta Sans (Sans) + DM Mono (Mono), 6 Tag-Cluster-Farbpärchen, kein hardcoded Hex.
+
+**Echo aktuell**: Tailwind v4 `@theme`-Tokens (paper/ink-1-5/action/signal) in globals.css. Eigene Fonts via system-stack. Keine zentrale Design-Token-TS-Datei. Hardcoded oklch-Werte in einigen Components (Suggestion-Card, Tag-Colors in types.ts).
+
+**Empfehlung**: **PARTIAL ADOPT** — Design-Tokens-TS als Mirror der bereits existierenden CSS-Tokens anlegen (eine Stunde). Fonts wechseln (Plus Jakarta Sans + DM Mono) ist nice-to-have, nicht kritisch — Echo's aktuelle Typographie sieht gut aus.
+
+**Aufwand**: 3-4h falls Fonts mit. **Priorität**: mittel.
+
+### B.3 Tag-Cluster-Schema komplett anders
+
+**v3**: **4 Tag-Cluster** (reminders, interests, potential, origin) + **2 separate Tabellen** (passions, circles) = 6 visuelle Cluster.
+
+**Echo aktuell**: 4 Tag-Cluster (context, topic, value, trigger). Keine passions, keine circles.
+
+**Konflikt-Tiefe**: Hoch. Das ist eine andere mentale Karte.
+
+**Empfehlung**: **DEEP REVIEW** — die v3-Cluster (reminders/interests/potential/origin) machen mehr semantischen Sinn als unsere (context/topic/value/trigger). Aber: wir haben gerade die Tags migriert mit topic-Default. Wechsel würde alle 13 Tags neu einsortieren.
+
+**Optionen**:
+- a) Cluster-Namen umtaufen: context→origin, topic→interests, value→potential, trigger→reminders. Daten-Migration via UPDATE-Statement. Aber: passion+circle als separate Tabellen einführen.
+- b) v3 1:1 übernehmen: tags-Schema komplett umbauen, passions+circles als neue Tabellen, max-5-für-passions enforcen.
+- c) Wir behalten unser Schema und ignorieren das v3-Tag-Modell.
+
+**Aufwand**: 6-8h. **Priorität**: hoch, wenn wir v3 ernst nehmen. Mittel, wenn nicht.
+
+### B.4 UI-Labels in eigener `lib/labels.ts`
+
+**v3 Section 5**: `DEPTH_LABELS` mit englischen Labels (Inner Circle, Core, Regulars, Network, Acquaintances), Pflicht über `lib/labels.ts`. P0-Verstoß: DB-Werte im UI rendern.
+
+**Echo aktuell**: `DEPTH_LABELS` in `lib/types.ts` mit deutschen Labels (Innerer Kreis, Vertrauter Kreis, etc.).
+
+**Empfehlung**: **PARTIAL ADOPT** — eigenes `lib/labels.ts` extrahieren (10 min), aber **bei deutschen Labels bleiben** (Echo ist deutsche App). v3-Labels sind englisch, Patrick UI ist deutsch. Briefing-Section sagt „Deutsch und Englisch identisch" — möglich, aber bisher unsere Direction.
+
+**Aufwand**: 30 min. **Priorität**: niedrig.
+
+### B.5 person_contacts als separate Tabelle
+
+**v3**: `person_contacts` für alle Kommunikationswege (phone/email/whatsapp/linkedin/sms). „Hardcoded contact-Felder raus".
+
+**Echo aktuell**: phones/emails/addresses/socials als JSONB-Arrays auf people.
+
+**Empfehlung**: **DEFER** — JSONB-Pattern funktioniert für Echo's Single-User-Setup. Eigene Tabelle hat Vorteile (Indizes, Constraints, Search), aber Migration-Kosten sind hoch (UI muss umgebaut werden, lib/people.ts queries, vCard-Import-Code, Voice-Extract-Tool-Schemas).
+
+**Aufwand**: 1-2 Tage. **Priorität**: niedrig — JSONB tut's für jetzt.
+
+### B.6 person_relationships als separate Tabelle (bidirektional)
+
+**v3**: Beziehungen in eigener Tabelle mit Auto-Detection aus how_we_met, Fuzzy-Match >80%.
+
+**Echo aktuell**: relationships JSONB-Array auf people. Bidirektionale Logik bei Insert (mirrored entries).
+
+**Empfehlung**: **DEFER** — gleiche Logik wie B.5. JSONB ist OK für Echo's Scale.
+
+**Aufwand**: 1-1.5 Tage. **Priorität**: niedrig.
+
+### B.7 person_geographies + Google Places
+
+**v3**: Strukturierte Geo-Daten via Google Places (street, city, region, country, lat/lng, place_id).
+
+**Echo aktuell**: addresses JSONB + AddressAutocomplete via Nominatim/OpenStreetMap.
+
+**Empfehlung**: **DEFER** — Echo's OpenStreetMap-Setup funktioniert, kostet null, ist DSGVO-freundlich. Google Places bringt bessere Daten + place_id für Place-Deduplication, aber kostet pro Lookup ($-Aufwand) und erfordert Google Cloud Account.
+
+**Aufwand**: 4-6h für Migration zu Google Places. **Priorität**: niedrig.
+
+### B.8 Life Events Section
+
+**v3 Section 11**: Komplett neue Tabelle `life_events` (photo/document/voice_note/milestone/note) + Junction `person_life_events`, Supabase Storage Bucket, Galerie-UI, Globale Lifeline-Ansicht.
+
+**Echo aktuell**: **Nichts dergleichen**.
+
+**Empfehlung**: **CONSIDER FOR PHASE 2** — schönes Feature, aber massive Bauarbeit (Storage-Setup, Upload-Flow, Thumbnail-Generation Edge Function, 2 Tabellen, Galerie-UI, Lifeline-View). Bei Echo's Solo-User-Stand kein Killer-Feature.
+
+**Aufwand**: 3-4 Tage. **Priorität**: niedrig (Phase 2).
+
+### B.9 REST API mit OpenAPI + Scalar Docs
+
+**v3 Section 13**: Alle Endpoints unter `/api/v1/`, `createRouteHandler`-Wrapper, OpenAPI 3.1 auto-generated via `zod-to-openapi`, Scalar Docs auf `/docs/api`.
+
+**Echo aktuell**: `/api/*` ohne Versionierung, ohne OpenAPI, ohne Scalar.
+
+**Empfehlung**: **DEFER** — sinnvoll wenn Echo public-API wird. Für Patrick als Solo-User ist es Overhead.
+
+**Aufwand**: 2-3 Tage. **Priorität**: niedrig (außer Patrick will MCP-Server, dann hängt's zusammen).
+
+### B.10 MCP Server
+
+**v3 Section 14**: `/app/mcp/route.ts`, Streamable HTTP Transport, 7 Tools (search_persons, get_person, create_person, add_interaction, get_sunday_pulse, generate_draft, find_intro_path), PAT-Auth.
+
+**Echo aktuell**: **Nichts**.
+
+**Empfehlung**: **CONSIDER** — sehr cool: Patrick könnte aus Claude Desktop direkt sein CRM abfragen, Drafts generieren lassen, Personen anlegen. Aber: braucht Auth-Layer (api_tokens-Tabelle), braucht REST-API-Backend, braucht PAT-Tokens. 1-Wochen-Projekt.
+
+**Aufwand**: 5-7 Tage. **Priorität**: mittel (cool factor hoch, immediate value mittel).
+
+### B.11 Voice-Provider-Abstraktion (für Phase-2 TML)
+
+**v3 Section 12**: `VoiceProvider` Interface mit transcribe/converse/synthesize. OpenAI / Anthropic / ElevenLabs als Provider. Phase-2: TML-Interaction-Small.
+
+**Echo aktuell**: WebSpeech API (Browser-built-in) + ElevenLabs TTS. Kein Provider-Layer.
+
+**Empfehlung**: **ADOPT** (sobald wir an Voice rangehen) — Refactor von Voice-Code mit Provider-Interface kostet wenig und macht Phase 2 (TML) trivial.
+
+**Aufwand**: 1-1.5 Tage. **Priorität**: mittel (vor next Voice-Feature).
+
+### B.12 Push-to-Talk + ⌘Space Shortcut
+
+**v3 Section 12**: Floating Mic-Button mobile, ⌘Space auf Desktop als Push-to-Talk.
+
+**Echo aktuell**: Voice-Orb auf `/`. Klick. Kein Floating-Button, kein Shortcut.
+
+**Empfehlung**: **ADOPT** — Floating Mic-Button + ⌘Space sind klein und wertvoll für Voice-First.
+
+**Aufwand**: 4-6h. **Priorität**: mittel.
+
+### B.13 BYOK + Quota-Pattern
+
+**v3 Section 16-17**: `user_api_keys` (encrypted via Supabase Vault) + `quota_usage` Tracking + 4-stage UI (Comfort → Warn → Soft-Degradation → Hard-Cap Modal). Free-Plan: 30 Voice-Min/Woche, 200 AI-Drafts, 50 PDL.
+
+**Echo aktuell**: `byo_keys` JSONB auf profiles (Anthropic + ElevenLabs). Stripe-Subscriptions seit Patrick's parallel-Commit. Keine Quotas, keine 4-Stage-UI.
+
+**Empfehlung**: **DEFER** — sehr aufwändig (encryption, 4-Stage-UI, Quota-Tracking-Cron). Erst nötig wenn Echo public ist. Patrick als Solo-User: Stripe-Subscription reicht.
+
+**Aufwand**: 4-5 Tage. **Priorität**: niedrig.
+
+### B.14 Capacitor + iOS/Android
+
+**v3 Section 3**: Capacitor 6+ von Anfang an, iOS und Android Targets, 7 Plugins (Contacts, Push, Local-Notifications, Calendar, Camera, Haptics, Filesystem).
+
+**Echo aktuell**: Web-only, PWA-Setup teilweise vorhanden (Phase E Plan).
+
+**Empfehlung**: **DEFER** — riesiger Aufwand (Bundle-IDs entscheiden, Apple/Google Developer Accounts, Native-Setup, Capacitor-Plugins). Für Patrick allein nicht nötig — Web auf iOS Safari + PWA-Install funktioniert.
+
+**Aufwand**: 1-2 Wochen. **Priorität**: niedrig (Phase 3).
+
+### B.15 Onboarding-Wizard (4 Screens)
+
+**v3 Section 21**: 4 Onboarding-Screens (Schichten, KI-Anreicherung, Sonntags-Puls, API-Keys).
+
+**Echo aktuell**: Keiner.
+
+**Empfehlung**: **DEFER** — Patrick ist alleiniger User, kein Onboarding nötig. Wird relevant bei public Launch.
+
+**Aufwand**: 1 Tag. **Priorität**: sehr niedrig.
+
+### B.16 SEO + AI-Discovery (/llms.txt + JSON-LD + MDX-Docs)
+
+**v3 Section 15**: `/llms.txt`, `/robots.txt` mit Bot-Allowlist, JSON-LD Schema, MDX-basierte Docs auf `/docs`.
+
+**Echo aktuell**: Standard Next.js `/robots.txt`, kein `/llms.txt`, keine MDX-Docs.
+
+**Empfehlung**: **DEFER** — relevant für Public-Launch. Solo-User braucht keine SEO.
+
+**Aufwand**: 4-6h. **Priorität**: sehr niedrig.
+
+---
+
+## C. BEREITS ABGEDECKT (8 Punkte)
+
+Dinge die v3 verlangt, die Echo schon hat (manchmal anders, aber funktional):
+
+| Punkt | v3 sagt | Echo hat |
 |---|---|---|
-| Platform | Capacitor 6 + Next.js, one codebase for Web + iOS + Android | Web only (Vercel) |
-| Alarm | `@capacitor/local-notifications` (native, fires when app is closed) | Browser WebAudio beep (requires tab open) |
-| Contacts | `@capacitor/contacts` (read phone contacts) | Not available |
-| Camera | `@capacitor/camera` | Not available |
-| Push | `@capacitor/push-notifications` | Not available |
-| Sunday Pulse at 19:00 | Native push, fires reliably | Cron exists but no notification delivery |
-| Next.js mode | `output: 'export'` (static, no SSR) | Server-rendered (SSR) |
-
-**Impact:** Capacitor requires `output: 'export'` in Next.js config. This breaks Server Components that fetch directly from Supabase - every data fetch must move to the client or API routes. This is a fundamental architecture shift.
-
-**To adopt:** Decide first whether you want iOS/Android. If yes, this affects almost every page. If web-only for now, this item can be deferred but Capacitor changes how SSR vs API routes are structured.
+| C.1 Depth-Achse mit 5 Werten | inner_5...periphery_500 | ✓ identisch |
+| C.2 Purpose-Achse mit 5 Werten | personal...aspirational | ✓ identisch |
+| C.3 Suggestions-Tabelle | suggestions + Type-Enum | ✓ + Apply-Layer (B1) |
+| C.4 how_we_met als Goldfeld | text, 1-3 Sätze | ✓ in 0023 + Quick-Add |
+| C.5 interactions.external_id | für Gmail/Calendar-Sync | (X) — Echo hat `external_events`-Tabelle, kein external_id auf interactions. Lösung: Spalte adden, vorhandene Calendar-Sync-Logik umstellen. **Sollten wir adden — 30 min Arbeit.** |
+| C.6 interactions.direction | inbound/outbound/mutual | ✓ in 0023 |
+| C.7 Stripe Subscriptions | Pro 9 EUR/Monat | ✓ Patrick hat das schon eingebaut |
+| C.8 deleted_at vs archived | deleted_at | ✓ (per Discovery Q10) |
 
 ---
 
-### CRITICAL - Table name `people` vs `persons`
+## STRATEGISCHE EMPFEHLUNG
 
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| Core table | `persons` | `people` |
+**Phase-1 — sofort (1-2 Tage):**
 
-Small but affects every query, every API route, every type. A rename migration with full FK repointing is required.
+1. **A.1 mode behalten** — keine Action, Briefing v3-Konflikt ignorieren
+2. **A.2 first_name/last_name in Phase F droppen** — Phase F Tasklist erweitern
+3. **A.3 met_event droppen, met_date + met_location behalten** — Phase F Tasklist
+4. **A.4 deleted_at behalten** — keine Action
+5. **B.1 APP_CONFIG anlegen** — Branding ENV-driven (2-3h)
+6. **C.5 external_id auf interactions** — Calendar-Sync-Konsistenz (30 min)
 
----
+**Phase-2 — wenn Phase C fertig (Tage-bis-Wochen):**
 
-### CRITICAL - Soft-Delete Convention Mismatch
+7. **B.3 Tag-Cluster-Schema entscheiden** — v3-Modell (reminders/interests/potential/origin + passions/circles) oder bei aktuellem bleiben?
+8. **B.11 Voice-Provider-Abstraktion** — vor nächsten Voice-Features
+9. **B.12 ⌘Space + Floating Mic** — Voice-First-Polish
 
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| Soft-delete | `archived boolean default false` | `deleted_at timestamptz` |
-| Filter queries | `.eq('archived', false)` | `.is('deleted_at', null)` |
+**Phase-3 — Public-Launch-Vorbereitung (Wochen, optional):**
 
-Every query, every index, every UI filter would need to change.
+10. **B.10 MCP Server** — coolest neues Feature
+11. **B.9 REST API + OpenAPI**
+12. **B.8 Life Events Section**
+13. **B.15 Onboarding-Wizard**
+14. **B.13 BYOK + Quota-Pattern**
 
-**Note:** This was documented in `ECHO_GAP_ANALYSIS.md` as a conscious Echo decision. The current Echo convention is semantically richer (you know *when* it was deleted) but conflicts with the briefing.
+**Nie / Phase-4 — wenn Echo wirklich public geht:**
 
----
-
-## 2. Tech Stack
-
-### HIGH - State Management Libraries Missing
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| Server state | TanStack Query (React Query) | Direct fetch in Server Components / raw `fetch()` |
-| Client state | Zustand | useState / localStorage |
-
-Echo works without these but the briefing expects them as the pattern for all data fetching on the client side.
+15. **B.14 Capacitor + Mobile Apps**
+16. **B.16 SEO + /llms.txt**
 
 ---
 
-### HIGH - Rate Limiting Backend
+## OFFENE FRAGEN AN PATRICK
 
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| Rate limiting | Upstash Redis (100 req/min free, 1000 req/min pro) | SQL `rate_limits` table with atomic SQL function |
+1. **Tag-Cluster (B.3)**: Bei aktuellen 4 Clustern (context/topic/value/trigger) bleiben, oder auf v3-Set umstellen (reminders/interests/potential/origin) + separate `passions` und `circles` Tabellen?
 
-Upstash is faster and designed for this use case. The SQL approach works but doesn't scale as cleanly. Both enforce limits - just different backends.
+2. **Branding (B.1)**: Public-Name künftig „Kindra"? Falls ja: APP_CONFIG jetzt einführen + Sidebar-Logo + Mail-Templates updaten. Falls nicht entschieden: APP_CONFIG anlegen mit „Echo" als Default.
 
----
+3. **Mode-Konflikt (A.1)**: OK dass wir bei Mode-als-Spalte bleiben gegen v3-Empfehlung?
 
-### MEDIUM - Next.js Version
+4. **Met-Felder (A.3)**: met_event droppen OK, met_date + met_location behalten OK?
 
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| Next.js | 14 | 16.2.4 |
+5. **Was zuerst nach Phase A**: 
+   - (a) C4-C6 wie geplant durchziehen (Heute-Dashboard, People-Liste-Filter, Tag-UI)
+   - (b) Quick-Wins aus v3 jetzt (APP_CONFIG + external_id + Phase-F-Drops vorziehen)
+   - (c) Tag-Cluster-Migration v3-Style (B.3) — wenn ja, dann sehr früh weil noch wenig Tag-Daten
 
-Echo is ahead of the briefing's spec. No downgrade needed - 16 is backwards-compatible with 14 APIs.
+Sag mir Antworten auf 1-5, dann passe ich die Migration-Plan-Reihenfolge an und gehe weiter.
 
----
-
-## 3. Naming & Branding
-
-### HIGH - No APP_CONFIG Abstraction
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| Brand constant | `lib/config.ts` → `APP_CONFIG.PUBLIC_NAME` | "Echo" hardcoded in various places |
-| Public name | "Kindra" (via env var, rebrandable without code change) | "Echo" |
-| Domain | `mykindra.ai` | Not abstracted |
-| Bundle ID | `com.placeholder.kindra` | Not relevant (no native app) |
-
-The briefing introduces the concept of separating the code-name (`echo`) from the public-facing brand name (`Kindra`). This allows a rebrand without touching any code - just change an env var.
-
-**To adopt:** Add `lib/config.ts` with `APP_CONFIG`, replace any user-visible "Echo" strings. Low risk, high value for rebrandability.
-
----
-
-## 4. Authentication
-
-### HIGH - SSO Missing (Apple, Google, Microsoft)
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| Login options | Google SSO + Apple SSO + Microsoft SSO + Magic Link | Magic Link only |
-| Google scopes at login | Gmail + Calendar requested together with auth | Separate OAuth flow after login |
-
-Apple SSO is required by App Store rules if you offer any other OAuth provider on iOS. Google SSO at login time means Gmail/Calendar tokens arrive during onboarding, not as a separate setup step.
-
----
-
-### HIGH - OAuth Token Storage Model
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| OAuth tokens | `email_accounts` table (purpose-specific) | `service_connections` table (generic) |
-| Gmail/Calendar link | At login (Google SSO scopes) | Post-login via `/api/oauth/google_calendar/start` |
-
----
-
-## 5. Database Schema
-
-### CRITICAL - Interactions Table: Single vs Array person_id
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| FK type | `person_id uuid references persons(id)` (single) | `person_ids uuid[]` (array) |
-
-Echo's array approach allows group meetings without duplicate rows. The briefing assumes single-person interactions. A migration would need to either split group interactions into multiple rows, or the briefing spec would need to be adjusted.
-
----
-
-### CRITICAL - Contact Data: Separate Table vs JSONB Columns
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| Phones, emails, socials | `person_contacts` table (separate rows per contact method) | JSONB columns on `people` (phones, emails, addresses, socials) |
-
-Separate table is more queryable (find all people with a Gmail address = simple WHERE). JSONB is faster to write but harder to index and search.
-
----
-
-### CRITICAL - Missing Tables in Echo
-
-These tables are in the briefing but do not exist in Echo at all:
-
-| Table | Purpose | Impact if missing |
-|-------|---------|-------------------|
-| `person_contacts` | Phones, emails, social handles | Contact data stuck in JSONB |
-| `person_relationships` | Bidirectional people links | Relationships stuck in JSONB |
-| `person_geographies` | Structured geo data via Google Places | Geos stuck in JSONB |
-| `passions` | Max 5 per person, separate from tags | Mixed into tags array |
-| `circles` | Communities and organisations person belongs to | Not available |
-| `person_circles` | Junction: person ↔ circle | Not available |
-| `tags` | Proper tag table with cluster enum + 4 clusters | Flat `text[]` on people |
-| `person_tags` | Junction: person ↔ tag (max 7 enforced at DB level) | No junction, no 7-limit enforcement |
-| `suggestions` | AI suggestion lifecycle (pending/accepted/rejected) | In-memory only, not persisted |
-| `user_preferences` | Settings (replaces Echo's `profiles`) | Settings in `profiles` table |
-| `email_accounts` | OAuth tokens for Gmail/Calendar | In `service_connections` |
-| `alarm_sounds` | Sound library for alarm | Hardcoded sounds |
-| `merge_history` | Audit trail of dedup merges | No merge history kept |
-| **`life_events`** | Photos, documents, voice notes per person | Not built at all |
-| **`person_life_events`** | Junction: person ↔ life event | Not built at all |
-| **`api_tokens`** | Personal Access Tokens for REST API/MCP | Not built at all |
-| **`user_api_keys`** | BYOK provider keys (Supabase Vault encrypted) | Keys stored as plain JSONB in profiles |
-| **`quota_usage`** | Weekly quota tracking for Free plan | Not built at all |
-
----
-
-### HIGH - Tags Are Completely Wrong
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| Storage | `tags` table + `person_tags` junction | `text[]` array on `people` |
-| Cluster names | `origin`, `interests`, `potential`, `reminders` | `context`, `topic`, `value`, `trigger` |
-| Extra clusters | `passion` (max 5), `circle` (from circles table) | None |
-| 7-limit enforcement | DB constraint via junction table | Not enforced anywhere |
-| Semantic meaning | Each cluster has specific color + icon in design system | No semantic differentiation |
-
-The cluster names are completely different - not aliases, actual different concepts. The briefing's "reminders" cluster replaces Echo's "trigger", and "origin" replaces "context", etc. But "passion" and "circle" are brand new concepts.
-
----
-
-### HIGH - `persons` Schema Differences
-
-Fields the briefing has that Echo is missing:
-
-| Field | Briefing v3 | Echo Today |
-|---|---|---|
-| `how_we_met` | Core field (goldfield for AI extraction) | Missing |
-| `depth` | Enum: inner_5, trusted_15, active_50, network_150, periphery_500 | `depth_override` (freetext) |
-| `depth_source` | Enum: auto, manual_override | Not tracked |
-| `purpose` | Enum: personal, family, business_active, business_latent, aspirational | `scope` (work/personal/both) - different! |
-| `preferred_channel` | Enum: call, whatsapp, email, linkedin, sms | Not a field |
-| `archived` | Boolean soft-delete | `deleted_at` timestamptz |
-| `industry` | Typed enum (10 values) | Freetext |
-| `function` | Enum: founder, exec, operator, ic, investor, advisor, student, other | `job_function` (freetext) |
-| `last_contact_at` | Briefing uses this name | `last_interaction_at` in Echo |
-
-Fields Echo has that briefing removes:
-
-| Field | Echo | Briefing decision |
-|---|---|---|
-| `scope` | work/personal/both | Removed - replaced by `purpose` |
-| `is_self` | Patrick's own record | Not in briefing schema |
-| `notes` | Freetext notes on person | Not in briefing (interactions handle this) |
-| `notes_summary` | AI summary of notes | Not in briefing |
-| `cta` | Call-to-action text | Phase 2 only (`ctas` table) |
-| `cta_expires_at` | CTA expiry | Phase 2 |
-| `priority` | A/B/C | Not in briefing |
-| `strength_score` | 0-100 relationship score | Phase 2 (`relationship_strength_score`) |
-| `stakeholder_types[]` | Multi-type array | Replaced by `purpose` (single enum) |
-| `organization_id` | FK to organizations | Echo-specific (orgs not in briefing) |
-| `next_best_action` | AI suggestion | Not in briefing |
-
----
-
-## 6. Voice
-
-### HIGH - STT: Browser Web Speech API vs Server-Side Whisper
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| Speech-to-Text | OpenAI Whisper (server-side, via API) | Browser Web Speech API (client-side, free) |
-| Quality | Better accuracy, works offline for Capacitor | Good for desktop browsers, inconsistent mobile |
-| Language control | Full control | Browser/OS determines language |
-| Latency target | <300ms (Whisper) | Near-instant (browser native) |
-
----
-
-### HIGH - Voice Provider Abstraction Missing
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| Provider interface | `VoiceProvider` interface in `lib/voice/types.ts` | Direct ElevenLabs calls, no abstraction |
-| Swap without refactor | Yes - add new class implementing VoiceProvider | Would require refactoring all call sites |
-| TTS default | OpenAI TTS HD | ElevenLabs (Sarah Eve) |
-| STT default | OpenAI Whisper | Browser Web Speech API |
-
-The briefing defines a clean `VoiceProvider` interface so any STT/LLM/TTS can be swapped without touching the app code. Echo calls ElevenLabs directly.
-
----
-
-### HIGH - Non-Streaming AI Calls
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| Voice response | All layers streamed, audio starts while LLM still generating | Non-streaming, waits for full Claude response |
-| Latency target | <1.5s total (STT 300ms + LLM first-token 500ms + TTS 200ms) | No defined target |
-
----
-
-## 7. Gmail / Calendar Sync
-
-### HIGH - Pull vs Push Sync Architecture
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| Gmail sync | Gmail Watch API + Pub/Sub webhooks (push model) | Polling via Vercel Cron every hour (pull model) |
-| Calendar sync | Calendar Watch API (push model) | Polling via Vercel Cron every hour |
-| Onboarding backfill | 90-day email backfill with progress UI | Not implemented |
-| Backfill UI | Progress bar showing emails processed + contacts found | Not implemented |
-
-Push model means near-instant sync when an email arrives. Pull model means up to 1 hour delay.
-
----
-
-## 8. Deduplication
-
-### MEDIUM - Different Scoring Algorithm
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| Email match | +60 pts | +30 pts |
-| Phone match | +50 pts | +20 pts |
-| LinkedIn match | +50 pts | Not checked |
-| Name similarity | +30 pts (>0.8 sim) | +40 pts (trigram) |
-| Company + role | +20 pts | +10 pts |
-| Merge suggestion threshold | >70 | High band (>80 roughly) |
-| Soft warning threshold | 50-70 | Medium band (60-80) |
-| Merge history | `merge_history` table with 30-day hard_delete_after | No history table |
-| Post-merge cleanup | Background job deletes loser after 30 days | Soft-delete only, no cleanup job |
-
----
-
-## 9. New Features in Briefing - Not Built At All
-
-### HIGH - Life Events Section
-
-Completely new feature. Not in Echo at all.
-
-- **What it is:** Per-person gallery of photos, documents, voice notes, milestones with date and location
-- **Storage:** Supabase Storage bucket `life-events` with RLS + thumbnail Edge Function
-- **Tables needed:** `life_events`, `person_life_events`
-- **UI:** 2-column grid on person detail page + global "Lifeline" sidebar tab chronological view
-- **Capacitor integration:** Camera, Filesystem, Microphone plugins for native upload
-
----
-
-### HIGH - REST API v1 (Versioned, OpenAPI, Scalar Docs)
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| API versioning | `/api/v1/` | `/api/` (no versioning) |
-| Auth for external use | JWT (web app) + PAT (external/MCP) | JWT only (no PAT) |
-| Audit log | Every POST/PATCH/DELETE logged with IP + token | Not implemented |
-| OpenAPI spec | Auto-generated from Zod schemas via `zod-to-openapi` | Not generated |
-| Scalar docs | Interactive playground at `/docs/api` | Not available |
-| Bearer token auth | Via `createRouteHandler` wrapper | Per-route manual auth check |
-
----
-
-### HIGH - MCP Server
-
-Completely missing. Not started.
-
-- **What it is:** Model Context Protocol server at `/mcp` - lets Claude Desktop, Cursor, etc. talk to Echo directly
-- **Auth:** Personal Access Tokens (`api_tokens` table)
-- **Tools:** search_persons, get_person, create_person, add_interaction, get_sunday_pulse, generate_draft, find_intro_path
-- **Use case:** Patrick can ask Claude Desktop "who in my network knows a Series A investor in construction tech?" and Claude queries Echo's MCP server
-
----
-
-### HIGH - Free vs Pro Plan + Quota System
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| Plan tiers | Free (quotas) vs Pro (9 EUR/mo, BYOK, no limits) | Single tier, no subscription logic |
-| Quotas | Weekly: 30 voice min, 200 AI drafts, 50 PDL enrichments | None |
-| Quota tracking | `quota_usage` table with weekly windows | Not implemented |
-| Soft degradation | At 95%: switch to cheaper providers automatically | Not implemented |
-| Hard cap | At 100%: upgrade modal with 2 options | Not implemented |
-| Quota warnings | Toasts at 70%, 85%, 95% (tracked so not repeated) | Not implemented |
-| BYOK storage | `user_api_keys` table, keys encrypted via Supabase Vault, last_four shown | `profiles.byo_api_keys` JSONB, no encryption, no vault |
-| Key validation | Test API call on save (OpenAI /models, Anthropic test, etc.) | No validation |
-
----
-
-### MEDIUM - SEO / AI Discovery
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| `/llms.txt` | Standardized AI crawler file | Not implemented |
-| JSON-LD on landing page | SoftwareApplication schema | Not implemented |
-| `/robots.txt` | Explicit allow for GPTBot, ClaudeBot, PerplexityBot | Not implemented |
-| MDX docs at `/docs` | AI-optimized documentation | Not implemented |
-
----
-
-## 10. Design System
-
-### HIGH - Design Token Source of Truth
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| Source of truth | `lib/design-tokens.ts` (TypeScript file, exports types + helpers) | `app/globals.css` only (CSS variables) |
-| TypeScript access | `import { tokens } from '@/lib/design-tokens'` | Not available |
-| `getClusterColors()` helper | Yes | No |
-| Tailwind config | Imports tokens, generates utility classes | Hand-configured |
-
-The uploaded zip includes the full `design-tokens.ts`, `globals.css`, and `tailwind.config.ts`. These are ready to drop in.
-
----
-
-### HIGH - Fonts: Geist vs Plus Jakarta Sans + DM Mono
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| UI font | Plus Jakarta Sans (variable weight, Google Fonts) | Geist (Vercel's font) |
-| Mono font | DM Mono | Not specified |
-| Dark mode | `data-theme="dark"` on `<html>` (via CSS variables) | Not specified |
-
-The briefing's `globals.css` (in the uploaded zip) defines the complete dark mode token override and font loading. Can be adopted as-is.
-
----
-
-### MEDIUM - Tag Cluster CSS Classes
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| CSS classes | `.cluster-reminders`, `.cluster-interests`, `.cluster-potential`, `.cluster-origin`, `.cluster-passion`, `.cluster-circle` | Not defined as utility classes |
-| Base class | `.cluster-tag` | Not defined |
-
-The uploaded `globals.css` has all 6 cluster classes ready to use. Currently Echo has no such semantic CSS for tags.
-
----
-
-## 11. Alarm Clock
-
-### HIGH - Native vs Browser
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| Trigger mechanism | Capacitor `LocalNotifications` - fires even when app is closed | Browser WebAudio API - requires tab open |
-| Volume behavior | Ramp from 10% to 100% over 90 seconds | Triple-beep, fixed volume |
-| Sounds | 6 royalty-free named sounds in `/public/sounds/` | Not specified |
-| Snooze options | 5/9/15 minutes, stored in user preferences | Exists but no configurable options |
-| Days | Configurable per weekday (mon/tue/etc.) | Not configurable |
-
----
-
-## 12. End-of-Day Review
-
-### MEDIUM - Different UX Approach
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| Trigger | Push notification at 18:00 | No push (tab must be open) |
-| UI | Dedicated Review Screen listing today's contacts with quick-note-input | `/debrief` voice-guided multi-phase flow |
-| Input style | 1-line text input per contact, 140 char max | Voice-first conversation |
-| Storage | As separate `interaction` rows | Saved as `debriefs` row |
-
-Both accomplish end-of-day reflection but very different UX. Briefing's approach is simpler and more structured; Echo's is voice-first and more conversational.
-
----
-
-## 13. Onboarding
-
-### MEDIUM - Not Built vs 4-Screen Wizard
-
-| | Briefing v3 | Echo Today |
-|---|---|---|
-| Wizard | 4 screens: Depth layers, AI enrichment demo, Sunday pulse preview, API keys (optional) | No structured onboarding wizard |
-| Email backfill | Starts automatically after onboarding with progress UI | No backfill |
-| API key setup | Screen 4 of onboarding (optional, can skip) | Manual, in settings after login |
-
----
-
-## 14. Person Detail Page Section Order
-
-### MEDIUM - Different Structure
-
-| Briefing v3 Order | Echo Today |
-|---|---|
-| 1. Header + Action-Bar | Header |
-| 2. Reminders | CTA |
-| 3. Passions | Suggestions (AI) |
-| 4. Interests | Context (stakeholder info) |
-| 5. Potential (Give/Get/Both) | Relationships |
-| 6. Origin | Timeline (interactions) |
-| 7. Circles | Notes |
-| 8. Geographies | |
-| 9. Relationships | |
-| 10. Contact Details | |
-| 11. Wie kennengelernt | |
-| 12. Life Events (NEW) | |
-| 13. Interactions History | |
-
----
-
-## 15. Features Echo Has That Briefing Excludes
-
-These exist in the current Echo codebase but are not in the briefing. Your call whether to keep, hide, or remove them.
-
-| Feature | Echo Status | Briefing stance |
-|---------|-------------|-----------------|
-| **Organizations** (first-class entity with CRUD, dedup, enrichment) | Fully built | Not in briefing schema at all |
-| **Pipelines + Deals** (sales Kanban) | Fully built | Explicitly excluded ("HubSpot's job") |
-| **Visual Workflow Editor** (@xyflow/react) | Built but no executor | Not in briefing |
-| **Debriefs table** + streak tracking | Fully built | Not in briefing |
-| **Gamification** (XP, levels, 16 achievements) | Fully built | Not in briefing |
-| **Notes** as separate entity | Fully built | Not in briefing (interactions cover this) |
-| **Todos** as separate entity | Fully built | Not in briefing |
-| **Multi-model catalog** (14 models, 7 providers) | Built, only Anthropic active | Briefing: BYOK per voice layer, no model catalog page |
-| **Scope field** (work/personal/both) | On `people` | Removed in briefing (replaced by `purpose`) |
-| **Admin dashboard** | Built | Not in briefing |
-| **`connections` table** | Dead table | Not in briefing |
-
----
-
-## Summary: What the Briefing Zip Actually Gives You
-
-The zip contains 5 files that are immediately usable:
-
-| File | What it is | Can adopt as-is? |
-|------|-----------|-----------------|
-| `ECHO_FINAL_UI_BRIEFING.md` | Full product spec v3 (authoritative) | Yes - read-only reference |
-| `CLAUDE.md` | New Claude Code rules for Kindra | Partially - has stricter rules than current Echo CLAUDE.md |
-| `lib/design-tokens.ts` | TypeScript design token file | **Yes - drop in immediately** |
-| `app/globals.css` | Full CSS variable system + cluster classes + fonts | **Yes - replace current globals.css** |
-| `tailwind.config.ts` | Tailwind config importing tokens | **Yes - replace current tailwind.config.ts** |
-
-The three design files (`design-tokens.ts`, `globals.css`, `tailwind.config.ts`) are the lowest-risk, highest-value things to adopt immediately. They change the font to Plus Jakarta Sans + DM Mono, add the 6 cluster CSS classes, add proper dark mode, and set up the full Kindra design system.
-
----
-
-## Recommended Adoption Order
-
-**Immediate (low risk, high value):**
-1. Drop in `lib/design-tokens.ts` from the zip
-2. Replace `app/globals.css` with the zip version (adds fonts + cluster classes + dark mode)
-3. Replace `tailwind.config.ts` with the zip version
-4. Add `lib/config.ts` with `APP_CONFIG` constant
-
-**Sprint-level (medium effort):**
-5. Add `life_events` + `person_life_events` tables (new feature, no migration conflict)
-6. Add `api_tokens` table + PAT generation UI
-7. Add `user_api_keys` table (Supabase Vault) replacing `profiles.byo_api_keys` JSONB
-8. Add `quota_usage` table + Free/Pro plan logic
-9. Add versioned API prefix `/api/v1/` via route rewrites
-10. Build MCP server at `/mcp`
-
-**Large migrations (plan carefully):**
-11. `person_contacts` table split from JSONB (data migration needed)
-12. `tags` + `person_tags` junction (data migration from `text[]`)
-13. `person` table name + `archived` boolean (data migration)
-14. `purpose` enum replacing `scope` (data migration)
-15. SSO authentication (Google, Apple, Microsoft)
-16. Capacitor integration (only if native app is wanted)
-
-**Defer or skip:**
-- Pipelines/deals removal (currently hidden per earlier decision)
-- Workflow editor removal (keep for now per earlier decision)
-- Upstash Redis (SQL rate limiting works, not urgent)

@@ -112,9 +112,9 @@ export default async function RhythmusPage() {
                       ) : (
                         <p className="font-mono text-xs text-ink-4">—</p>
                       )}
-                      {row.person.expected_cadence_days && (
+                      {row.person.cadence_days && (
                         <p className="font-mono text-[10px] uppercase tracking-wider text-ink-4">
-                          Soll {row.person.expected_cadence_days}
+                          Soll {row.person.cadence_days}
                         </p>
                       )}
                     </div>

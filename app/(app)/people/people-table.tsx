@@ -1,100 +1,126 @@
 "use client";
 
+// People-Tabelle (Phase C5 v7).
+//
+// Spalten ein-/ausblenden, sortieren, drag-and-drop reordern — alles
+// über den generischen useColumnConfig-Hook plus die data-table
+// Components. Avatar + Name links gepinnt, Aktionen rechts. Filter und
+// Row-Rendering bleibt people-spezifisch.
+
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { Person, Scope } from "@/lib/types";
-import { StrengthMeter } from "@/components/strength-meter";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { bulkDeletePeopleAction } from "./bulk-actions";
+import {
+  isEmptyFilter,
+  serializeFilterToParams,
+  type PeopleFilterSpec,
+} from "@/lib/people-filter";
+import {
+  CIRCLE_COLOR,
+  DEPTH_LABELS,
+  MODE_LABELS,
+  PASSION_COLOR,
+  PURPOSE_LABELS,
+  TAG_CLUSTER_COLORS,
+  TAG_CLUSTER_LABELS,
+  type CircleRow,
+  type Depth,
+  type Mode,
+  type Person,
+  type Purpose,
+  type TagCluster,
+} from "@/lib/types";
+import {
+  useColumnConfig,
+  type DataTableColumn,
+  type SortDir,
+} from "@/hooks/use-column-config";
+import { ColumnPopover } from "@/components/data-table/column-popover";
+import { SortableHeaderRow } from "@/components/data-table/sortable-header-row";
 
-type SortKey = "name" | "company" | "last_interaction_at" | "scope";
-type SortDir = "asc" | "desc";
-type ScopeFilter = "all" | Scope;
+type SortKey = "name" | "company" | "last_contact_at";
+type ChannelFilter = "all" | "has_phone" | "has_email" | "has_linkedin";
 
-const SCOPE_LABEL: Record<Scope, string> = {
-  work: "Beruflich",
-  personal: "Privat",
-  both: "Beides",
-};
-
-// Spalten-Registry. Avatar + Name sind immer da (Avatar als Anker,
-// Name als Klick-Ziel). Alles andere ist togglebar via Popover. Reihen-
-// folge unten = Reihenfolge im Header. Defaults entsprechen der
-// vorherigen Ansicht damit Bestandsuser nichts vermissen.
-type ColumnKey =
-  | "company"
-  | "role"
-  | "scope"
-  | "tags"
-  | "stakeholder"
-  | "priority"
-  | "strength"
-  | "industry"
-  | "cta"
-  | "cadence"
-  | "last_interaction";
-
-interface ColumnDef {
-  key: ColumnKey;
-  label: string;
-  gridSize: string;
-  default: boolean;
-  sortKey?: SortKey;
-  align?: "right";
+interface Row {
+  person: Person;
+  tagsByCluster: Record<string, string[]>;
+  clusters: string[];
+  passions: string[];
+  circleIds: string[];
+  // 0028 — per-link Notes (pro Tag-Name / Passion-Lower / Circle-ID).
+  tagNotes: Record<string, string>;
+  passionNotes: Record<string, string>;
+  circleNotes: Record<string, string>;
+  // 0030 — V3 strukturierte Aggregation (parallel zu JSONB-Feldern bis Phase 3)
+  cityList: string[];          // lower-case Cities + display_names aus person_geographies
+  contactChannels: string[];   // distinct channels aus person_contacts
 }
 
-// Spaltenbreiten als minmax(Npx, Mfr) — Npx ist die Lese-Minimumbreite,
-// unter die wir nie schrumpfen. Wenn die Summe aller sichtbaren Mins
-// > Container-Breite ist, scrollt der Wrapper horizontal (overflow-x-
-// auto + min-w-max auf den Grid-Rows). Wenn weniger, expandieren die
-// fr-Anteile und füllen die Breite — bisheriges Verhalten bleibt.
+interface LocationOption {
+  value: string; // lower-cased
+  label: string; // original
+}
+
+interface Props {
+  rows: Row[];
+  circles: CircleRow[];
+  passions: string[];
+  locations: LocationOption[];
+  totalCount?: number;
+  // Voice / Deep-Link: initiale Filter aus URL-Params. Wenn gesetzt,
+  // wird die UI sofort mit diesen Filtern gerendert; jede manuelle
+  // Änderung schreibt zurück in die URL.
+  initialFilter?: PeopleFilterSpec;
+}
+
+// ───────── Column Registry ─────────
+type ColumnKey =
+  | "select"      // always (bulk-delete checkbox)
+  | "avatar"      // always
+  | "name"        // always
+  | "company"
+  | "purpose"
+  | "mode"
+  | "depth"
+  | "cadence"
+  | "last_contact"
+  | "current_location"
+  | "met_location"
+  | "reminders"   // Tag-Cluster
+  | "interests"   // Tag-Cluster
+  | "potential"   // Tag-Cluster
+  | "origin"      // Tag-Cluster
+  | "passions"
+  | "circles"
+  | "actions";    // always
+
+type ColumnDef = DataTableColumn<ColumnKey, SortKey>;
+
 const COLUMNS: ColumnDef[] = [
-  { key: "company", label: "Firma", gridSize: "minmax(180px,1.2fr)", default: true, sortKey: "company" },
-  { key: "role", label: "Rolle", gridSize: "minmax(140px,1fr)", default: false },
-  { key: "scope", label: "Scope", gridSize: "minmax(90px,0.8fr)", default: true, sortKey: "scope" },
-  { key: "tags", label: "Tags", gridSize: "minmax(180px,1.4fr)", default: true },
-  { key: "stakeholder", label: "Stakeholder", gridSize: "minmax(140px,1fr)", default: false },
-  { key: "priority", label: "Prio", gridSize: "70px", default: false },
-  { key: "strength", label: "Stärke", gridSize: "80px", default: true },
-  { key: "industry", label: "Industrie", gridSize: "minmax(140px,1fr)", default: false },
-  { key: "cta", label: "CTA", gridSize: "minmax(160px,1.2fr)", default: false },
-  { key: "cadence", label: "Cadence", gridSize: "90px", default: false },
-  { key: "last_interaction", label: "Letzte Interaktion", gridSize: "140px", default: true, sortKey: "last_interaction_at", align: "right" },
+  { key: "select", label: "", always: true, default: true, gridCol: "32px", pinned: "start" },
+  { key: "avatar", label: "Avatar", always: true, default: true, gridCol: "40px", pinned: "start" },
+  { key: "name", label: "Name", always: true, default: true, sortKey: "name", gridCol: "minmax(180px,1.6fr)", pinned: "start" },
+  { key: "company", label: "Firma · Rolle", default: true, sortKey: "company", gridCol: "minmax(140px,1fr)" },
+  { key: "purpose", label: "Zweck", default: true, gridCol: "100px" },
+  { key: "mode", label: "Modus", default: true, gridCol: "100px" },
+  { key: "depth", label: "Tiefe", default: false, gridCol: "110px" },
+  { key: "cadence", label: "Cadence", default: false, gridCol: "80px", align: "right" },
+  { key: "last_contact", label: "Letzter Kontakt", default: true, sortKey: "last_contact_at", gridCol: "110px" },
+  { key: "current_location", label: "Stadt", default: false, gridCol: "120px" },
+  { key: "met_location", label: "Wo getroffen", default: false, gridCol: "140px" },
+  { key: "reminders", label: "Signale", default: false, gridCol: "minmax(200px,1.4fr)" },
+  { key: "interests", label: "Interests", default: false, gridCol: "minmax(200px,1.4fr)" },
+  { key: "potential", label: "Potential", default: false, gridCol: "minmax(200px,1.4fr)" },
+  { key: "origin", label: "Origin", default: false, gridCol: "minmax(180px,1.2fr)" },
+  { key: "passions", label: "Passions", default: false, gridCol: "minmax(180px,1.2fr)" },
+  { key: "circles", label: "Circles", default: false, gridCol: "minmax(180px,1.2fr)" },
+  { key: "actions", label: "Aktionen", always: true, default: true, gridCol: "auto", align: "right", pinned: "end" },
 ];
 
-const COLUMNS_STORAGE_KEY = "echo:people:columns:v1";
+const STORAGE_KEY = "echo:people:columns:v3";
 
-function loadVisibleColumns(): Set<ColumnKey> {
-  if (typeof window === "undefined") {
-    return new Set(COLUMNS.filter((c) => c.default).map((c) => c.key));
-  }
-  try {
-    const raw = window.localStorage.getItem(COLUMNS_STORAGE_KEY);
-    if (!raw) {
-      return new Set(COLUMNS.filter((c) => c.default).map((c) => c.key));
-    }
-    const parsed = JSON.parse(raw) as string[];
-    if (!Array.isArray(parsed)) {
-      return new Set(COLUMNS.filter((c) => c.default).map((c) => c.key));
-    }
-    const valid = new Set<ColumnKey>();
-    for (const k of parsed) {
-      if (COLUMNS.some((c) => c.key === k)) valid.add(k as ColumnKey);
-    }
-    return valid;
-  } catch {
-    return new Set(COLUMNS.filter((c) => c.default).map((c) => c.key));
-  }
-}
-
-function saveVisibleColumns(set: Set<ColumnKey>) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(
-      COLUMNS_STORAGE_KEY,
-      JSON.stringify(Array.from(set)),
-    );
-  } catch {}
-}
+// ───────── Utils ─────────
 
 function initials(name: string): string {
   return name
@@ -103,6 +129,13 @@ function initials(name: string): string {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+}
+
+function titleCase(s: string): string {
+  return s
+    .split(/\s+/)
+    .map((w) => (w.length > 0 ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(" ");
 }
 
 function formatDate(iso: string | null): string {
@@ -115,269 +148,444 @@ function formatDate(iso: string | null): string {
 }
 
 function compareNullable(
-  a: string | number | null,
-  b: string | number | null,
+  a: string | null,
+  b: string | null,
   dir: SortDir,
 ): number {
   if (a === null && b === null) return 0;
   if (a === null) return 1;
   if (b === null) return -1;
-  const cmp =
-    typeof a === "number"
-      ? a - (b as number)
-      : a.localeCompare(b as string);
+  const cmp = a.localeCompare(b);
   return dir === "asc" ? cmp : -cmp;
 }
 
-export function PeopleTable({
-  people,
-  activeTag = null,
-  totalCount,
-}: {
-  people: Person[];
-  activeTag?: string | null;
-  totalCount?: number;
-}) {
-  const router = useRouter();
-  const [search, setSearch] = useState("");
-  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("all");
-  const [stakeholderFilter, setStakeholderFilter] = useState<string>("all");
-  const [priorityFilter, setPriorityFilter] = useState<string>("all");
-  const [sortKey, setSortKey] = useState<SortKey>("name");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+function normalizeForWaMe(raw: string | null | undefined): string {
+  if (!raw) return "";
+  return raw.replace(/[^\d]/g, "");
+}
 
-  // Hydrate-after-mount, damit SSR und Client-Render auf den Defaults
-  // matchen und localStorage später die User-Auswahl reinzieht.
-  const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(
-    () => new Set(COLUMNS.filter((c) => c.default).map((c) => c.key)),
+function primaryPhone(person: Person): string | null {
+  const mobile = person.phones?.find(
+    (p) =>
+      p.label?.toLowerCase().includes("mobile") ||
+      p.label?.toLowerCase().includes("iphone"),
   );
-  const [columnsHydrated, setColumnsHydrated] = useState(false);
-  const [columnsOpen, setColumnsOpen] = useState(false);
-  const columnsBtnRef = useRef<HTMLDivElement | null>(null);
+  const first = mobile ?? person.phones?.[0];
+  return first?.value ?? null;
+}
 
-  useEffect(() => {
-    setVisibleColumns(loadVisibleColumns());
-    setColumnsHydrated(true);
-  }, []);
+function primaryEmail(person: Person): string | null {
+  return person.emails?.[0]?.value ?? null;
+}
 
-  useEffect(() => {
-    if (!columnsHydrated) return;
-    saveVisibleColumns(visibleColumns);
-  }, [visibleColumns, columnsHydrated]);
+const CLUSTER_ORDER: TagCluster[] = [
+  "reminders",
+  "interests",
+  "potential",
+  "origin",
+];
 
-  // Click-outside fürs Popover.
-  useEffect(() => {
-    if (!columnsOpen) return;
-    function onDoc(e: MouseEvent) {
-      if (!columnsBtnRef.current) return;
-      if (!columnsBtnRef.current.contains(e.target as Node)) {
-        setColumnsOpen(false);
-      }
+// ───────── Main ─────────
+
+export function PeopleTable({
+  rows,
+  circles,
+  passions,
+  locations,
+  totalCount,
+  initialFilter,
+}: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // initialFilter aus URL (Voice/Deep-Link). circle kommt entweder als
+  // circle_id ODER als name-substring — bei name suchen wir die circle_id.
+  // location kommt lower-cased — passt direkt zu locationFilter-value.
+  const resolvedCircleId = useMemo(() => {
+    const v = initialFilter?.circle;
+    if (!v) return undefined;
+    // Wenn UUID, direkt nehmen.
+    if (/^[0-9a-f-]{36}$/i.test(v)) {
+      return circles.find((c) => c.id === v)?.id;
     }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [columnsOpen]);
+    // Substring-Match über alle Circles.
+    const lower = v.toLowerCase();
+    return circles.find((c) => c.name.toLowerCase().includes(lower))?.id;
+  }, [initialFilter?.circle, circles]);
 
-  function toggleColumn(key: ColumnKey) {
-    setVisibleColumns((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }
+  const resolvedLocation = useMemo(() => {
+    const v = initialFilter?.location;
+    if (!v) return undefined;
+    // Substring-Match gegen die known locations damit Dropdown-Value matched.
+    const hit = locations.find((l) => l.value.includes(v));
+    return hit?.value ?? v;
+  }, [initialFilter?.location, locations]);
 
-  // Build the stakeholder-type filter options from what's actually in
-  // the dataset — manual taxonomy + any custom values the user added.
-  const stakeholderOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const p of people) {
-      for (const t of p.stakeholder_types ?? []) set.add(t);
+  const [search, setSearch] = useState(initialFilter?.q ?? "");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkPending, startBulkTransition] = useTransition();
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [modeFilter, setModeFilter] = useState<"all" | Mode>(
+    initialFilter?.mode ?? "all",
+  );
+  const [purposeFilter, setPurposeFilter] = useState<"all" | Purpose>(
+    initialFilter?.purpose ?? "all",
+  );
+  const [depthFilter, setDepthFilter] = useState<"all" | Depth>(
+    initialFilter?.depth ?? "all",
+  );
+  const [clusterFilter, setClusterFilter] = useState<"all" | TagCluster>(
+    initialFilter?.cluster ?? "all",
+  );
+  const [tagFilter, setTagFilter] = useState<string>(
+    initialFilter?.tag ?? "all",
+  );
+  const [passionFilter, setPassionFilter] = useState<string>(
+    initialFilter?.passion ?? "all",
+  );
+  const [circleFilter, setCircleFilter] = useState<string>(
+    resolvedCircleId ?? "all",
+  );
+  const [locationFilter, setLocationFilter] = useState<string>(
+    resolvedLocation ?? "all",
+  );
+  const [channelFilter, setChannelFilter] = useState<ChannelFilter>(
+    initialFilter?.channel ?? "all",
+  );
+
+  // URL-Sync — jede Filter-Änderung schreibt die URL um, sodass der
+  // Stand bookmarkbar/shareable bleibt. Beim ersten Render skip damit
+  // wir nicht mit ?cluster=all&… volllaufen.
+  const skipFirstSync = useRef(true);
+  useEffect(() => {
+    if (skipFirstSync.current) {
+      skipFirstSync.current = false;
+      return;
     }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [people]);
+    const spec: PeopleFilterSpec = {};
+    if (search.trim()) spec.q = search.trim();
+    if (modeFilter !== "all") spec.mode = modeFilter;
+    if (purposeFilter !== "all") spec.purpose = purposeFilter;
+    if (depthFilter !== "all") spec.depth = depthFilter;
+    if (clusterFilter !== "all") spec.cluster = clusterFilter;
+    if (tagFilter !== "all") spec.tag = tagFilter;
+    if (passionFilter !== "all") spec.passion = passionFilter;
+    if (circleFilter !== "all") spec.circle = circleFilter;
+    if (locationFilter !== "all") spec.location = locationFilter;
+    if (channelFilter !== "all") spec.channel = channelFilter;
+    const params = serializeFilterToParams(spec);
+    const qs = params.toString();
+    const target = qs ? `${pathname}?${qs}` : pathname;
+    router.replace(target, { scroll: false });
+  }, [
+    search,
+    modeFilter,
+    purposeFilter,
+    depthFilter,
+    clusterFilter,
+    tagFilter,
+    passionFilter,
+    circleFilter,
+    locationFilter,
+    channelFilter,
+    pathname,
+    router,
+  ]);
+
+  // Aktive-Filter-Indikator nutzt isEmptyFilter unten (siehe activeFilterCount).
+  void isEmptyFilter;
+
+  // Column-Config (Attio-Pattern) — Hook handelt visibility + order +
+  // persistence + sort + DnD-Sensoren komplett ab.
+  const cols = useColumnConfig<ColumnKey, SortKey>({
+    columns: COLUMNS,
+    storageKey: STORAGE_KEY,
+    defaultSortKey: "name",
+    defaultSortDir: "asc",
+  });
+  const sortKey = cols.sortKey ?? "name";
+  const sortDir = cols.sortDir;
+
+  const activeFilterCount =
+    (modeFilter !== "all" ? 1 : 0) +
+    (purposeFilter !== "all" ? 1 : 0) +
+    (depthFilter !== "all" ? 1 : 0) +
+    (clusterFilter !== "all" ? 1 : 0) +
+    (tagFilter !== "all" ? 1 : 0) +
+    (passionFilter !== "all" ? 1 : 0) +
+    (circleFilter !== "all" ? 1 : 0) +
+    (locationFilter !== "all" ? 1 : 0) +
+    (channelFilter !== "all" ? 1 : 0);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return people.filter((p) => {
-      if (scopeFilter !== "all" && p.scope !== scopeFilter) return false;
-      if (
-        stakeholderFilter !== "all" &&
-        !(p.stakeholder_types ?? []).includes(stakeholderFilter)
-      )
+    return rows.filter((r) => {
+      const p = r.person;
+      if (modeFilter !== "all" && p.mode !== modeFilter) return false;
+      if (purposeFilter !== "all" && p.purpose !== purposeFilter) return false;
+      if (depthFilter !== "all" && p.depth !== depthFilter) return false;
+      if (clusterFilter !== "all" && !r.clusters.includes(clusterFilter))
         return false;
-      if (priorityFilter !== "all") {
-        if (priorityFilter === "—" && p.priority) return false;
-        if (priorityFilter !== "—" && p.priority !== priorityFilter) return false;
+      if (tagFilter !== "all") {
+        // case-insensitive Match gegen alle Tag-Namen aller Cluster
+        const allTagNames = Object.values(r.tagsByCluster).flat();
+        const wanted = tagFilter.toLowerCase();
+        if (!allTagNames.some((n) => n.toLowerCase() === wanted)) return false;
       }
+      if (passionFilter !== "all" && !r.passions.includes(passionFilter))
+        return false;
+      if (circleFilter !== "all" && !r.circleIds.includes(circleFilter))
+        return false;
+
+      // Location-Filter — V3 schaut auf person_geographies cityList
+      // PLUS Legacy-Freitext-Felder. „all" deaktiviert den Filter.
+      if (locationFilter !== "all") {
+        const v3 = r.cityList.includes(locationFilter);
+        const legacy = [
+          p.current_location?.toLowerCase(),
+          p.home_location?.toLowerCase(),
+          p.met_location?.toLowerCase(),
+        ].some((x) => x === locationFilter);
+        if (!v3 && !legacy) return false;
+      }
+
+      // Channel-Filter — V3 person_contacts ODER JSONB-Fallback.
+      if (channelFilter === "has_phone") {
+        const v3 = r.contactChannels.some(
+          (c) => c === "phone" || c === "whatsapp",
+        );
+        const legacy = (p.phones?.length ?? 0) > 0;
+        if (!v3 && !legacy) return false;
+      }
+      if (channelFilter === "has_email") {
+        const v3 = r.contactChannels.includes("email");
+        const legacy = (p.emails?.length ?? 0) > 0;
+        if (!v3 && !legacy) return false;
+      }
+      if (channelFilter === "has_linkedin") {
+        const v3 = r.contactChannels.includes("linkedin");
+        const legacy = Boolean(p.linkedin_url);
+        if (!v3 && !legacy) return false;
+      }
+
       if (!q) return true;
-      // Search across everything that helps the user find a person:
-      // name, company, role, tags, stakeholder typings, classification,
-      // CTA, interests, geographies (place names + kinds).
-      const subTypeValues = Object.values(p.stakeholder_sub_types ?? {}).flat();
-      const geoValues = (p.geographies ?? []).flatMap((g) => [
-        g.kind,
-        g.place,
-      ]);
+      // Haystack umfasst Person-Felder + alle Tag-Namen aller Cluster
+      // + Passion-Namen + Circle-Namen — sodass Free-Text-Suche auch
+      // „geburtstag", „entrepreneurship", „padel" findet.
+      const allTagNames = Object.values(r.tagsByCluster).flat();
+      const circleNames = r.circleIds
+        .map((id) => circles.find((c) => c.id === id)?.name ?? "")
+        .filter(Boolean);
       const haystack = [
         p.name,
         p.company,
         p.role,
-        p.industry,
-        p.job_function,
-        p.cta,
         p.notes,
-        p.notes_summary,
-        ...(p.tags ?? []),
-        ...(p.stakeholder_types ?? []),
-        ...subTypeValues,
-        ...(p.interests ?? []),
-        ...geoValues,
+        p.how_we_met,
+        p.met_location,
+        p.current_location,
+        p.home_location,
+        ...allTagNames,
+        ...r.passions,
+        ...circleNames,
       ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [people, search, scopeFilter, stakeholderFilter, priorityFilter]);
+  }, [
+    rows,
+    search,
+    modeFilter,
+    purposeFilter,
+    depthFilter,
+    clusterFilter,
+    tagFilter,
+    passionFilter,
+    circleFilter,
+    locationFilter,
+    channelFilter,
+    circles,
+  ]);
 
   const sorted = useMemo(() => {
-    const arr = [...filtered];
-    arr.sort((a, b) => {
-      const av = a[sortKey] as string | null;
-      const bv = b[sortKey] as string | null;
-      return compareNullable(av, bv, sortDir);
+    const copy = [...filtered];
+    copy.sort((a, b) => {
+      const pa = a.person;
+      const pb = b.person;
+      if (sortKey === "name") {
+        return sortDir === "asc"
+          ? pa.name.localeCompare(pb.name)
+          : pb.name.localeCompare(pa.name);
+      }
+      if (sortKey === "company") {
+        return compareNullable(pa.company, pb.company, sortDir);
+      }
+      if (sortKey === "last_contact_at") {
+        return compareNullable(pa.last_contact_at, pb.last_contact_at, sortDir);
+      }
+      return 0;
     });
-    return arr;
+    return copy;
   }, [filtered, sortKey, sortDir]);
 
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir(sortDir === "asc" ? "desc" : "asc");
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
+  function resetFilters() {
+    setModeFilter("all");
+    setPurposeFilter("all");
+    setDepthFilter("all");
+    setClusterFilter("all");
+    setTagFilter("all");
+    setPassionFilter("all");
+    setCircleFilter("all");
+    setLocationFilter("all");
+    setChannelFilter("all");
   }
-
-  // Build the grid-template-columns string from the currently visible
-  // column set. Avatar + Name are always present, in that order.
-  // Name kriegt ebenfalls eine Lese-Mindestbreite damit sie bei vielen
-  // sichtbaren Spalten nicht zur ersten Ellipsis-Quelle wird.
-  const visibleColDefs = COLUMNS.filter((c) => visibleColumns.has(c.key));
-  const gridTemplate =
-    `28px minmax(200px,1.6fr) ` +
-    visibleColDefs.map((c) => c.gridSize).join(" ");
 
   return (
     <div className="space-y-4">
-      {activeTag && (
-        <div className="flex items-center gap-2 text-sm">
-          <span className="t-label">Tag-Filter</span>
-          <span
-            className="tag"
-            style={{
-              borderColor: "var(--action)",
-              color: "var(--action)",
-            }}
-          >
-            <span className="dot" style={{ background: "var(--action)" }} />
-            {activeTag}
-          </span>
-          <Link
-            href="/people"
-            className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3 transition hover:text-ink-1"
-          >
-            × Filter entfernen
-          </Link>
-        </div>
-      )}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex h-9 min-w-72 flex-1 items-center gap-2 rounded border border-rule bg-paper px-3">
-          <span className="t-label" aria-hidden>
-            Suche
-          </span>
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Name, Firma, Stakeholder, Industrie, Interessen, Orte…"
-            className="flex-1 bg-transparent text-sm text-ink-1 outline-none placeholder:text-ink-4"
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Name, Firma, Ort, Notiz …"
+          className="h-9 w-full max-w-xs rounded border border-rule bg-paper px-3 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20"
+        />
+
+        <FilterSelect
+          label="Modus"
+          value={modeFilter}
+          onChange={(v) => setModeFilter(v as "all" | Mode)}
+          options={[
+            { value: "all", label: "Alle" },
+            ...(Object.keys(MODE_LABELS) as Mode[]).map((m) => ({
+              value: m,
+              label: MODE_LABELS[m],
+            })),
+          ]}
+        />
+
+        <FilterSelect
+          label="Zweck"
+          value={purposeFilter}
+          onChange={(v) => setPurposeFilter(v as "all" | Purpose)}
+          options={[
+            { value: "all", label: "Alle" },
+            ...(Object.keys(PURPOSE_LABELS) as Purpose[]).map((p) => ({
+              value: p,
+              label: PURPOSE_LABELS[p],
+            })),
+          ]}
+        />
+
+        <FilterSelect
+          label="Tiefe"
+          value={depthFilter}
+          onChange={(v) => setDepthFilter(v as "all" | Depth)}
+          options={[
+            { value: "all", label: "Alle" },
+            ...(Object.keys(DEPTH_LABELS) as Depth[]).map((d) => ({
+              value: d,
+              label: DEPTH_LABELS[d],
+            })),
+          ]}
+        />
+
+        <FilterSelect
+          label="Cluster"
+          value={clusterFilter}
+          onChange={(v) => setClusterFilter(v as "all" | TagCluster)}
+          options={[
+            { value: "all", label: "Alle" },
+            ...CLUSTER_ORDER.map((c) => ({
+              value: c,
+              label: TAG_CLUSTER_LABELS[c],
+            })),
+          ]}
+          highlight={
+            clusterFilter !== "all"
+              ? TAG_CLUSTER_COLORS[clusterFilter as TagCluster]
+              : undefined
+          }
+        />
+
+        {passions.length > 0 && (
+          <FilterSelect
+            label="Passion"
+            value={passionFilter}
+            onChange={setPassionFilter}
+            options={[
+              { value: "all", label: "Alle" },
+              ...passions.map((p) => ({ value: p, label: titleCase(p) })),
+            ]}
           />
-        </div>
-        <div className="flex h-9 rounded border border-rule bg-paper p-0.5 text-xs">
-          {(["all", "work", "personal", "both"] as ScopeFilter[]).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setScopeFilter(s)}
-              className={`rounded px-3 transition-colors ${
-                scopeFilter === s
-                  ? "bg-paper-2 text-ink-1"
-                  : "text-ink-3 hover:text-ink-1"
-              }`}
-            >
-              {s === "all" ? "Alle" : SCOPE_LABEL[s as Scope]}
-            </button>
-          ))}
-        </div>
-        <div className="relative" ref={columnsBtnRef}>
+        )}
+
+        {circles.length > 0 && (
+          <FilterSelect
+            label="Circle"
+            value={circleFilter}
+            onChange={setCircleFilter}
+            options={[
+              { value: "all", label: "Alle" },
+              ...circles.map((c) => ({ value: c.id, label: c.name })),
+            ]}
+          />
+        )}
+
+        {locations.length > 0 && (
+          <FilterSelect
+            label="Ort"
+            value={locationFilter}
+            onChange={setLocationFilter}
+            options={[
+              { value: "all", label: "Alle" },
+              ...locations.map((l) => ({ value: l.value, label: l.label })),
+            ]}
+          />
+        )}
+
+        <FilterSelect
+          label="Kanäle"
+          value={channelFilter}
+          onChange={(v) => setChannelFilter(v as ChannelFilter)}
+          options={[
+            { value: "all", label: "Alle" },
+            { value: "has_phone", label: "Hat Telefon" },
+            { value: "has_email", label: "Hat Email" },
+            { value: "has_linkedin", label: "Hat LinkedIn" },
+          ]}
+        />
+
+        {tagFilter !== "all" && (
           <button
             type="button"
-            onClick={() => setColumnsOpen((v) => !v)}
-            aria-haspopup="true"
-            aria-expanded={columnsOpen}
-            className="inline-flex h-9 items-center gap-1.5 rounded border border-rule px-3 text-xs text-ink-2 transition hover:border-action hover:text-action"
+            onClick={() => setTagFilter("all")}
+            className="inline-flex h-9 items-center gap-1 rounded border border-action bg-action-soft px-2.5 text-xs text-ink-1 transition hover:border-bad hover:text-bad"
+            title="Tag-Filter entfernen"
           >
-            Spalten
-            <span aria-hidden className="text-[10px]">▾</span>
+            <span className="t-label">Tag</span>
+            <span>{tagFilter}</span>
+            <span aria-hidden>×</span>
           </button>
-          {columnsOpen && (
-            <div
-              role="menu"
-              className="absolute right-0 top-10 z-30 w-56 space-y-1 rounded border border-rule bg-paper p-2 shadow-[0_8px_24px_rgba(20,17,13,0.08)]"
-            >
-              <p className="t-label px-2 pt-1">Sichtbare Spalten</p>
-              {COLUMNS.map((c) => (
-                <label
-                  key={c.key}
-                  className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm text-ink-1 hover:bg-paper-2"
-                >
-                  <input
-                    type="checkbox"
-                    checked={visibleColumns.has(c.key)}
-                    onChange={() => toggleColumn(c.key)}
-                    className="h-3.5 w-3.5 rounded border-rule accent-action"
-                  />
-                  <span>{c.label}</span>
-                </label>
-              ))}
-              <div className="flex items-center justify-between border-t border-rule pt-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setVisibleColumns(
-                      new Set(
-                        COLUMNS.filter((c) => c.default).map((c) => c.key),
-                      ),
-                    )
-                  }
-                  className="px-2 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3 transition hover:text-ink-1"
-                >
-                  zurücksetzen
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setColumnsOpen(false)}
-                  className="rounded border border-rule px-2 py-1 text-[10px] text-ink-2 transition hover:border-action hover:text-action"
-                >
-                  Schließen
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
+        )}
+
+        {activeFilterCount > 0 && (
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="inline-flex h-9 items-center rounded border border-dashed border-rule px-3 text-xs text-ink-3 transition hover:border-bad hover:text-bad"
+            title="Alle Filter zurücksetzen"
+          >
+            × {activeFilterCount}
+          </button>
+        )}
+
+        <div className="ml-auto flex items-center gap-2">
+          <ColumnPopover api={cols} />
+
           <Link
             href="/people/import"
             className="inline-flex h-9 items-center rounded border border-rule px-3 text-xs text-ink-2 transition hover:border-action hover:text-action"
@@ -393,296 +601,631 @@ export function PeopleTable({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 text-xs">
-        {stakeholderOptions.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="t-label mr-1">Stakeholder</span>
-            <button
-              type="button"
-              onClick={() => setStakeholderFilter("all")}
-              className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
-                stakeholderFilter === "all"
-                  ? "border-action bg-action-soft text-action"
-                  : "border-rule bg-paper text-ink-3 hover:border-ink-3 hover:text-ink-1"
-              }`}
-            >
-              Alle
-            </button>
-            {stakeholderOptions.map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() =>
-                  setStakeholderFilter(stakeholderFilter === t ? "all" : t)
-                }
-                className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
-                  stakeholderFilter === t
-                    ? "border-action bg-action-soft text-action"
-                    : "border-rule bg-paper text-ink-3 hover:border-ink-3 hover:text-ink-1"
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="t-label mr-1">Priorität</span>
-          {(["all", "A", "B", "C", "—"] as const).map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPriorityFilter(p)}
-              className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
-                priorityFilter === p
-                  ? "border-action bg-action-soft text-action"
-                  : "border-rule bg-paper text-ink-3 hover:border-ink-3 hover:text-ink-1"
-              }`}
-            >
-              {p === "all" ? "Alle" : p === "—" ? "Keine" : p}
-            </button>
-          ))}
-        </div>
-
-        {(stakeholderFilter !== "all" || priorityFilter !== "all") && (
+      {/* Bulk-Action-Bar — sichtbar wenn mindestens eine Zeile ausgewählt. */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 rounded border border-action bg-action-soft px-3 py-2">
+          <span className="t-label text-action">{selected.size} ausgewählt</span>
           <button
             type="button"
-            onClick={() => {
-              setStakeholderFilter("all");
-              setPriorityFilter("all");
-            }}
-            className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3 transition hover:text-ink-1"
+            onClick={() => setSelected(new Set())}
+            className="text-xs text-ink-3 transition hover:text-ink-1"
           >
-            × alle Filter zurücksetzen
+            Auswahl aufheben
           </button>
-        )}
-      </div>
+          <div className="ml-auto flex items-center gap-2">
+            {bulkError && (
+              <span className="text-[11px] text-bad">{bulkError}</span>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                const ids = Array.from(selected);
+                if (
+                  !confirm(`${ids.length} Person${ids.length > 1 ? "en" : ""} löschen?`)
+                ) {
+                  return;
+                }
+                setBulkError(null);
+                startBulkTransition(async () => {
+                  const res = await bulkDeletePeopleAction(ids);
+                  if (!res.ok) {
+                    setBulkError(res.error ?? "Fehler beim Löschen");
+                    return;
+                  }
+                  setSelected(new Set());
+                });
+              }}
+              disabled={bulkPending}
+              className="rounded border border-bad bg-bad/10 px-3 py-1 text-xs font-medium text-bad transition hover:bg-bad hover:text-paper disabled:opacity-50"
+            >
+              {bulkPending ? "Lösche…" : `Löschen (${selected.size})`}
+            </button>
+          </div>
+        </div>
+      )}
 
-      {/* Scroll-Wrapper: bei vielen Spalten scrollt der innere Bereich
-          horizontal ohne dass die Page selbst wegrutscht. min-w-max auf
-          den Grid-Rows zwingt sie auf ihre intrinsische Breite (Summe
-          der Spalten-Mins), wodurch overflow-x-auto greift. */}
+      {/* Table */}
       <div className="overflow-x-auto rounded border border-rule bg-paper">
-        <div
-          className="grid min-w-max gap-4 border-b border-rule bg-paper-2 px-4 py-2.5"
-          style={{ gridTemplateColumns: gridTemplate }}
-        >
-          <span className="t-label" />
-          <SortHeader
-            label="Name"
-            active={sortKey === "name"}
-            dir={sortDir}
-            onClick={() => toggleSort("name")}
+        <div className="min-w-max">
+          <SortableHeaderRow
+            api={cols}
+            customHeaderCells={{
+              select: (
+                <SelectAllCheckbox
+                  visibleIds={sorted.map((r) => r.person.id)}
+                  selected={selected}
+                  onChange={setSelected}
+                />
+              ),
+            }}
           />
-          {visibleColDefs.map((c) =>
-            c.sortKey ? (
-              <SortHeader
-                key={c.key}
-                label={c.label}
-                active={sortKey === c.sortKey}
-                dir={sortDir}
-                onClick={() => toggleSort(c.sortKey!)}
-                align={c.align}
+
+          {sorted.length === 0 ? (
+            <div className="px-4 py-12 text-center text-sm italic text-ink-3">
+              {totalCount === 0
+                ? "Noch keine Personen — leg die erste an."
+                : "Keine Treffer für diese Filter."}
+            </div>
+          ) : (
+            sorted.map((r) => (
+              <PersonTableRow
+                key={r.person.id}
+                row={r}
+                activeColumns={cols.activeColumns}
+                gridTemplate={cols.gridTemplate}
+                circles={circles}
+                selected={selected.has(r.person.id)}
+                onToggleSelect={() => {
+                  setSelected((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(r.person.id)) next.delete(r.person.id);
+                    else next.add(r.person.id);
+                    return next;
+                  });
+                }}
               />
-            ) : (
-              <span
-                key={c.key}
-                className={`t-label ${c.align === "right" ? "text-right" : ""}`}
-              >
-                {c.label}
-              </span>
-            ),
+            ))
           )}
         </div>
-
-        {sorted.length === 0 ? (
-          <div className="px-4 py-16 text-center text-sm text-ink-3">
-            {people.length === 0
-              ? "Noch keine Personen — leg die erste an."
-              : "Keine Treffer für diesen Filter."}
-          </div>
-        ) : (
-          sorted.map((p) => (
-            <div
-              key={p.id}
-              role="link"
-              tabIndex={0}
-              onClick={() => router.push(`/people/${p.id}`)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  router.push(`/people/${p.id}`);
-                }
-              }}
-              className="grid min-w-max cursor-pointer gap-4 border-b border-rule-soft px-4 py-3 transition-colors hover:bg-paper-2 last:border-b-0 focus:bg-paper-2 focus:outline-none"
-              style={{ gridTemplateColumns: gridTemplate }}
-            >
-              <span className="avatar self-center" aria-hidden>
-                {initials(p.name)}
-              </span>
-              <span className="min-w-0 self-center">
-                <span className="block truncate font-medium text-ink-1">
-                  {p.name}
-                </span>
-                {p.role && (
-                  <span className="block truncate font-mono text-[10px] tracking-wider text-ink-4">
-                    {p.role}
-                  </span>
-                )}
-              </span>
-              {visibleColDefs.map((c) => (
-                <Cell key={c.key} col={c} person={p} />
-              ))}
-            </div>
-          ))
-        )}
       </div>
-
-      <p className="t-label">
-        {sorted.length} von {totalCount ?? people.length}
-        {activeTag && ` · gefiltert nach „${activeTag}"`}
-      </p>
     </div>
   );
 }
 
-// Single-cell renderer keyed off the column. Switch is exhaustive
-// over ColumnKey — adding a new column here means the table picks it
-// up automatically.
-function Cell({ col, person }: { col: ColumnDef; person: Person }) {
-  const align = col.align === "right" ? "text-right" : "";
+// ───────── Filter Select ─────────
 
-  switch (col.key) {
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  highlight?: { bg: string; fg: string };
+}) {
+  const active = value !== "all";
+  const style: React.CSSProperties | undefined =
+    active && highlight
+      ? { background: highlight.bg, color: highlight.fg, borderColor: highlight.fg }
+      : undefined;
+  return (
+    <label
+      className={`inline-flex h-9 items-center gap-1.5 rounded border bg-paper px-2.5 text-xs transition ${
+        active
+          ? "border-action text-ink-1"
+          : "border-rule text-ink-3 hover:border-ink-3 hover:text-ink-1"
+      }`}
+      style={style}
+    >
+      <span className="t-label">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="cursor-pointer bg-transparent text-xs text-inherit outline-none"
+        style={style}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+// ───────── Row Renderer ─────────
+
+function PersonTableRow({
+  row,
+  activeColumns,
+  gridTemplate,
+  circles,
+  selected,
+  onToggleSelect,
+}: {
+  row: Row;
+  activeColumns: ColumnDef[];
+  gridTemplate: string;
+  circles: CircleRow[];
+  selected: boolean;
+  onToggleSelect: () => void;
+}) {
+  const person = row.person;
+  return (
+    <div
+      className={`grid items-start gap-3 border-b border-rule-soft px-4 py-3 transition last:border-0 ${
+        selected ? "bg-action-soft" : "hover:bg-paper-2"
+      }`}
+      style={{ gridTemplateColumns: gridTemplate }}
+    >
+      {activeColumns.map((c) => (
+        <Cell
+          key={c.key}
+          column={c}
+          person={person}
+          row={row}
+          circles={circles}
+          selected={selected}
+          onToggleSelect={onToggleSelect}
+        />
+      ))}
+    </div>
+  );
+}
+
+// Select-All-Checkbox im Header. Wird checked wenn ALLE sichtbaren
+// Personen ausgewählt sind; indeterminate wenn nur einige.
+function SelectAllCheckbox({
+  visibleIds,
+  selected,
+  onChange,
+}: {
+  visibleIds: string[];
+  selected: Set<string>;
+  onChange: (next: Set<string>) => void;
+}) {
+  const visibleCount = visibleIds.length;
+  const selectedVisible = visibleIds.filter((id) => selected.has(id)).length;
+  const allSelected = visibleCount > 0 && selectedVisible === visibleCount;
+  const someSelected = selectedVisible > 0 && selectedVisible < visibleCount;
+
+  return (
+    <span className="flex items-center justify-center">
+      <input
+        type="checkbox"
+        checked={allSelected}
+        ref={(el) => {
+          if (el) el.indeterminate = someSelected;
+        }}
+        onChange={() => {
+          if (allSelected || someSelected) {
+            // Auswahl auf nicht-sichtbare reduzieren
+            const next = new Set(selected);
+            for (const id of visibleIds) next.delete(id);
+            onChange(next);
+          } else {
+            const next = new Set(selected);
+            for (const id of visibleIds) next.add(id);
+            onChange(next);
+          }
+        }}
+        className="h-3.5 w-3.5 accent-[var(--action)]"
+        aria-label="Alle sichtbaren auswählen"
+      />
+    </span>
+  );
+}
+
+function Cell({
+  column,
+  person,
+  row,
+  circles,
+  selected,
+  onToggleSelect,
+}: {
+  column: ColumnDef;
+  person: Person;
+  row: Row;
+  circles: CircleRow[];
+  selected: boolean;
+  onToggleSelect: () => void;
+}) {
+  switch (column.key) {
+    case "select":
+      return (
+        <span className="flex items-center justify-center">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            onClick={(e) => e.stopPropagation()}
+            className="h-3.5 w-3.5 accent-[var(--action)]"
+            aria-label={`${person.name} auswählen`}
+          />
+        </span>
+      );
+    case "avatar":
+      return (
+        <Link
+          href={`/people/${person.id}`}
+          className="flex items-center justify-center"
+        >
+          <span className="avatar" aria-hidden>
+            {initials(person.name)}
+          </span>
+        </Link>
+      );
+    case "name":
+      return (
+        <Link href={`/people/${person.id}`} className="min-w-0">
+          <span className="block truncate text-sm font-medium text-ink-1">
+            {person.name}
+          </span>
+          {person.how_we_met && (
+            <span className="block truncate text-[11px] italic text-ink-4">
+              {person.how_we_met}
+            </span>
+          )}
+        </Link>
+      );
     case "company":
       return (
-        <span className={`self-center truncate text-sm text-ink-2 ${align}`}>
-          {person.company ? (
-            person.organization_id ? (
-              <Link
-                href={`/organizations/${person.organization_id}`}
-                onClick={(e) => e.stopPropagation()}
-                className="transition hover:text-action"
-              >
-                {person.company}
-              </Link>
-            ) : (
-              person.company
-            )
-          ) : (
-            "—"
-          )}
+        <Link href={`/people/${person.id}`} className="min-w-0">
+          <span className="block truncate text-xs text-ink-3">
+            {[person.company, person.role].filter(Boolean).join(" · ") || "—"}
+          </span>
+        </Link>
+      );
+    case "purpose":
+      return (
+        <span className="text-xs text-ink-2">
+          {person.purpose ? PURPOSE_LABELS[person.purpose] : "—"}
         </span>
       );
-    case "role":
+    case "mode":
       return (
-        <span className="self-center truncate text-sm text-ink-2">
-          {person.role ?? "—"}
-        </span>
+        <span className="text-xs text-ink-2">{MODE_LABELS[person.mode]}</span>
       );
-    case "scope":
+    case "depth":
       return (
-        <span className="self-center font-mono text-[10px] uppercase tracking-[0.12em] text-ink-3">
-          {SCOPE_LABEL[person.scope]}
-        </span>
-      );
-    case "tags":
-      return (
-        <span className="flex flex-wrap gap-1 self-center">
-          {(person.tags ?? []).slice(0, 3).map((t) => (
-            <Link
-              key={t}
-              href={`/people?tag=${encodeURIComponent(t)}`}
-              onClick={(e) => e.stopPropagation()}
-              className="tag transition hover:border-action hover:text-action"
-            >
-              <span className="dot" />
-              {t}
-            </Link>
-          ))}
-        </span>
-      );
-    case "stakeholder":
-      return (
-        <span className="flex flex-wrap gap-1 self-center font-mono text-[9px] uppercase tracking-wider text-ink-3">
-          {(person.stakeholder_types ?? []).slice(0, 2).map((s) => (
-            <span key={s} className="tag">
-              {s}
-            </span>
-          )) || "—"}
-        </span>
-      );
-    case "priority":
-      return (
-        <span className="self-center text-center font-mono text-[11px] font-medium tracking-wider text-ink-1">
-          {person.priority ?? "—"}
-        </span>
-      );
-    case "strength":
-      return (
-        <span className="self-center">
-          {(person.strength_score ?? 0) > 0 ? (
-            <StrengthMeter
-              value={person.strength_score ?? 0}
-              showLabel={false}
-            />
-          ) : (
-            <span className="font-mono text-xs text-ink-4">—</span>
-          )}
-        </span>
-      );
-    case "industry":
-      return (
-        <span className="self-center truncate text-sm text-ink-2">
-          {person.industry ?? "—"}
-        </span>
-      );
-    case "cta":
-      return (
-        <span className="self-center truncate text-sm text-ink-2">
-          {person.cta ?? "—"}
+        <span className="text-xs text-ink-2">
+          {person.depth ? DEPTH_LABELS[person.depth] : "—"}
         </span>
       );
     case "cadence":
       return (
-        <span className="self-center text-center font-mono text-[11px] tracking-wider text-ink-3">
-          {person.expected_cadence_days
-            ? `${person.expected_cadence_days}d`
-            : "—"}
+        <span className="text-right font-mono text-[11px] text-ink-3">
+          {person.cadence_days ? `${person.cadence_days}d` : "—"}
         </span>
       );
-    case "last_interaction":
+    case "last_contact":
       return (
-        <span className="self-center text-right font-mono text-[11px] tracking-wider text-ink-3">
-          {formatDate(person.last_interaction_at)}
+        <span className="font-mono text-[11px] text-ink-3">
+          {formatDate(person.last_contact_at)}
         </span>
       );
+    case "current_location":
+      return (
+        <span className="truncate text-xs text-ink-3">
+          {person.current_location ?? "—"}
+        </span>
+      );
+    case "met_location":
+      return (
+        <span className="truncate text-xs text-ink-3">
+          {person.met_location ?? "—"}
+        </span>
+      );
+    case "reminders":
+      return (
+        <TagClusterCell
+          tags={row.tagsByCluster.reminders ?? []}
+          cluster="reminders"
+          notes={row.tagNotes}
+        />
+      );
+    case "interests":
+      return (
+        <TagClusterCell
+          tags={row.tagsByCluster.interests ?? []}
+          cluster="interests"
+          notes={row.tagNotes}
+        />
+      );
+    case "potential":
+      return (
+        <TagClusterCell
+          tags={row.tagsByCluster.potential ?? []}
+          cluster="potential"
+          notes={row.tagNotes}
+        />
+      );
+    case "origin":
+      return (
+        <TagClusterCell
+          tags={row.tagsByCluster.origin ?? []}
+          cluster="origin"
+          notes={row.tagNotes}
+        />
+      );
+    case "passions":
+      return <PassionsCell names={row.passions} notes={row.passionNotes} />;
+    case "circles":
+      return (
+        <CirclesCell
+          circleIds={row.circleIds}
+          circles={circles}
+          notes={row.circleNotes}
+        />
+      );
+    case "actions": {
+      const phone = primaryPhone(person);
+      const email = primaryEmail(person);
+      const phoneDigits = phone ? normalizeForWaMe(phone) : "";
+      const hasUsablePhone = phoneDigits.length >= 7;
+      return (
+        <div className="flex items-center justify-end gap-1">
+          <ActionIcon
+            href={hasUsablePhone ? `tel:${phone}` : undefined}
+            title="Anrufen"
+            icon={
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z" />
+              </svg>
+            }
+          />
+          <ActionIcon
+            href={
+              hasUsablePhone ? `https://wa.me/${phoneDigits}` : undefined
+            }
+            title="WhatsApp"
+            variant="wa"
+            icon={
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden
+              >
+                <path d="M20.52 3.48A11.94 11.94 0 0 0 12 0C5.37 0 0 5.37 0 12c0 2.11.55 4.17 1.6 5.99L0 24l6.18-1.62A11.94 11.94 0 0 0 12 24c6.63 0 12-5.37 12-12 0-3.2-1.25-6.21-3.48-8.52z" />
+              </svg>
+            }
+          />
+          <ActionIcon
+            href={email ? `mailto:${email}` : undefined}
+            title="Email"
+            icon={
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <rect x="3" y="5" width="18" height="14" rx="2" />
+                <path d="m3 7 9 6 9-6" />
+              </svg>
+            }
+          />
+        </div>
+      );
+    }
+    default:
+      return <span />;
   }
 }
 
-function SortHeader({
-  label,
-  active,
-  dir,
-  onClick,
-  align,
+function ActionIcon({
+  href,
+  title,
+  icon,
+  variant,
 }: {
-  label: string;
-  active: boolean;
-  dir: SortDir;
-  onClick: () => void;
-  align?: "right";
+  href: string | undefined;
+  title: string;
+  icon: React.ReactNode;
+  variant?: "wa";
 }) {
+  const base =
+    "inline-flex h-8 w-8 items-center justify-center rounded transition";
+  if (!href) {
+    return (
+      <span
+        title={`${title} · nicht hinterlegt`}
+        className={`${base} cursor-not-allowed text-ink-4 opacity-40`}
+        aria-hidden
+      >
+        {icon}
+      </span>
+    );
+  }
+  if (variant === "wa") {
+    return (
+      <a
+        href={href}
+        title={title}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`${base} text-ink-3 hover:bg-[#25D366]/15 hover:text-[#25D366]`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {icon}
+      </a>
+    );
+  }
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`t-label inline-flex items-center gap-1 hover:text-ink-1 ${
-        active ? "text-ink-1" : ""
-      } ${align === "right" ? "justify-end" : ""}`}
+    <a
+      href={href}
+      title={title}
+      className={`${base} text-ink-3 hover:bg-paper-2 hover:text-action`}
+      onClick={(e) => e.stopPropagation()}
     >
-      {label}
-      {active && <span aria-hidden>{dir === "asc" ? "↑" : "↓"}</span>}
-    </button>
+      {icon}
+    </a>
+  );
+}
+
+// ───────── Cluster / Passion / Circle Cells ─────────
+
+// Volltextige Pills ohne Truncation, kompakte Optik. Pills wrappen
+// vertikal wenn die Spalte zu eng ist. Items mit Note kriegen ein
+// dezentes „·"-Glyph als Hinweis, Hover zeigt die Note als Tooltip
+// (0028, Tag-Notes in der Listen-Übersicht).
+function PillStack({
+  values,
+  bg,
+  fg,
+  max = 6,
+  notesByValue,
+}: {
+  values: string[];
+  bg: string;
+  fg: string;
+  max?: number;
+  // Optional: Map von value → Note. value ist im selben Format wie der
+  // angezeigte String (also für Passions z. B. capitalized).
+  notesByValue?: Record<string, string>;
+}) {
+  if (values.length === 0)
+    return <span className="text-[11px] italic text-ink-4">—</span>;
+  const visible = values.slice(0, max);
+  const extra = values.length - visible.length;
+  return (
+    <span className="flex flex-wrap items-start gap-1">
+      {visible.map((v, i) => {
+        const note = notesByValue?.[v];
+        return (
+          <span
+            key={`${v}-${i}`}
+            className="group/pill relative inline-flex items-center gap-0.5 rounded-full px-1.5 py-px text-[10px] leading-snug"
+            style={{ background: bg, color: fg }}
+            title={note || undefined}
+          >
+            <span>{v}</span>
+            {note && (
+              <span
+                className="font-bold leading-none opacity-60"
+                aria-hidden
+                style={{ fontSize: "9px" }}
+              >
+                ·
+              </span>
+            )}
+          </span>
+        );
+      })}
+      {extra > 0 && (
+        <span
+          className="font-mono text-[10px] text-ink-4"
+          title={values.slice(max).join(", ")}
+        >
+          +{extra}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function TagClusterCell({
+  tags,
+  cluster,
+  notes,
+}: {
+  tags: string[];
+  cluster: TagCluster;
+  notes: Record<string, string>;
+}) {
+  const colors = TAG_CLUSTER_COLORS[cluster];
+  return (
+    <PillStack
+      values={tags}
+      bg={colors.bg}
+      fg={colors.fg}
+      notesByValue={notes}
+    />
+  );
+}
+
+function PassionsCell({
+  names,
+  notes,
+}: {
+  names: string[];
+  notes: Record<string, string>;
+}) {
+  // Names sind lower-cased aus der Server-Aggregation. Capitalize fürs UI.
+  const display = names.map((n) =>
+    n
+      .split(/\s+/)
+      .map((w) => (w.length ? w[0].toUpperCase() + w.slice(1) : w))
+      .join(" "),
+  );
+  // notes ist auf den lower-cased Namen indiziert — mappen wir auf die
+  // display-Variante damit der Tooltip findet.
+  const displayNotes: Record<string, string> = {};
+  for (let i = 0; i < names.length; i += 1) {
+    const note = notes[names[i]];
+    if (note) displayNotes[display[i]] = note;
+  }
+  return (
+    <PillStack
+      values={display}
+      bg={PASSION_COLOR.bg}
+      fg={PASSION_COLOR.fg}
+      notesByValue={displayNotes}
+    />
+  );
+}
+
+function CirclesCell({
+  circleIds,
+  circles,
+  notes,
+}: {
+  circleIds: string[];
+  circles: CircleRow[];
+  notes: Record<string, string>;
+}) {
+  const items = circleIds
+    .map((id) => {
+      const c = circles.find((cc) => cc.id === id);
+      return c ? { id, name: c.name } : null;
+    })
+    .filter((x): x is { id: string; name: string } => x !== null);
+  const names = items.map((c) => c.name);
+  // Map circle-name → note via id-lookup.
+  const notesByName: Record<string, string> = {};
+  for (const c of items) {
+    const note = notes[c.id];
+    if (note) notesByName[c.name] = note;
+  }
+  return (
+    <PillStack
+      values={names}
+      bg={CIRCLE_COLOR.bg}
+      fg={CIRCLE_COLOR.fg}
+      notesByValue={notesByName}
+    />
   );
 }

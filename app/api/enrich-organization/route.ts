@@ -4,6 +4,8 @@ import { CLAUDE_MODEL } from "@/lib/claude";
 import { getUserContext } from "@/lib/user-context";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
 import { mapAnthropicError } from "@/lib/anthropic-error";
+import { createClient } from "@/lib/supabase/server";
+import { logAnthropic } from "@/lib/llm-usage";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -126,6 +128,8 @@ export async function POST(request: Request) {
     ? `Recherchiere die Organisation "${name}" (Domain: ${body.domain}). Fülle das Tool nur mit Daten, die du wirklich weißt.`
     : `Recherchiere die Organisation "${name}". Fülle das Tool nur mit Daten, die du wirklich weißt.`;
 
+  const supabase = await createClient();
+  const startMs = Date.now();
   try {
     const response = await getClient(ctx.claude_key).messages.create({
       model: CLAUDE_MODEL,
@@ -133,6 +137,14 @@ export async function POST(request: Request) {
       tools: [TOOL],
       tool_choice: { type: "tool", name: "enrich_organization" },
       messages: [{ role: "user", content: userMessage }],
+    });
+    void logAnthropic({
+      supabase,
+      userId: ctx.user_id,
+      endpoint: "/api/enrich-organization",
+      model: CLAUDE_MODEL,
+      usage: response.usage,
+      latencyMs: Date.now() - startMs,
     });
 
     const toolUse = response.content.find(
@@ -164,6 +176,15 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ data: result });
   } catch (err) {
+    void logAnthropic({
+      supabase,
+      userId: ctx.user_id,
+      endpoint: "/api/enrich-organization",
+      model: CLAUDE_MODEL,
+      usage: null,
+      latencyMs: Date.now() - startMs,
+      status: "error",
+    });
     const { status, message } = mapAnthropicError(err);
     return NextResponse.json({ error: message }, { status });
   }

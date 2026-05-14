@@ -111,6 +111,15 @@ function getClient(apiKey?: string | null): Anthropic {
   return sharedClient;
 }
 
+export interface BusinessCardResult {
+  data: BusinessCardData;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+  };
+  model: string;
+}
+
 export async function extractBusinessCard({
   imageBase64,
   mediaType,
@@ -119,7 +128,7 @@ export async function extractBusinessCard({
   imageBase64: string;
   mediaType: SupportedMediaType;
   apiKey?: string | null;
-}): Promise<BusinessCardData> {
+}): Promise<BusinessCardResult> {
   const response = await getClient(apiKey).messages.create({
     model: CLAUDE_MODEL,
     max_tokens: 1024,
@@ -146,20 +155,31 @@ export async function extractBusinessCard({
     ],
   });
 
+  const usage = {
+    input_tokens: response.usage?.input_tokens ?? 0,
+    output_tokens: response.usage?.output_tokens ?? 0,
+  };
+
   const toolUse = response.content.find(
     (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
   );
-  if (!toolUse) return EMPTY;
+  if (!toolUse) {
+    return { data: EMPTY, usage, model: CLAUDE_MODEL };
+  }
 
   const input = toolUse.input as Partial<BusinessCardData>;
   return {
-    name: stringOrNull(input.name),
-    company: stringOrNull(input.company),
-    role: stringOrNull(input.role),
-    phones: cleanPhones(input.phones),
-    emails: cleanEmails(input.emails),
-    addresses: cleanAddresses(input.addresses),
-    socials: cleanSocials(input.socials),
+    data: {
+      name: stringOrNull(input.name),
+      company: stringOrNull(input.company),
+      role: stringOrNull(input.role),
+      phones: cleanPhones(input.phones),
+      emails: cleanEmails(input.emails),
+      addresses: cleanAddresses(input.addresses),
+      socials: cleanSocials(input.socials),
+    },
+    usage,
+    model: CLAUDE_MODEL,
   };
 }
 

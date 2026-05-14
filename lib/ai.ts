@@ -7,7 +7,12 @@
 // Phase B will swap the body for a Vercel AI SDK call so swapping
 // providers becomes a one-line change. The signatures here stay stable.
 
-import { chat as anthropicChat, chatWithTools as anthropicChatWithTools, type ChatMessage } from "@/lib/claude";
+import {
+  chat as anthropicChat,
+  chatWithTools as anthropicChatWithTools,
+  type ChatMessage,
+  type AnthropicUsage,
+} from "@/lib/claude";
 import { synthesizeSpeech as elevenSynthesize } from "@/lib/elevenlabs";
 import { modelById, type TaskId } from "@/lib/model-catalog";
 import type { UserContext } from "@/lib/user-context";
@@ -64,9 +69,15 @@ export async function chatForTask({
   messages: ChatMessage[];
   system: string;
   maxTokens?: number;
-}): Promise<string> {
-  const { apiKey } = resolveTextModel(ctx, task);
-  return anthropicChat({ messages, system, maxTokens, apiKey });
+}): Promise<{ text: string; usage: AnthropicUsage; model: string }> {
+  const { apiKey, model } = resolveTextModel(ctx, task);
+  const { text, usage } = await anthropicChat({
+    messages,
+    system,
+    maxTokens,
+    apiKey,
+  });
+  return { text, usage, model };
 }
 
 export async function chatWithToolsForTask({
@@ -83,9 +94,21 @@ export async function chatWithToolsForTask({
   system: string;
   tools: Anthropic.Tool[];
   maxTokens?: number;
-}): Promise<{ text: string; toolCalls: ToolCall[] }> {
-  const { apiKey } = resolveTextModel(ctx, task);
-  return anthropicChatWithTools({ messages, system, tools, maxTokens, apiKey });
+}): Promise<{
+  text: string;
+  toolCalls: ToolCall[];
+  usage: AnthropicUsage;
+  model: string;
+}> {
+  const { apiKey, model } = resolveTextModel(ctx, task);
+  const { text, toolCalls, usage } = await anthropicChatWithTools({
+    messages,
+    system,
+    tools,
+    maxTokens,
+    apiKey,
+  });
+  return { text, toolCalls, usage, model };
 }
 
 export async function synthesizeForTask({

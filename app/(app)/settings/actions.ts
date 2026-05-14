@@ -79,3 +79,12 @@ export async function updateSettings(formData: FormData) {
   revalidatePath("/", "layout");
   redirect(`${base}${join}saved=1`);
 }
+
+// V3 Onboarding-Reset: setzt profiles.onboarding_progress zurück und
+// schickt den User zum Wizard. Bestehende Daten (Profile-Felder,
+// Personen, etc.) bleiben unangetastet.
+export async function restartOnboarding(): Promise<void> {
+  const { resetOnboarding } = await import("@/lib/onboarding");
+  await resetOnboarding();
+  redirect("/onboarding");
+}

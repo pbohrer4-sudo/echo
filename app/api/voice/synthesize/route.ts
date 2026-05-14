@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { synthesizeSpeech } from "@/lib/elevenlabs";
 import { getUserContext } from "@/lib/user-context";
+import { createClient } from "@/lib/supabase/server";
 import { LIMITS, rateLimit } from "@/lib/rate-limit";
+import { logUsage } from "@/lib/llm-usage";
 
 export const runtime = "nodejs";
 
@@ -50,11 +52,21 @@ export async function POST(request: Request) {
     );
   }
 
+  const supabase = await createClient();
+  const startMs = Date.now();
   try {
     const audio = await synthesizeSpeech({
       text,
       voiceId: body.voice_id ?? ctx.voice_id ?? undefined,
       apiKey: ctx.elevenlabs_key,
+    });
+    void logUsage({
+      supabase,
+      userId: ctx.user_id,
+      endpoint: "/api/voice/synthesize",
+      provider: "elevenlabs",
+      characters: text.length,
+      latencyMs: Date.now() - startMs,
     });
     return new Response(audio, {
       status: 200,
@@ -64,6 +76,15 @@ export async function POST(request: Request) {
       },
     });
   } catch (err) {
+    void logUsage({
+      supabase,
+      userId: ctx.user_id,
+      endpoint: "/api/voice/synthesize",
+      provider: "elevenlabs",
+      characters: text.length,
+      latencyMs: Date.now() - startMs,
+      status: "error",
+    });
     const message = err instanceof Error ? err.message : "tts failed";
     return NextResponse.json({ error: message }, { status: 502 });
   }

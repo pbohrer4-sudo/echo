@@ -20,8 +20,187 @@ import {
   resolveRelatedIds,
 } from "@/lib/relationships";
 import { resolveOrCreateOrganization } from "@/lib/organizations";
+import type {
+  ContactChannel,
+  EmailEntry,
+  PhoneEntry,
+  SocialEntry,
+  AddressEntry,
+} from "@/lib/types";
 
 export const runtime = "nodejs";
+
+// V3 (0030): Voice-Extract schreibt zusätzlich in die strukturierten
+// Tabellen. JSONB-Felder bleiben in der Transition als source-of-truth
+// in der UI — die Tabellen wachsen mit jedem Voice-Turn parallel.
+
+function socialPlatformToChannel(platform: string | undefined | null): ContactChannel {
+  const p = (platform ?? "").toLowerCase();
+  if (p.includes("linkedin")) return "linkedin";
+  if (p.includes("instagram")) return "instagram";
+  if (p.includes("twitter") || p === "x") return "twitter";
+  if (p.includes("github")) return "github";
+  if (p.includes("mastodon")) return "mastodon";
+  if (p.includes("bluesky")) return "bluesky";
+  if (p.includes("threads")) return "threads";
+  if (p.includes("tiktok")) return "tiktok";
+  if (p.includes("telegram")) return "telegram";
+  if (p.includes("signal")) return "signal";
+  if (p.includes("calendly")) return "calendly";
+  if (p.includes("website")) return "website";
+  return "other";
+}
+
+interface V3SyncSupabase {
+  from: (table: string) => {
+    insert: (
+      rows: Record<string, unknown> | Record<string, unknown>[],
+    ) => Promise<{ error: { message: string } | null }>;
+  };
+}
+
+async function syncContactsToV3(args: {
+  supabase: V3SyncSupabase;
+  userId: string;
+  personId: string;
+  phones?: PhoneEntry[];
+  emails?: EmailEntry[];
+  socials?: SocialEntry[];
+  source?: "voice_extract" | "manual";
+}): Promise<void> {
+  const { supabase, userId, personId } = args;
+  const source = args.source ?? "voice_extract";
+  const inserts: Record<string, unknown>[] = [];
+
+  for (const p of args.phones ?? []) {
+    if (!p?.value) continue;
+    inserts.push({
+      user_id: userId,
+      person_id: personId,
+      channel: "phone",
+      subtype: p.label || null,
+      value: p.value,
+      source,
+    });
+  }
+  for (const e of args.emails ?? []) {
+    if (!e?.value) continue;
+    inserts.push({
+      user_id: userId,
+      person_id: personId,
+      channel: "email",
+      subtype: e.label || null,
+      value: e.value,
+      source,
+    });
+  }
+  for (const s of args.socials ?? []) {
+    if (!s?.handle_or_url) continue;
+    inserts.push({
+      user_id: userId,
+      person_id: personId,
+      channel: socialPlatformToChannel(s.platform),
+      value: s.handle_or_url,
+      source,
+    });
+  }
+  if (inserts.length === 0) return;
+  const { error } = await supabase.from("person_contacts").insert(inserts);
+  if (error) {
+    console.error("[commit] syncContactsToV3 failed", error.message);
+  }
+}
+
+// V3 (0030) — Beziehungs-Label aus dem Voice-Free-Text auf den
+// strukturierten relationship_type-Enum mappen.
+function labelToRelationshipType(label: string): string {
+  const l = label.toLowerCase().trim();
+  if (l === "ehepartner:in" || l === "ehepartner") return "spouse";
+  if (l === "partner:in" || l === "partner") return "partner";
+  if (l === "mutter" || l === "vater" || l === "elternteil") return "parent";
+  if (l === "sohn" || l === "tochter" || l === "kind") return "child";
+  if (l === "bruder" || l === "schwester" || l === "geschwister")
+    return "sibling";
+  if (l === "freund:in" || l === "freund" || l === "freundin") return "friend";
+  if (l === "kolleg:in" || l === "kollege" || l === "kollegin")
+    return "colleague";
+  if (l === "mentor:in" || l === "mentor") return "mentor";
+  if (l === "mentee") return "mentee";
+  if (l === "co-founder" || l === "co_founder" || l === "mitgründer:in")
+    return "co_founder";
+  if (l.includes("vorgesetzt")) return "former_manager";
+  if (l === "investor:in" || l === "investor") return "investor";
+  if (l === "advisor") return "advisor";
+  if (l.includes("vermittelt") || l.includes("intro")) return "introduced_by";
+  if (l === "familie") return "family";
+  return "custom";
+}
+
+async function syncRelationshipsToV3(args: {
+  supabase: V3SyncSupabase;
+  userId: string;
+  edges: { from: string; to: string; label: string }[];
+}): Promise<void> {
+  if (args.edges.length === 0) return;
+  const rows = args.edges
+    .filter((e) => e.from !== e.to)
+    .map((e) => ({
+      user_id: args.userId,
+      person_id: e.from,
+      related_person_id: e.to,
+      relationship_type: labelToRelationshipType(e.label),
+      label: e.label,
+      created_by: "user",
+    }));
+  if (rows.length === 0) return;
+  // upsert würden wir mit on-conflict-do-nothing wollen, supabase-js
+  // exposed das nicht direkt — Bulk-Insert ignoriert Unique-Verletzungen
+  // nicht, also pro Row einzeln einfügen und 23505 schlucken.
+  for (const row of rows) {
+    const { error } = await args.supabase
+      .from("person_relationships")
+      .insert(row);
+    if (error && !error.message.includes("duplicate key")) {
+      console.error("[commit] syncRelationshipsToV3 row failed", error.message);
+    }
+  }
+}
+
+async function syncAddressesToV3(args: {
+  supabase: V3SyncSupabase;
+  userId: string;
+  personId: string;
+  addresses?: AddressEntry[];
+}): Promise<void> {
+  const { supabase, userId, personId } = args;
+  const inserts: Record<string, unknown>[] = [];
+  for (const a of args.addresses ?? []) {
+    const hasAny =
+      a?.street || a?.city || a?.postal_code || a?.country;
+    if (!hasAny) continue;
+    const display =
+      [a.street, a.city, a.country].filter(Boolean).join(", ") ||
+      a.label ||
+      "Adresse";
+    inserts.push({
+      user_id: userId,
+      person_id: personId,
+      geo_type: "custom",
+      custom_label: a.label || null,
+      is_active: true,
+      display_name: display,
+      street: a.street || null,
+      postal_code: a.postal_code || null,
+      city: a.city || null,
+      country: a.country || null,
+    });
+  }
+  if (inserts.length === 0) return;
+  const { error } = await supabase.from("person_geographies").insert(inserts);
+  if (error) {
+    console.error("[commit] syncAddressesToV3 failed", error.message);
+  }
+}
 
 interface CommitRequest {
   toolCalls: ToolCall[];
@@ -78,6 +257,8 @@ export async function POST(request: Request) {
 
     const phones = parsePhones(input.phones);
     const emails = parseEmails(input.emails);
+    const socials = parseSocials(input.socials);
+    const addresses = parseAddresses(input.addresses);
 
     // Auto-link / auto-create organization wenn der Voice-Extract eine
     // Firma mitliefert. Macht den Voice-Pfad konsistent mit dem
@@ -98,18 +279,16 @@ export async function POST(request: Request) {
         company: companyText,
         organization_id,
         role: stringOrNull(input.role),
-        scope: scopeOr(input.scope, "both"),
-        tags: stringArray(input.tags),
         notes: stringOrNull(input.notes),
+        // Goldfeld + Met-Kontext aus Voice-Extraction.
+        how_we_met: stringOrNull(input.how_we_met),
+        met_date: stringOrNull(input.met_date),
+        met_location: stringOrNull(input.met_location),
         phones,
         emails,
-        addresses: parseAddresses(input.addresses),
-        socials: parseSocials(input.socials),
+        addresses,
+        socials,
         important_dates: parseImportantDates(input.important_dates),
-        // Mirror primary phone/email so legacy code paths still work.
-        phone: phones[0]?.value ?? null,
-        email: emails[0]?.value ?? null,
-        birthday: findBirthday(input.important_dates),
       })
       .select("id, name")
       .single();
@@ -122,6 +301,22 @@ export async function POST(request: Request) {
     }
     newByName.set(name.toLowerCase(), data.id);
     commits.people += 1;
+
+    // V3-Sync (0030): strukturierte Tabellen parallel füttern.
+    await syncContactsToV3({
+      supabase: supabase as unknown as V3SyncSupabase,
+      userId: user.id,
+      personId: data.id,
+      phones,
+      emails,
+      socials,
+    });
+    await syncAddressesToV3({
+      supabase: supabase as unknown as V3SyncSupabase,
+      userId: user.id,
+      personId: data.id,
+      addresses,
+    });
 
     // Stash any relationships for Pass 1.7. We can't resolve them yet
     // because related_person_name might point at a person not-yet-
@@ -182,6 +377,12 @@ export async function POST(request: Request) {
       update.scope = scopeOr(input.scope, "both");
     if (typeof input.notes === "string")
       update.notes = stringOrNull(input.notes);
+    if (typeof input.how_we_met === "string")
+      update.how_we_met = stringOrNull(input.how_we_met);
+    if (typeof input.met_date === "string")
+      update.met_date = stringOrNull(input.met_date);
+    if (typeof input.met_location === "string")
+      update.met_location = stringOrNull(input.met_location);
 
     const addTags = stringArray(input.add_tags);
     if (addTags.length) {
@@ -244,6 +445,29 @@ export async function POST(request: Request) {
       );
     }
     commits.people += 1;
+
+    // V3-Sync (0030): die ADD-Tranchen parallel in die strukturierten
+    // Tabellen schreiben. Existierende Werte (was schon auf der Person
+    // war) wurden in 0030 Migration einmalig backfilled — wir würden
+    // sonst doppelt einlegen.
+    if (addPhones.length || addEmails.length || addSocials.length) {
+      await syncContactsToV3({
+        supabase: supabase as unknown as V3SyncSupabase,
+        userId: user.id,
+        personId: id,
+        phones: addPhones,
+        emails: addEmails,
+        socials: addSocials,
+      });
+    }
+    if (addAddresses.length) {
+      await syncAddressesToV3({
+        supabase: supabase as unknown as V3SyncSupabase,
+        userId: user.id,
+        personId: id,
+        addresses: addAddresses,
+      });
+    }
   }
 
   // Pass 1.7: relationships. Resolve every related_person_name against
@@ -281,6 +505,16 @@ export async function POST(request: Request) {
       console.error("relationship apply failed", err);
       // Fall through — relationships failing shouldn't kill the whole
       // commit; the rest of the data is already in.
+    }
+    // V3-Sync (0030): zusätzlich in person_relationships schreiben.
+    try {
+      await syncRelationshipsToV3({
+        supabase: supabase as unknown as V3SyncSupabase,
+        userId: user.id,
+        edges: allEdges,
+      });
+    } catch (err) {
+      console.error("v3 relationship sync failed", err);
     }
   }
 
@@ -337,18 +571,18 @@ export async function POST(request: Request) {
       }
       commits.interactions += 1;
 
-      // Bump last_interaction_at on the involved people. Filter by
+      // Bump last_contact_at on the involved people. Filter by
       // user_id and deleted_at so a forged or tombstoned id can't be
       // touched, even if RLS weren't there.
       if (personIds.length) {
         const { error: bumpError } = await supabase
           .from("people")
-          .update({ last_interaction_at: new Date().toISOString() })
+          .update({ last_contact_at: new Date().toISOString() })
           .in("id", personIds)
           .eq("user_id", user.id)
           .is("deleted_at", null);
         if (bumpError) {
-          console.error("last_interaction_at bump failed", bumpError);
+          console.error("last_contact_at bump failed", bumpError);
         }
       }
       continue;

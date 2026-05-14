@@ -191,25 +191,37 @@ export function DateList({
   );
 }
 
+// V3 (0030): liest jetzt aus person_relationships statt JSONB-Array.
+// label-Spalte aus der Tabelle bevorzugt; sonst Mapping aus
+// relationship_type-Enum via RELATIONSHIP_TYPE_LABELS.
+import {
+  RELATIONSHIP_TYPE_LABELS,
+  type PersonRelationship,
+} from "@/lib/types";
+
 export function RelationshipList({
   relationships,
   peopleMap,
 }: {
-  relationships: RelationshipEntry[];
+  relationships: PersonRelationship[];
   peopleMap: Record<string, string>;
 }) {
   if (relationships.length === 0)
     return <p className="text-xs italic text-ink-4">Keine Beziehungen.</p>;
   return (
     <ul className="space-y-2">
-      {relationships.map((r, i) => {
+      {relationships.map((r) => {
         const name = peopleMap[r.related_person_id];
+        const displayLabel =
+          r.label && r.label.trim()
+            ? r.label
+            : RELATIONSHIP_TYPE_LABELS[r.relationship_type];
         return (
           <li
-            key={i}
+            key={r.id}
             className="flex items-baseline justify-between gap-4 text-sm"
           >
-            <span className="t-label w-28 shrink-0">{r.label}</span>
+            <span className="t-label w-28 shrink-0">{displayLabel}</span>
             {name ? (
               <Link
                 href={`/people/${r.related_person_id}`}

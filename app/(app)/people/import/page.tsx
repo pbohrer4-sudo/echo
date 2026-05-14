@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ImportRunner } from "./import-runner";
+import { APP_CONFIG } from "@/lib/config";
 
 export const metadata = {
   title: "Kontakte importieren",
@@ -16,7 +17,7 @@ export default function ImportPage() {
           </h1>
           <p className="max-w-2xl text-sm text-ink-3">
             Lade eine .vcf-Datei aus deinen iPhone- oder Mac-Kontakten hoch.
-            Echo erkennt Duplikate, vergibt Organisationen automatisch und
+            {APP_CONFIG.PUBLIC_NAME} erkennt Duplikate, vergibt Organisationen automatisch und
             legt Telefonnummern, Mails, Adressen und Geburtstage gleich
             mit an.
           </p>

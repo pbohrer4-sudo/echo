@@ -1,8 +1,18 @@
 import { notFound } from "next/navigation";
-import { getPersonById, listAllTags, listPeople } from "@/lib/people";
-import { listOrganizations } from "@/lib/organizations";
-import { updatePerson } from "../../actions";
-import { PersonForm } from "../../person-form";
+import { getPersonById } from "@/lib/people";
+import { listTagsWithNotesForPerson } from "@/lib/tags";
+import { listPassionsForPerson } from "@/lib/passions";
+import {
+  listAllCircles,
+  listCirclesForPerson,
+} from "@/lib/circles";
+import { listContactsForPerson } from "@/lib/person-contacts";
+import { EditPersonForm } from "./edit-form";
+
+// Edit-Page mit allen scalar + Cluster-Feldern. Multi-Row-Sachen
+// (phones/emails/relationships/reminders/todos/multiple-Geographies/
+// multiple important_dates beyond Birthday) bleiben den Inline-Buttons
+// auf der Detail-Seite vorbehalten — sonst wird die Form unhandlich.
 
 export default async function EditPersonPage({
   params,
@@ -14,37 +24,39 @@ export default async function EditPersonPage({
   const { id } = await params;
   const { error } = await searchParams;
 
-  const [person, allPeople, existingTags, orgs] = await Promise.all([
-    getPersonById(id),
-    listPeople(),
-    listAllTags(),
-    listOrganizations(),
-  ]);
+  const [person, tags, passions, personCircles, allCircles, contacts] =
+    await Promise.all([
+      getPersonById(id),
+      listTagsWithNotesForPerson(id),
+      listPassionsForPerson(id),
+      listCirclesForPerson(id),
+      listAllCircles(),
+      listContactsForPerson(id),
+    ]);
   if (!person) notFound();
-
-  const peopleOptions = allPeople
-    .filter((p) => p.id !== id)
-    .map((p) => ({ id: p.id, name: p.name }));
-  const existingOrgs = orgs.map((o) => o.name);
-
-  const action = updatePerson.bind(null, id);
 
   return (
     <div className="px-8 py-10">
-      <div className="mx-auto max-w-2xl space-y-8">
+      <div className="mx-auto max-w-2xl space-y-6">
         <header className="space-y-2">
           <p className="t-label">Bearbeiten</p>
           <h1 className="text-3xl font-semibold tracking-tight text-ink-1">
             {person.name}
           </h1>
+          <p className="text-sm text-ink-3">
+            Alle Felder dieser Person editierbar. Beziehungen, Reminders,
+            Aufgaben, Life Events und mehrere Orte (Wohnsitz-Historie) pflegst
+            du via Inline-Buttons auf der Detail-Seite.
+          </p>
         </header>
-        <PersonForm
-          initial={person}
-          action={action}
-          cancelHref={`/people/${id}`}
-          peopleOptions={peopleOptions}
-          existingTags={existingTags}
-          existingOrgs={existingOrgs}
+
+        <EditPersonForm
+          person={person}
+          tags={tags}
+          passions={passions}
+          personCircles={personCircles}
+          allCircles={allCircles}
+          contacts={contacts}
           error={error ? decodeURIComponent(error) : undefined}
         />
       </div>
