@@ -19,9 +19,11 @@ import {
   listUpcomingBirthdays,
   listCadenceOverdue,
 } from "@/lib/today";
+import { listSignals } from "@/lib/signals";
 import { APP_CONFIG } from "@/lib/config";
 import { MODE_LABELS, PURPOSE_LABELS } from "@/lib/types";
 import type { Person } from "@/lib/types";
+import { SignalCard } from "./signal-card";
 
 export const metadata = {
   title: "Heute",
@@ -57,14 +59,21 @@ function dueLabel(iso: string | null): string {
 }
 
 export default async function HeutePage() {
-  const [pendingSuggestions, inboxAll, birthdays, reconnects, cadenceOverdue] =
-    await Promise.all([
-      listAllPending(5),
-      listInbox(),
-      listUpcomingBirthdays(7),
-      listReconnectPeople(5),
-      listCadenceOverdue(5),
-    ]);
+  const [
+    pendingSuggestions,
+    inboxAll,
+    birthdays,
+    reconnects,
+    cadenceOverdue,
+    signals,
+  ] = await Promise.all([
+    listAllPending(5),
+    listInbox(),
+    listUpcomingBirthdays(7),
+    listReconnectPeople(5),
+    listCadenceOverdue(5),
+    listSignals(),
+  ]);
 
   // Heute-relevante Reminders: Fälligkeit ≤ heute Ende.
   const todayEnd = new Date();
@@ -78,7 +87,8 @@ export default async function HeutePage() {
     remindersToday.length > 0 ||
     birthdays.length > 0 ||
     reconnects.length > 0 ||
-    cadenceOverdue.length > 0;
+    cadenceOverdue.length > 0 ||
+    signals.length > 0;
 
   const now = new Date();
   const greeting =
@@ -156,6 +166,26 @@ export default async function HeutePage() {
                         : `in ${b.daysAway} Tagen`
                   }
                 />
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {signals.length > 0 && (
+          <section className="space-y-3">
+            <SectionHead
+              title={`Signale · ${signals.length}`}
+              rightHref="/people?cluster=reminders"
+              rightLabel="Alle"
+            />
+            <p className="text-[11px] italic text-ink-4">
+              Wiederkehrende Anker pro Person — Geburtstage, Follow-ups,
+              Lebensereignisse. Klick „Erinnerung +" um daraus einen echten
+              Reminder zu machen.
+            </p>
+            <ul className="overflow-hidden rounded border border-rule bg-paper">
+              {signals.map((s) => (
+                <SignalCard key={s.tag_id + s.person_id} signal={s} />
               ))}
             </ul>
           </section>

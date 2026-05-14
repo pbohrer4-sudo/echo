@@ -169,7 +169,7 @@ function TagClusterRow({
 
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
         <span
           className="t-label inline-flex items-center gap-1.5"
           style={{ color: colors.fg }}
@@ -177,15 +177,6 @@ function TagClusterRow({
           {TAG_CLUSTER_LABELS[cluster]}
           <InfoTooltip text={TAG_CLUSTER_HINTS[cluster]} />
         </span>
-        {!adding && !disabled && (
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="text-xs text-ink-3 transition hover:text-ink-1"
-          >
-            + Tag
-          </button>
-        )}
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         {tags.length === 0 && !adding && (
@@ -218,6 +209,17 @@ function TagClusterRow({
             fg={colors.fg}
             pending={pending}
           />
+        )}
+        {!adding && !disabled && (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="inline-flex items-center rounded-full border border-dashed px-2 py-px text-[10px] leading-snug transition hover:border-solid"
+            style={{ borderColor: colors.fg, color: colors.fg }}
+            title={`${TAG_CLUSTER_LABELS[cluster]} hinzufügen`}
+          >
+            + Tag
+          </button>
         )}
       </div>
       {error && <p className="text-[10px] text-bad">{error}</p>}
