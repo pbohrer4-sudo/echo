@@ -406,6 +406,18 @@ export default async function PersonDetailPage({
           </section>
         )}
 
+        {showProfileBody && person.gift_idea && (
+          <section>
+            <div className="section-head">
+              <span className="t-label">Geschenk</span>
+              <span className="rule" />
+            </div>
+            <p className="text-sm leading-relaxed text-ink-1">
+              {person.gift_idea}
+            </p>
+          </section>
+        )}
+
         {showProfileBody && person.cadence_days && (
           <section>
             <div className="section-head">

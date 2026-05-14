@@ -386,6 +386,9 @@ export interface Person {
   important_dates: ImportantDate[];
   relationships: RelationshipEntry[];
   notes: string | null;
+  // Freitext-Vorschlag was man dieser Person schenken würde. Optional,
+  // 1-Wort bis 1-Satz. UI-Label: "Geschenk".
+  gift_idea: string | null;
   is_self: boolean;
   // Goldfeld + Met-Kontext (Briefing 5.1).
   how_we_met: string | null;

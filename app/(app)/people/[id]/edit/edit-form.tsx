@@ -111,6 +111,7 @@ export function EditPersonForm({
   const [photoUrl, setPhotoUrl] = useState(person.photo_url ?? "");
   const [linkedinUrl, setLinkedinUrl] = useState(person.linkedin_url ?? "");
   const [howWeMet, setHowWeMet] = useState(person.how_we_met ?? "");
+  const [giftIdea, setGiftIdea] = useState(person.gift_idea ?? "");
   const [metDate, setMetDate] = useState(person.met_date ?? "");
   const [purpose, setPurpose] = useState<Purpose | "">(person.purpose ?? "");
   const [depth, setDepth] = useState<Depth | "auto">(
@@ -446,6 +447,18 @@ export function EditPersonForm({
             value={howWeMet}
             onChange={(e) => setHowWeMet(e.target.value)}
             className="w-full rounded border border-rule bg-paper px-3 py-2 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20"
+          />
+        </Field>
+
+        {/* — Geschenk: was man dieser Person zum nächsten Anlass schenken könnte. */}
+        <Field label="Geschenk">
+          <input
+            type="text"
+            name="gift_idea"
+            value={giftIdea}
+            onChange={(e) => setGiftIdea(e.target.value)}
+            placeholder="z. B. Whisky, Pflanze, Buch über …"
+            className={inputClass}
           />
         </Field>
 

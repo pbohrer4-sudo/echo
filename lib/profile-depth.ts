@@ -1,10 +1,10 @@
 import type { Person } from "@/lib/types";
 
-// 12 fields beyond the required `name`. Each non-empty value counts as
+// 13 fields beyond the required `name`. Each non-empty value counts as
 // one notch toward "complete". Used in person detail header to give
 // soft progress feedback — not a quality score, just a completeness
 // signal.
-const FIELDS = 12;
+const FIELDS = 13;
 
 export function getProfileDepth(person: Person): {
   filled: number;
@@ -24,5 +24,6 @@ export function getProfileDepth(person: Person): {
   if (person.cadence_days != null) filled += 1;
   if (person.photo_url) filled += 1;
   if (person.how_we_met) filled += 1;
+  if (person.gift_idea) filled += 1;
   return { filled, total: FIELDS, percent: Math.round((filled / FIELDS) * 100) };
 }
