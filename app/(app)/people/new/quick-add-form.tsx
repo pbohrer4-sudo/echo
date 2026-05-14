@@ -119,6 +119,9 @@ export function QuickAddForm({
       notes: fields.notes ?? prev.notes,
       birthday: fields.birthday ?? prev.birthday,
       current_location: fields.current_location ?? prev.current_location,
+      how_we_met: fields.how_we_met ?? prev.how_we_met,
+      met_date: fields.met_date ?? prev.met_date,
+      met_location: fields.met_location ?? prev.met_location,
     }));
     // Voice-extracted tags → default-Cluster „interests". Dedupe gegen
     // bestehenden Cluster-State.

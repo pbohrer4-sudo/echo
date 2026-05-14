@@ -144,12 +144,31 @@ export function EditPersonForm({
     person.important_dates ?? [],
   );
 
+  const [voiceHint, setVoiceHint] = useState<string | null>(null);
+
   function applyVoice(fields: VoiceExtractedFields) {
     if (fields.name) setName(fields.name);
     if (fields.company) setCompany(fields.company);
     if (fields.role) setRole(fields.role);
     if (fields.linkedin_url) setLinkedinUrl(fields.linkedin_url);
     if (fields.notes) setNotes(fields.notes);
+    if (fields.how_we_met) setHowWeMet(fields.how_we_met);
+    if (fields.met_date) setMetDate(fields.met_date);
+
+    // Hint zusammenbauen aus detected-extras die nicht direkt im
+    // Edit-Form gepflegt werden (Beziehungen, neu angelegte Personen).
+    const hints: string[] = [];
+    if (fields.detected_relationships?.length) {
+      const rels = fields.detected_relationships
+        .map((r) => `${r.label} → ${r.name}`)
+        .join(", ");
+      hints.push(`Beziehung erkannt: ${rels}. Auf Detail-Seite via +Beziehung anlegen.`);
+    }
+    if (fields.detected_new_people?.length) {
+      const names = fields.detected_new_people.join(", ");
+      hints.push(`Neue Person(en) im Kontext: ${names}. Separat anlegen.`);
+    }
+    setVoiceHint(hints.length > 0 ? hints.join(" · ") : null);
     // Voice-Phone/Email/LinkedIn an Contact-Liste anhängen wenn noch nicht da.
     const additions: ContactDraft[] = [];
     if (fields.phone) {
@@ -248,6 +267,11 @@ export function EditPersonForm({
   return (
     <div className="space-y-6">
       <VoiceCapture onApply={applyVoice} />
+      {voiceHint && (
+        <p className="rounded border border-action/30 bg-action-soft px-3 py-2 text-[11px] text-action">
+          {voiceHint}
+        </p>
+      )}
 
       <form action={action} className="space-y-6">
         <Field label="Name" required>
