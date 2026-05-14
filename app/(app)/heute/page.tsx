@@ -21,6 +21,7 @@ import {
 } from "@/lib/today";
 import { listSignals } from "@/lib/signals";
 import { APP_CONFIG } from "@/lib/config";
+import { getT } from "@/lib/i18n/server";
 import { MODE_LABELS, PURPOSE_LABELS } from "@/lib/types";
 import type { Person } from "@/lib/types";
 import { SignalCard } from "./signal-card";
@@ -59,6 +60,7 @@ function dueLabel(iso: string | null): string {
 }
 
 export default async function HeutePage() {
+  const { t } = await getT();
   const [
     pendingSuggestions,
     inboxAll,
@@ -93,23 +95,23 @@ export default async function HeutePage() {
   const now = new Date();
   const greeting =
     now.getHours() < 11
-      ? "Guten Morgen"
+      ? t("today.greeting_morning")
       : now.getHours() < 18
-        ? "Guten Tag"
-        : "Guten Abend";
+        ? t("today.greeting_day")
+        : t("today.greeting_evening");
 
   return (
     <div className="px-6 py-10 sm:px-8">
       <div className="mx-auto max-w-2xl space-y-8">
         <header className="space-y-2">
-          <p className="t-label">Heute</p>
+          <p className="t-label">{t("nav.heute")}</p>
           <h1 className="text-3xl font-semibold tracking-tight text-ink-1">
             {greeting}
           </h1>
           <p className="text-sm text-ink-3">
             {hasAnything
-              ? "Das hier braucht heute deine Aufmerksamkeit."
-              : `Nichts dringend. ${APP_CONFIG.PUBLIC_NAME} hält die Augen offen.`}
+              ? t("today.has_attention")
+              : `${t("today.empty")} ${APP_CONFIG.PUBLIC_NAME}.`}
           </p>
         </header>
 

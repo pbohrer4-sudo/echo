@@ -110,11 +110,11 @@ const COLUMNS: ColumnDef[] = [
   { key: "current_location", label: "Stadt", default: false, gridCol: "120px" },
   { key: "met_location", label: "Wo getroffen", default: false, gridCol: "140px" },
   { key: "reminders", label: "Signale", default: false, gridCol: "minmax(200px,1.4fr)" },
-  { key: "interests", label: "Interessen", default: false, gridCol: "minmax(200px,1.4fr)" },
-  { key: "potential", label: "Potenzial", default: false, gridCol: "minmax(200px,1.4fr)" },
-  { key: "origin", label: "Herkunft", default: false, gridCol: "minmax(180px,1.2fr)" },
-  { key: "passions", label: "Leidenschaften", default: false, gridCol: "minmax(180px,1.2fr)" },
-  { key: "circles", label: "Kreise", default: false, gridCol: "minmax(180px,1.2fr)" },
+  { key: "interests", label: "Interests", default: false, gridCol: "minmax(200px,1.4fr)" },
+  { key: "potential", label: "Potential", default: false, gridCol: "minmax(200px,1.4fr)" },
+  { key: "origin", label: "Origin", default: false, gridCol: "minmax(180px,1.2fr)" },
+  { key: "passions", label: "Passions", default: false, gridCol: "minmax(180px,1.2fr)" },
+  { key: "circles", label: "Circles", default: false, gridCol: "minmax(180px,1.2fr)" },
   { key: "actions", label: "Aktionen", always: true, default: true, gridCol: "auto", align: "right", pinned: "end" },
 ];
 
@@ -513,7 +513,7 @@ export function PeopleTable({
 
         {passions.length > 0 && (
           <FilterSelect
-            label="Leidenschaft"
+            label="Passion"
             value={passionFilter}
             onChange={setPassionFilter}
             options={[
@@ -525,7 +525,7 @@ export function PeopleTable({
 
         {circles.length > 0 && (
           <FilterSelect
-            label="Kreis"
+            label="Circle"
             value={circleFilter}
             onChange={setCircleFilter}
             options={[

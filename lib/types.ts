@@ -738,11 +738,13 @@ export const TAG_CLUSTER_COLORS: Record<TagCluster, { bg: string; fg: string }> 
   origin:    { bg: "#EEEDFE", fg: "#3C3489" }, // Purple — Beziehungs-Herkunft
 };
 
+// V3-Anker-Begriffe — bewusst in allen Sprachen Englisch belassen
+// damit die Cluster-Identität konstant bleibt (wie Tags, Status, etc.).
 export const TAG_CLUSTER_LABELS: Record<TagCluster, string> = {
-  reminders: "Signale",
-  interests: "Interessen",
-  potential: "Potenzial",
-  origin: "Herkunft",
+  reminders: "Signals",
+  interests: "Interests",
+  potential: "Potential",
+  origin: "Origin",
 };
 
 // Beschreibungen für Info-Tooltips an Cluster-Section-Headern (V3-Stil).

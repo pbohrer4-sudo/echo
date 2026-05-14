@@ -4,6 +4,7 @@ import { listAllCircles } from "@/lib/circles";
 import { PeopleTable } from "./people-table";
 import { DuplicateBanner } from "@/components/duplicate-banner";
 import { parseFilterFromParams } from "@/lib/people-filter";
+import { getT } from "@/lib/i18n/server";
 
 export default async function PeoplePage({
   searchParams,
@@ -12,6 +13,7 @@ export default async function PeoplePage({
 }) {
   const params = await searchParams;
   const initialFilter = parseFilterFromParams(params);
+  const { t } = await getT();
 
   const [contextRows, dupes, circles] = await Promise.all([
     listPeopleWithContext(),
@@ -84,10 +86,10 @@ export default async function PeoplePage({
         <header className="space-y-2">
           <p className="t-label">Personal CRM</p>
           <h1 className="text-3xl font-semibold tracking-tight text-ink-1">
-            Personen
+            {t("people.title")}
           </h1>
           <p className="max-w-xl text-sm text-ink-3">
-            Beruflich und privat. Sortier-, filter- und durchsuchbar.
+            {t("people.subtitle")}
           </p>
         </header>
         <DuplicateBanner

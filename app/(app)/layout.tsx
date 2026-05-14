@@ -12,6 +12,8 @@ import { NavLink } from "./nav-link";
 import { NotificationManager } from "@/components/notification-manager";
 import { SearchModal } from "@/components/search-modal";
 import { SearchTrigger } from "@/components/search-trigger";
+import { getT } from "@/lib/i18n/server";
+import { LocaleProvider } from "@/lib/i18n/provider";
 
 function initials(name: string): string {
   return name
@@ -48,8 +50,10 @@ export default async function AppLayout({
   const self = await getOrCreateSelfPerson();
   const showAdmin = isAdminEmail(user.email);
   const overdueReminders = await countOverdueReminders();
+  const { t, locale } = await getT();
 
   return (
+    <LocaleProvider locale={locale}>
     <div className="flex h-screen">
       <aside className="sticky top-0 flex h-screen w-56 shrink-0 flex-col overflow-y-auto border-r border-rule bg-paper px-5 py-6">
         <div className="space-y-8">
@@ -61,25 +65,25 @@ export default async function AppLayout({
           </Link>
           <SearchTrigger />
           <nav className="flex flex-col gap-1 text-sm">
-            <NavLink href="/heute">Heute</NavLink>
-            <NavLink href="/">Voice</NavLink>
-            <NavLink href="/debrief">Wecker</NavLink>
-            <NavLink href="/people">Personen</NavLink>
-            <NavLink href="/organizations">Organisationen</NavLink>
+            <NavLink href="/heute">{t("nav.heute")}</NavLink>
+            <NavLink href="/">{t("nav.voice")}</NavLink>
+            <NavLink href="/debrief">{t("nav.wecker")}</NavLink>
+            <NavLink href="/people">{t("nav.people")}</NavLink>
+            <NavLink href="/organizations">{t("nav.organizations")}</NavLink>
             {/* Pipelines hidden per Discovery Decision Q1 (refactor/3-axis-model).
                 Code + Tabellen bleiben — Route ist via app/pipelines/page.tsx
                 manuell aufrufbar wenn Patrick rein will. */}
             <NavLink href="/inbox" badge={overdueReminders}>
-              Reminders
+              {t("nav.reminders")}
             </NavLink>
-            <NavLink href="/rhythmus">Rhythmus</NavLink>
-            <NavLink href="/lifeline">Lifeline</NavLink>
-            <NavLink href="/pulse">Sonntags-Puls</NavLink>
-            <NavLink href="/recap">Rückblick</NavLink>
-            <NavLink href="/integrations">Voice Vibe Integrations</NavLink>
-            <NavLink href="/connections">Verbindungen</NavLink>
-            <NavLink href="/integrations/workflows">Workflows</NavLink>
-            <NavLink href="/models">Modelle</NavLink>
+            <NavLink href="/rhythmus">{t("nav.rhythm")}</NavLink>
+            <NavLink href="/lifeline">{t("nav.lifeline")}</NavLink>
+            <NavLink href="/pulse">{t("nav.pulse")}</NavLink>
+            <NavLink href="/recap">{t("nav.recap")}</NavLink>
+            <NavLink href="/integrations">{t("nav.integrations")}</NavLink>
+            <NavLink href="/connections">{t("nav.connections")}</NavLink>
+            <NavLink href="/integrations/workflows">{t("nav.workflows")}</NavLink>
+            <NavLink href="/models">{t("nav.models")}</NavLink>
             {showAdmin && (
               <>
                 <span className="mt-3 px-3 font-mono text-[9px] uppercase tracking-[0.12em] text-ink-4">
@@ -135,5 +139,6 @@ export default async function AppLayout({
       <NotificationManager />
       <SearchModal />
     </div>
+    </LocaleProvider>
   );
 }

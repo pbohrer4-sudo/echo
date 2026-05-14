@@ -280,7 +280,7 @@ function PassionsBlock({
     <section className="space-y-3">
       <div className="section-head">
         <span className="t-label inline-flex items-center gap-1.5">
-          Leidenschaften ({passions.length}/5)
+          Passions ({passions.length}/5)
           <InfoTooltip text={PASSION_HINT} />
         </span>
         <span className="rule" />
@@ -397,7 +397,7 @@ function CirclesBlock({
     <section className="space-y-3">
       <div className="section-head">
         <span className="t-label inline-flex items-center gap-1.5">
-          Kreise
+          Circles
           <InfoTooltip text={CIRCLE_HINT} />
         </span>
         <span className="rule" />
