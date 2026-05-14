@@ -306,7 +306,9 @@ export default async function PersonDetailPage({
           </div>
         )}
 
-        {!person.is_self && <ActionBar contacts={contacts} />}
+        {!person.is_self && (
+          <ActionBar personId={person.id} contacts={contacts} />
+        )}
 
         {!person.is_self && <SuggestionStack personId={person.id} />}
 
