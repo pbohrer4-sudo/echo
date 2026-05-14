@@ -450,8 +450,8 @@ export function EditPersonForm({
           />
         </Field>
 
-        {/* — Geschenk: was man dieser Person zum nächsten Anlass schenken könnte. */}
-        <Field label="Geschenk">
+        {/* — Gifts: was man dieser Person zum nächsten Anlass schenken könnte. */}
+        <Field label="Gifts">
           <input
             type="text"
             name="gift_idea"

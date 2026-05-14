@@ -93,6 +93,94 @@ export async function addRelationshipAction(
   return { ok: true };
 }
 
+// ───────── Timeline-Events (interactions) ─────────
+// Manuell hinzugefügte Ereignisse landen in derselben interactions-
+// Tabelle wie Voice-/Debrief-Logs, source='manual' damit man später
+// filtern könnte. Bump auch last_contact_at — wer ein Event in die
+// Vergangenheit setzt sollte mit dem letzten Kontakt-Datum dort
+// landen.
+
+const INTERACTION_TYPES = ["meeting", "call", "email", "note", "voice"] as const;
+type InteractionTypeLiteral = (typeof INTERACTION_TYPES)[number];
+const SENTIMENTS = ["positive", "neutral", "tense"] as const;
+type SentimentLiteral = (typeof SENTIMENTS)[number];
+
+export async function addEventAction(formData: FormData): Promise<Result> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "unauth" };
+
+  const personId = String(formData.get("person_id") ?? "").trim();
+  const typeRaw = String(formData.get("type") ?? "meeting").trim();
+  const summary = String(formData.get("summary") ?? "").trim();
+  const occurredAtRaw = String(formData.get("occurred_at") ?? "").trim();
+  const sentimentRaw = String(formData.get("sentiment") ?? "").trim();
+  const topicsRaw = String(formData.get("topics") ?? "").trim();
+
+  if (!personId) return { ok: false, error: "person_id fehlt" };
+  if (!summary) return { ok: false, error: "Beschreibung fehlt" };
+
+  const type: InteractionTypeLiteral = (INTERACTION_TYPES as readonly string[]).includes(
+    typeRaw,
+  )
+    ? (typeRaw as InteractionTypeLiteral)
+    : "meeting";
+
+  const sentiment: SentimentLiteral | null = (SENTIMENTS as readonly string[]).includes(
+    sentimentRaw,
+  )
+    ? (sentimentRaw as SentimentLiteral)
+    : null;
+
+  // date-input → ISO mit 12:00 lokal damit das Datum stabil bleibt,
+  // egal in welcher Zeitzone der Server steht.
+  const occurredAt = /^\d{4}-\d{2}-\d{2}$/.test(occurredAtRaw)
+    ? new Date(`${occurredAtRaw}T12:00:00`).toISOString()
+    : new Date().toISOString();
+
+  const topics = topicsRaw
+    ? topicsRaw
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean)
+    : [];
+
+  const { error } = await supabase.from("interactions").insert({
+    user_id: user.id,
+    person_ids: [personId],
+    type,
+    source: "manual",
+    summary,
+    sentiment,
+    topics,
+    occurred_at: occurredAt,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  // last_contact_at synchron halten — sonst zeigt der Header
+  // veraltete Werte, wenn der User ein altes Treffen nachträgt.
+  const { data: existing } = await supabase
+    .from("people")
+    .select("last_contact_at")
+    .eq("id", personId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const existingLast = existing?.last_contact_at as string | null;
+  if (!existingLast || existingLast < occurredAt) {
+    await supabase
+      .from("people")
+      .update({ last_contact_at: occurredAt })
+      .eq("id", personId)
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
+  }
+
+  revalidatePath(`/people/${personId}`);
+  return { ok: true };
+}
+
 // ───────── Erinnerungen ─────────
 
 export async function addReminderAction(formData: FormData): Promise<Result> {

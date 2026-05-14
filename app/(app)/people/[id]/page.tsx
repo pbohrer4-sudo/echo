@@ -15,6 +15,7 @@ import { listRelationshipsForPerson } from "@/lib/person-relationships";
 import { GeographiesList } from "@/components/geographies-list";
 import {
   AddDateButton,
+  AddEventButton,
   AddGeographyButton,
   AddRelationshipButton,
   AddReminderButton,
@@ -409,7 +410,7 @@ export default async function PersonDetailPage({
         {showProfileBody && person.gift_idea && (
           <section>
             <div className="section-head">
-              <span className="t-label">Geschenk</span>
+              <span className="t-label">Gifts</span>
               <span className="rule" />
             </div>
             <p className="text-sm leading-relaxed text-ink-1">
@@ -457,6 +458,7 @@ export default async function PersonDetailPage({
             <div className="section-head">
               <span className="t-label">Timeline</span>
               <span className="rule" />
+              {!person.is_self && <AddEventButton personId={person.id} />}
             </div>
             <PersonTimeline interactions={interactions} notes={notes} />
           </section>

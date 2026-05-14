@@ -17,6 +17,7 @@ import {
 } from "@/lib/types";
 import { LocationAutocomplete } from "@/components/location-autocomplete";
 import {
+  addEventAction,
   addGeographyAction,
   addImportantDateAction,
   addRelationshipAction,
@@ -447,6 +448,124 @@ function AddTodoForm({
         onSubmit={submit}
         onCancel={onDone}
         disabled={!text.trim()}
+      />
+    </div>
+  );
+}
+
+// ───────── + Event (Timeline / interactions) ─────────
+
+export function AddEventButton({ personId }: { personId: string }) {
+  return (
+    <InlineAddShell label="Event">
+      {(close) => <AddEventForm personId={personId} onDone={close} />}
+    </InlineAddShell>
+  );
+}
+
+function AddEventForm({
+  personId,
+  onDone,
+}: {
+  personId: string;
+  onDone: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [type, setType] = useState("meeting");
+  const [summary, setSummary] = useState("");
+  // Default: heute. Der User trägt das Datum oft nachträglich ein,
+  // aber „heute" ist häufiger als „letzte Woche".
+  const [occurredAt, setOccurredAt] = useState(
+    new Date().toISOString().slice(0, 10),
+  );
+  const [sentiment, setSentiment] = useState("");
+  const [topics, setTopics] = useState("");
+
+  function submit() {
+    const fd = new FormData();
+    fd.set("person_id", personId);
+    fd.set("type", type);
+    fd.set("summary", summary);
+    fd.set("occurred_at", occurredAt);
+    if (sentiment) fd.set("sentiment", sentiment);
+    if (topics) fd.set("topics", topics);
+    startTransition(async () => {
+      const res = await addEventAction(fd);
+      if (!res.ok) setError(res.error ?? "Fehler");
+      else onDone();
+    });
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        <label className="space-y-1">
+          <Label>Art</Label>
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            className={inputClass}
+          >
+            <option value="meeting">Treffen</option>
+            <option value="call">Anruf</option>
+            <option value="email">Email</option>
+            <option value="note">Notiz</option>
+            <option value="voice">Sprachnotiz</option>
+          </select>
+        </label>
+        <label className="space-y-1">
+          <Label>Datum</Label>
+          <input
+            type="date"
+            value={occurredAt}
+            onChange={(e) => setOccurredAt(e.target.value)}
+            className={inputClass}
+          />
+        </label>
+      </div>
+      <label className="space-y-1 block">
+        <Label>Was ist passiert?</Label>
+        <textarea
+          value={summary}
+          onChange={(e) => setSummary(e.target.value)}
+          placeholder='z.B. "Treffen im Büro, Pitch besprochen"'
+          rows={2}
+          autoFocus
+          className={`${inputClass} h-auto py-1.5`}
+        />
+      </label>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="space-y-1">
+          <Label>Stimmung</Label>
+          <select
+            value={sentiment}
+            onChange={(e) => setSentiment(e.target.value)}
+            className={inputClass}
+          >
+            <option value="">—</option>
+            <option value="positive">Positiv</option>
+            <option value="neutral">Neutral</option>
+            <option value="tense">Angespannt</option>
+          </select>
+        </label>
+        <label className="space-y-1">
+          <Label>Themen (Komma-getrennt)</Label>
+          <input
+            type="text"
+            value={topics}
+            onChange={(e) => setTopics(e.target.value)}
+            placeholder="KI, Pitch"
+            className={inputClass}
+          />
+        </label>
+      </div>
+      <ErrorRow message={error} />
+      <SubmitRow
+        pending={pending}
+        onSubmit={submit}
+        onCancel={onDone}
+        disabled={!summary.trim()}
       />
     </div>
   );
