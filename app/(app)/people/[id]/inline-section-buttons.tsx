@@ -24,6 +24,7 @@ import {
   addRelationshipAction,
   addReminderAction,
   addTodoAction,
+  createMinimalPersonAction,
   removeGiftIdeaAction,
 } from "./inline-section-actions";
 
@@ -217,11 +218,59 @@ function AddRelationshipForm({
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [relatedId, setRelatedId] = useState("");
   const [type, setType] = useState<RelationshipType>("friend");
   const [labelText, setLabelText] = useState("");
 
+  // Combobox-State: query (was der User tippt) + relatedId (UUID der
+  // gewählten Person). Wenn der User noch nicht ausgewählt hat,
+  // bleibt relatedId leer, aber wir können trotzdem submitten falls
+  // query auf eine eindeutige Person matched.
+  const [query, setQuery] = useState("");
+  const [relatedId, setRelatedId] = useState("");
+  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  const candidates = candidatePeople.filter((p) => p.id !== personId);
+  const filtered = (() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return candidates.slice(0, 8);
+    return candidates
+      .filter((p) => p.name.toLowerCase().includes(q))
+      .slice(0, 8);
+  })();
+  const exactMatch = candidates.find(
+    (p) => p.name.toLowerCase() === query.trim().toLowerCase(),
+  );
+  const canCreate =
+    query.trim().length >= 2 && !exactMatch && !relatedId;
+
+  function selectPerson(p: PersonOption) {
+    setRelatedId(p.id);
+    setQuery(p.name);
+    setOpen(false);
+  }
+
+  async function createAndSelect() {
+    const name = query.trim();
+    if (!name) return;
+    setCreating(true);
+    const fd = new FormData();
+    fd.set("name", name);
+    const res = await createMinimalPersonAction(fd);
+    setCreating(false);
+    if (!res.ok || !res.id) {
+      setError(res.error ?? "Konnte Person nicht anlegen");
+      return;
+    }
+    setRelatedId(res.id);
+    setOpen(false);
+  }
+
   function submit() {
+    if (!relatedId) {
+      setError("Bitte Person auswählen oder neu anlegen");
+      return;
+    }
     const fd = new FormData();
     fd.set("person_id", personId);
     fd.set("related_person_id", relatedId);
@@ -234,25 +283,57 @@ function AddRelationshipForm({
     });
   }
 
-  const candidates = candidatePeople.filter((p) => p.id !== personId);
-
   return (
     <div className="space-y-2">
-      <label className="space-y-1 block">
+      <div className="space-y-1">
         <Label>Verbunden mit</Label>
-        <select
-          value={relatedId}
-          onChange={(e) => setRelatedId(e.target.value)}
-          className={inputClass}
-        >
-          <option value="">Person wählen…</option>
-          {candidates.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-      </label>
+        <div className="relative">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setRelatedId("");
+              setOpen(true);
+            }}
+            onFocus={() => setOpen(true)}
+            placeholder="Name suchen oder neu eintippen"
+            autoFocus
+            className={inputClass}
+          />
+          {open && (filtered.length > 0 || canCreate) && (
+            <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded border border-rule bg-paper shadow-[0_4px_14px_rgba(20,17,13,0.08)]">
+              {filtered.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => selectPerson(p)}
+                  className={`block w-full px-3 py-1.5 text-left text-xs transition hover:bg-paper-2 ${
+                    relatedId === p.id ? "bg-action-soft text-action" : "text-ink-1"
+                  }`}
+                >
+                  {p.name}
+                </button>
+              ))}
+              {canCreate && (
+                <button
+                  type="button"
+                  onClick={createAndSelect}
+                  disabled={creating}
+                  className="block w-full border-t border-rule-soft px-3 py-1.5 text-left text-xs text-action transition hover:bg-action-soft disabled:opacity-50"
+                >
+                  {creating ? "Lege an…" : `+ „${query.trim()}" als neue Person anlegen`}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+        {relatedId && (
+          <p className="text-[10px] text-ink-4">
+            ✓ ausgewählt — andere Felder ausfüllen + Anlegen
+          </p>
+        )}
+      </div>
       <label className="space-y-1 block">
         <Label>Typ</Label>
         <select

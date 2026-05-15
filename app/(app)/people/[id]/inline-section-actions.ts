@@ -69,6 +69,40 @@ export async function addImportantDateAction(
 
 // ───────── Beziehungen ─────────
 
+// Inline-Person anlegen aus der Beziehungs-Form: nur Name, sonst leer.
+// Wird vom Combobox-Picker getriggert wenn der getippte Name nicht
+// in der Kandidatenliste matched. Vermeidet, dass der User die
+// Seite wechseln muss um einen flüchtigen Kontakt anzulegen.
+export async function createMinimalPersonAction(
+  formData: FormData,
+): Promise<Result & { id?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "unauth" };
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { ok: false, error: "Name fehlt" };
+
+  const { data, error } = await supabase
+    .from("people")
+    .insert({
+      user_id: user.id,
+      name,
+      purpose: "personal",
+      // mode + depth_source haben DB-Defaults (active / auto), Rest
+      // bleibt NULL. Reicht für „flüchtig referenzierte Person".
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    return { ok: false, error: error?.message ?? "Insert fehlgeschlagen" };
+  }
+  revalidatePath("/people");
+  return { ok: true, id: (data as { id: string }).id };
+}
+
 export async function addRelationshipAction(
   formData: FormData,
 ): Promise<Result> {
