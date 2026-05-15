@@ -61,6 +61,43 @@ export async function addContactAction(
   return { ok: true };
 }
 
+// Update value (und optional subtype) eines bestehenden Kontakts.
+// Verwendet vom inline-Edit auf der ActionBar: Klick auf die
+// existierende Nummer → kleines Popover mit pre-filled value.
+export async function updateContactAction(
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "unauthenticated" };
+
+  const contactId = String(formData.get("contact_id") ?? "").trim();
+  const personId = String(formData.get("person_id") ?? "").trim();
+  const value = String(formData.get("value") ?? "").trim();
+  const subtypeRaw = String(formData.get("subtype") ?? "");
+  const subtype = subtypeRaw.trim() || null;
+
+  if (!contactId || !personId)
+    return { ok: false, error: "contact_id/person_id fehlt" };
+  if (!value) return { ok: false, error: "Wert fehlt" };
+
+  const update: Record<string, unknown> = { value };
+  // Nur überschreiben wenn der Caller subtype mitgibt — leerer
+  // String würde sonst einen existierenden Label-Subtyp killen.
+  if (subtypeRaw.length > 0) update.subtype = subtype;
+
+  const { error } = await supabase
+    .from("person_contacts")
+    .update(update)
+    .eq("id", contactId)
+    .eq("user_id", user.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/people/${personId}`);
+  return { ok: true };
+}
+
 export async function deleteContactAction(
   contactId: string,
   personId: string,
