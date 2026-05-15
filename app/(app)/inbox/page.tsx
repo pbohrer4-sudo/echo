@@ -2,6 +2,7 @@ import { listInbox, getPeopleMap, type InboxRow } from "@/lib/inbox";
 import { listUnreadWhatsapp } from "@/lib/whatsapp-inbox";
 import { InboxRowItem } from "./inbox-row";
 import { WhatsappInboxStrip } from "@/components/whatsapp-inbox-strip";
+import { AgendaCalendar, type DayMarker } from "./agenda-calendar";
 
 // Reminders gelten erst als „offen" wenn sie heute oder früher fällig
 // sind. Zukünftige Erinnerungen (Geburtstage in 4 Wochen, Hochzeitstag
@@ -85,6 +86,24 @@ export default async function InboxPage() {
   }
   const upcomingGroups = groupByDay(upcoming);
 
+  // Kalender-Marker: aggregiert beide Buckets damit der Kalender
+  // sowohl heute-fällige (rot) als auch anstehende (action-Farbe)
+  // Tage anzeigt. Items ohne due werden ignoriert.
+  const markerMap = new Map<string, DayMarker>();
+  for (const r of [...due, ...upcoming]) {
+    if (!r.due) continue;
+    const key = dateKey(r.due);
+    const existing = markerMap.get(key);
+    const isDue = r.due <= cutoff;
+    if (existing) {
+      existing.count += 1;
+      if (isDue) existing.due = true;
+    } else {
+      markerMap.set(key, { key, count: 1, due: isDue });
+    }
+  }
+  const markers = [...markerMap.values()];
+
   return (
     <div className="px-8 py-10">
       <div className="mx-auto max-w-3xl space-y-8">
@@ -100,6 +119,17 @@ export default async function InboxPage() {
         </header>
 
         <WhatsappInboxStrip rows={waRows} />
+
+        {/* — Kalender-Übersicht (current + next month) — */}
+        {markers.length > 0 && (
+          <section className="rounded border border-rule bg-paper px-4 py-4">
+            <AgendaCalendar markers={markers} />
+            <p className="mt-3 text-[10px] text-ink-4">
+              Rote Punkte = heute fällig oder überfällig · graue Punkte =
+              anstehend. Klick auf einen Tag scrollt zur Liste.
+            </p>
+          </section>
+        )}
 
         {/* — Heute & Überfällig — */}
         <section className="space-y-3">
@@ -137,7 +167,7 @@ export default async function InboxPage() {
             </div>
             <div className="space-y-5">
               {upcomingGroups.map((g) => (
-                <div key={g.day} className="space-y-2">
+                <div key={g.day} id={`day-${g.day}`} className="space-y-2 scroll-mt-20">
                   <p className="text-[11px] uppercase tracking-wider text-ink-4">
                     {formatDateHeading(g.day)}
                   </p>
