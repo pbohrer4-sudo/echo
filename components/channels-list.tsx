@@ -66,13 +66,37 @@ function buildHref(c: PersonContact): string | null {
   }
 }
 
+function prettySubtype(channel: ContactChannel, subtype: string): string {
+  // Phone-Subtypes lesbar machen — der Picker schreibt „mobile" /
+  // „landline", aber die Anzeige soll deutsch + in Klammern.
+  if (channel === "phone") {
+    const s = subtype.toLowerCase();
+    if (s.includes("mobil") || s.includes("iphone")) return "Mobilfunk";
+    if (s.includes("landline") || s.includes("festnetz")) return "Festnetz";
+    if (s.includes("work") || s.includes("arbeit") || s.includes("office"))
+      return "Arbeit";
+    if (s.includes("fax")) return "Fax";
+  }
+  if (channel === "email") {
+    const s = subtype.toLowerCase();
+    if (s.includes("work") || s.includes("arbeit") || s.includes("office"))
+      return "Arbeit";
+    if (s.includes("private") || s.includes("privat") || s === "persönlich")
+      return "Privat";
+  }
+  // Fallback: Subtype roh anzeigen, aber capitalized.
+  if (!subtype) return "";
+  return subtype.charAt(0).toUpperCase() + subtype.slice(1);
+}
+
 function buildChannels(contacts: PersonContact[]): ResolvedChannel[] {
   const out: ResolvedChannel[] = [];
   for (const c of contacts) {
     const href = buildHref(c);
     if (!href) continue;
     const baseLabel = CONTACT_CHANNEL_LABELS[c.channel] ?? c.channel;
-    const label = c.subtype ? `${baseLabel} · ${c.subtype}` : baseLabel;
+    const subPretty = c.subtype ? prettySubtype(c.channel, c.subtype) : "";
+    const label = subPretty ? `${baseLabel} (${subPretty})` : baseLabel;
     out.push({
       type: c.channel,
       label,

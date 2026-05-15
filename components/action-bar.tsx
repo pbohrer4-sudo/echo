@@ -38,26 +38,63 @@ function buildWaMeDigits(phone: PersonContact): string {
   return phone.value.replace(/[^\d]/g, "");
 }
 
-// Sinnvolle Channel-Auswahl im Quick-Add-Form. Beschränkt auf die
-// Action-Bar-relevanten + ein paar häufige — der vollständige Set
-// steckt in CONTACT_CHANNELS für die Voice-Pipeline.
-const QUICK_ADD_CHANNELS: ContactChannel[] = [
-  "phone",
-  "whatsapp",
-  "email",
-  "linkedin",
-  "telegram",
-  "signal",
-  "instagram",
-  "website",
+// Quick-Add-Optionen im Inline-Form. Phone splittet sich in Festnetz
+// und Mobilfunk auf (gleicher channel=phone, unterschiedlicher
+// subtype) — der Subtype steuert das Anzeige-Label in der
+// Kanäle-Liste UND die WhatsApp-Fallback-Logik (Mobil = automatisch
+// WhatsApp-Nummer).
+interface QuickAddOption {
+  id: string;
+  label: string;
+  channel: ContactChannel;
+  subtype: string | null;
+}
+const QUICK_ADD_OPTIONS: QuickAddOption[] = [
+  { id: "phone:mobile", label: "Telefon (Mobilfunk)", channel: "phone", subtype: "mobile" },
+  { id: "phone:landline", label: "Telefon (Festnetz)", channel: "phone", subtype: "landline" },
+  { id: "whatsapp", label: "WhatsApp", channel: "whatsapp", subtype: null },
+  { id: "email", label: CONTACT_CHANNEL_LABELS.email, channel: "email", subtype: null },
+  { id: "linkedin", label: CONTACT_CHANNEL_LABELS.linkedin, channel: "linkedin", subtype: null },
+  { id: "telegram", label: CONTACT_CHANNEL_LABELS.telegram, channel: "telegram", subtype: null },
+  { id: "signal", label: CONTACT_CHANNEL_LABELS.signal, channel: "signal", subtype: null },
+  { id: "instagram", label: CONTACT_CHANNEL_LABELS.instagram, channel: "instagram", subtype: null },
+  { id: "website", label: CONTACT_CHANNEL_LABELS.website, channel: "website", subtype: null },
 ];
+
+function optionForChannelSubtype(
+  channel: ContactChannel,
+  subtype: string | null,
+): QuickAddOption | undefined {
+  return QUICK_ADD_OPTIONS.find(
+    (o) => o.channel === channel && (o.subtype ?? null) === (subtype ?? null),
+  );
+}
+
+function findMobilePhone(contacts: PersonContact[]): PersonContact | null {
+  // Phone-Contacts mit subtype 'mobile' / 'iphone' / 'mobil' — auch
+  // legacy-Daten ohne strict-Enum (Voice-Extract liefert oft freie
+  // Strings wie „mobil").
+  const phones = contacts.filter((c) => c.channel === "phone");
+  const mobile = phones.find((c) => {
+    const s = c.subtype?.toLowerCase() ?? "";
+    return s.includes("mobil") || s.includes("iphone");
+  });
+  if (mobile) return mobile;
+  // Wenn kein expliziter Mobile-Subtype, gibt's keinen — der
+  // Caller fällt dann auf primary phone zurück.
+  return null;
+}
 
 export function ActionBar({ personId, contacts }: Props) {
   const phone =
     findPrimaryByChannel(contacts, "phone") ??
     findPrimaryByChannel(contacts, "whatsapp");
+  // WhatsApp-Auflösung: explicit WhatsApp-Contact > Mobile-Phone >
+  // beliebige Phone. So „läuft" WhatsApp automatisch auf der Mobil-
+  // nummer, ohne dass der User sie doppelt anlegen muss.
   const whatsapp =
     findPrimaryByChannel(contacts, "whatsapp") ??
+    findMobilePhone(contacts) ??
     findPrimaryByChannel(contacts, "phone");
 
   const phoneDigits = phone ? buildWaMeDigits(phone) : "";
@@ -66,26 +103,34 @@ export function ActionBar({ personId, contacts }: Props) {
   const hasUsableWa = whatsappDigits.length >= 7;
 
   const [addOpen, setAddOpen] = useState(false);
-  const [addChannel, setAddChannel] = useState<ContactChannel>("phone");
+  // Quick-Add nutzt jetzt die Option-ID (z.B. „phone:mobile") statt
+  // nur den Channel — sonst könnten wir Festnetz und Mobilfunk nicht
+  // im selben Dropdown unterscheiden.
+  const [addOptionId, setAddOptionId] = useState<string>(
+    QUICK_ADD_OPTIONS[0].id,
+  );
   const [addValue, setAddValue] = useState("");
-  // Edit-State: wenn gesetzt, wird das Quickadd-Form als Update auf
-  // den existing Contact gefahren statt eine neue Row anzulegen.
   const [editContactId, setEditContactId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const currentOption =
+    QUICK_ADD_OPTIONS.find((o) => o.id === addOptionId) ?? QUICK_ADD_OPTIONS[0];
+  const addChannel = currentOption.channel;
 
   function submit() {
     if (!addValue.trim()) return;
     const fd = new FormData();
     fd.set("person_id", personId);
     fd.set("value", addValue.trim());
+    if (currentOption.subtype) fd.set("subtype", currentOption.subtype);
     startTransition(async () => {
       let res: { ok: boolean; error?: string };
       if (editContactId) {
         fd.set("contact_id", editContactId);
         res = await updateContactAction(fd);
       } else {
-        fd.set("channel", addChannel);
+        fd.set("channel", currentOption.channel);
         res = await addContactAction(fd);
       }
       if (!res.ok) {
@@ -100,7 +145,13 @@ export function ActionBar({ personId, contacts }: Props) {
   }
 
   function quickAdd(channel: ContactChannel) {
-    setAddChannel(channel);
+    // Default-Option pro Channel suchen. Bei phone nehmen wir Mobilfunk
+    // als sinnvollen Standard (häufiger als Festnetz).
+    const defaultOption =
+      channel === "phone"
+        ? QUICK_ADD_OPTIONS.find((o) => o.id === "phone:mobile")
+        : QUICK_ADD_OPTIONS.find((o) => o.channel === channel);
+    setAddOptionId(defaultOption?.id ?? QUICK_ADD_OPTIONS[0].id);
     setAddValue("");
     setEditContactId(null);
     setAddOpen(true);
@@ -108,7 +159,11 @@ export function ActionBar({ personId, contacts }: Props) {
   }
 
   function quickEdit(contact: PersonContact) {
-    setAddChannel(contact.channel);
+    const match =
+      optionForChannelSubtype(contact.channel, contact.subtype) ??
+      QUICK_ADD_OPTIONS.find((o) => o.channel === contact.channel) ??
+      QUICK_ADD_OPTIONS[0];
+    setAddOptionId(match.id);
     setAddValue(contact.value);
     setEditContactId(contact.id);
     setAddOpen(true);
@@ -173,21 +228,19 @@ export function ActionBar({ personId, contacts }: Props) {
         <div className="flex flex-wrap items-end gap-2 rounded border border-rule bg-paper-2 p-3">
           {editContactId ? (
             <p className="basis-full text-[11px] text-ink-3">
-              {CONTACT_CHANNEL_LABELS[addChannel]} bearbeiten
+              {currentOption.label} bearbeiten
             </p>
           ) : (
             <label className="space-y-1">
               <span className="t-label">Channel</span>
               <select
-                value={addChannel}
-                onChange={(e) =>
-                  setAddChannel(e.target.value as ContactChannel)
-                }
+                value={addOptionId}
+                onChange={(e) => setAddOptionId(e.target.value)}
                 className="h-9 rounded border border-rule bg-paper px-2 text-xs text-ink-1 outline-none focus:border-action focus:ring-2 focus:ring-action/20"
               >
-                {QUICK_ADD_CHANNELS.map((c) => (
-                  <option key={c} value={c}>
-                    {CONTACT_CHANNEL_LABELS[c]}
+                {QUICK_ADD_OPTIONS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
                   </option>
                 ))}
               </select>
