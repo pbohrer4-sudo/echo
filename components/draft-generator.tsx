@@ -24,6 +24,7 @@ const USE_CASES: DraftUseCase[] = [
   "intro_thanks",
   "follow_up",
   "lebenszeichen",
+  "missing_data",
 ];
 
 interface Draft {

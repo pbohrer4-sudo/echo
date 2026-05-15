@@ -8,7 +8,8 @@ export type DraftUseCase =
   | "birthday"
   | "intro_thanks"
   | "follow_up"
-  | "lebenszeichen";
+  | "lebenszeichen"
+  | "missing_data";
 
 export const DRAFT_USE_CASE_LABELS: Record<DraftUseCase, string> = {
   reengage: "Reengage Freund",
@@ -17,6 +18,7 @@ export const DRAFT_USE_CASE_LABELS: Record<DraftUseCase, string> = {
   intro_thanks: "Danke für Intro",
   follow_up: "Follow-Up",
   lebenszeichen: "Lebenszeichen",
+  missing_data: "Fehlende Daten",
 };
 
 export const DRAFT_USE_CASE_DESCRIPTIONS: Record<DraftUseCase, string> = {
@@ -26,4 +28,5 @@ export const DRAFT_USE_CASE_DESCRIPTIONS: Record<DraftUseCase, string> = {
   intro_thanks: "Kurzer Dank nach einem Intro",
   follow_up: "Action-orientiertes Follow-Up nach Treffen",
   lebenszeichen: "Behutsames Lebenszeichen, kein konkretes Anliegen",
+  missing_data: "Proaktiv nach fehlenden Daten fragen (Adresse, Geburtstag …)",
 };

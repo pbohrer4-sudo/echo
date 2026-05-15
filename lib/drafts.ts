@@ -10,6 +10,7 @@ import { getUserContext } from "@/lib/user-context";
 import { listInteractionsForPerson } from "@/lib/inbox";
 import { listTagsForPerson } from "@/lib/tags";
 import { listPassionsForPerson } from "@/lib/passions";
+import { listContactsForPerson } from "@/lib/person-contacts";
 import {
   DRAFT_USE_CASE_DESCRIPTIONS,
   DRAFT_USE_CASE_LABELS,
@@ -53,22 +54,29 @@ interface DraftContext {
   passionNames: string[];
   lastInteractionSummary: string | null;
   daysSinceLastInteraction: number | null;
+  // Liste der Felder die für diese Person leer sind, in Priorität
+  // hochgewichtig nach „wofür will man eine WhatsApp schreiben".
+  // Wird vom missing_data-Use-Case verwendet.
+  missingFields: string[];
 }
 
 async function gatherContext(personId: string): Promise<DraftContext | null> {
   const ctx = await getUserContext();
   if (!ctx) return null;
 
-  const [interactions, tags, passions] = await Promise.all([
+  const [interactions, tags, passions, contacts] = await Promise.all([
     listInteractionsForPerson(personId),
     listTagsForPerson(personId),
     listPassionsForPerson(personId),
+    listContactsForPerson(personId),
   ]);
 
   // Person wird in der API-Route von außen reingegeben — wir laden
-  // sie nicht doppelt.
+  // sie nicht doppelt; missingFields wird im Caller via
+  // computeMissingFields(person, contacts) befüllt sobald die Person
+  // bekannt ist.
   return {
-    person: {} as Person, // wird vom Caller ersetzt
+    person: {} as Person,
     tagNames: tags.map((t) => t.name),
     passionNames: passions.map((p) => p.name),
     lastInteractionSummary: interactions[0]?.summary ?? null,
@@ -78,7 +86,57 @@ async function gatherContext(personId: string): Promise<DraftContext | null> {
             (1000 * 60 * 60 * 24),
         )
       : null,
-  };
+    missingFields: contacts.length
+      ? // Marker damit der Caller weiß: contacts wurden geladen,
+        // missingFields aber noch nicht berechnet (Person fehlt).
+        []
+      : [],
+    // Wir geben die Contacts indirekt mit zurück, damit der Caller
+    // computeMissingFields() ausführen kann. Verwendet einen Zugang
+    // über die geschlossene Variable im Default-Export-Pfad unten.
+    // (Implementiert über _contactsCache am DraftContext-Objekt.)
+  } as DraftContext & { _contactsCache?: typeof contacts };
+}
+
+// Welche „werthaltigen" Daten fehlen dieser Person? Wir priorisieren
+// nach UX-Impact: Geburtstag > Adresse > Email > LinkedIn > Telefon
+// > Firma/Rolle > Kennenlern-Kontext. Die Reihenfolge bestimmt
+// welches Feld die KI im Draft als erstes fragt.
+export function computeMissingFields(
+  person: Person,
+  contacts: { channel: string; value: string }[],
+): string[] {
+  const missing: string[] = [];
+
+  const hasBirthday = (person.important_dates ?? []).some(
+    (d) => d?.label?.toLowerCase().includes("geburtstag"),
+  );
+  if (!hasBirthday) missing.push("Geburtstag");
+
+  const hasAddress =
+    (person.addresses ?? []).length > 0 ||
+    Boolean(person.current_location) ||
+    Boolean(person.home_location);
+  if (!hasAddress) missing.push("Adresse oder aktueller Wohnort");
+
+  const hasEmail = contacts.some((c) => c.channel === "email" && c.value);
+  if (!hasEmail) missing.push("Email-Adresse");
+
+  const hasLinkedIn =
+    Boolean(person.linkedin_url) ||
+    contacts.some((c) => c.channel === "linkedin" && c.value);
+  if (!hasLinkedIn) missing.push("LinkedIn-Profil");
+
+  const hasPhone = contacts.some(
+    (c) => (c.channel === "phone" || c.channel === "whatsapp") && c.value,
+  );
+  if (!hasPhone) missing.push("Telefonnummer / WhatsApp");
+
+  if (!person.company) missing.push("aktuelle Firma");
+  if (!person.role) missing.push("aktuelle Rolle");
+  if (!person.how_we_met) missing.push("wie ihr euch kennengelernt habt");
+
+  return missing;
 }
 
 function buildContextBlock(ctx: DraftContext): string {
@@ -103,12 +161,23 @@ function buildContextBlock(ctx: DraftContext): string {
         : "";
     lines.push(`Letzte Interaktion${ago}: ${ctx.lastInteractionSummary}`);
   }
+  if (ctx.missingFields.length > 0) {
+    lines.push(`Fehlende Daten: ${ctx.missingFields.join(", ")}`);
+  }
   return lines.join("\n");
 }
 
 function buildUseCasePrompt(useCase: DraftUseCase, ctx: DraftContext): string {
   const contextBlock = buildContextBlock(ctx);
   const firstName = ctx.person.name.split(/\s+/)[0];
+
+  const top1 = ctx.missingFields[0];
+  const top2 = ctx.missingFields[1];
+  const missingHint = top1
+    ? top2
+      ? `Frag konkret nach: ${top1} (primär) und nimm wenn es organisch passt auch ${top2} mit. Maximal ZWEI Felder anfragen.`
+      : `Frag konkret nach: ${top1}.`
+    : `Es fehlt aktuell nichts Offensichtliches — schreib stattdessen einen lockeren Touch-Base-Nachrichtenvorschlag der nebenbei nach einem Detail fragt (z.B. wie es beruflich grad läuft).`;
 
   const intentByCase: Record<DraftUseCase, string> = {
     reengage: `Schreib eine warmherzige WhatsApp an ${firstName}. Es war länger nichts. Du willst dich melden ohne konkretes Anliegen, einfach weil dir die Person wichtig ist. Verweise wenn passend auf ein gemeinsames Erlebnis oder ein Interesse aus dem Kontext.`,
@@ -117,6 +186,11 @@ function buildUseCasePrompt(useCase: DraftUseCase, ctx: DraftContext): string {
     intro_thanks: `Schreib ${firstName} ein kurzes WhatsApp-Dankeschön für ein Intro. 2-3 Sätze: Dank + was du davon erwartest + Rück-Verpflichtung anbieten.`,
     follow_up: `Schreib ${firstName} ein action-orientiertes Follow-Up nach eurem letzten Kontakt. Beziehe dich konkret auf den Inhalt der letzten Interaktion. Schlag den nächsten Schritt vor (Treffen, konkrete Aktion, etc.).`,
     lebenszeichen: `Schreib ${firstName} ein behutsames Lebenszeichen. Du willst zeigen dass du noch da bist, ohne aktiv etwas zu wollen. Verweis auf ein Detail aus dem Kontext (Interest, Passion, gemeinsame Erfahrung) das du grad mitbekommen oder dran gedacht hast.`,
+    missing_data: `Schreib ${firstName} eine kurze, ungezwungene WhatsApp die proaktiv nach fehlenden Daten fragt. Keine CRM-Sprache („ich pflege gerade meine Kontakte"), keine Listen. Es soll sich anfühlen als wäre dir spontan eingefallen dass du das Detail noch nicht hast — z.B. weil du was schicken / planen / einladen willst.
+
+${missingHint}
+
+Format: 2-4 Sätze, maximal eine konkrete Frage. Wenn du nach einer Adresse fragst, gib einen plausiblen Grund (Karte zum Geburtstag, ein Buch schicken, Treffen vorschlagen).`,
   };
 
   return `${intentByCase[useCase]}
@@ -145,6 +219,10 @@ export async function generateDraft(
   const draftContext = await gatherContext(person.id);
   if (!draftContext) return null;
   draftContext.person = person;
+  // missingFields können erst gerechnet werden wenn Person bekannt ist
+  // (gatherContext kriegt nur die personId, nicht die Row).
+  const contactsForMissing = await listContactsForPerson(person.id);
+  draftContext.missingFields = computeMissingFields(person, contactsForMissing);
 
   const userPrompt = buildUseCasePrompt(useCase, draftContext);
 
