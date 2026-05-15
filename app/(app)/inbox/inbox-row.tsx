@@ -87,8 +87,15 @@ export function InboxRowItem({
         />
 
         <div className="min-w-0 flex-1 space-y-1">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-ink-1">{row.text}</span>
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-ink-1">{row.display_text ?? row.text}</span>
+            {row.kind === "reminder" && row.lead_days !== undefined && (
+              <span className="rounded-full border border-rule bg-paper-2 px-2 py-0.5 text-[10px] text-ink-3">
+                {row.lead_days === 0
+                  ? "Erinnerung – am Tag"
+                  : `Erinnerung – ${row.lead_days} Tag${row.lead_days === 1 ? "" : "e"} zuvor`}
+              </span>
+            )}
             {row.kind === "todo" && row.priority && row.priority !== "medium" && (
               <span
                 className={`rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${PRIORITY_TONE[row.priority] ?? ""}`}

@@ -77,6 +77,71 @@ export interface InboxRow {
   recurrence?: string;
   reminderType?: string;
   priority?: string;
+  // Lead-Info aus dem Text geparsed (siehe parseLeadInfo). Brauchen
+  // wir um im Kalender NUR den Event-Tag als Dot zu zeigen und nicht
+  // jeden Lead-Vorlauf einzeln.
+  lead_days?: number;
+  // Event-Datum = remind_at + lead_days, also der eigentliche Anlass.
+  // Lead-Items (lead_days > 0) sollten auf der event_at-Spalte in den
+  // Kalender, nicht auf remind_at.
+  event_at?: string | null;
+  // Cleaned-up Anzeige-Text — ohne „Signal:"-Prefix (Altdaten) und
+  // mit hervorgehobenem Erinnerungs-Suffix.
+  display_text?: string;
+}
+
+const LEAD_RE = /\s*\(Erinnerung\s*[–-]\s*(\d+)\s*Tag(?:e)?\s*zuvor\)\s*$/i;
+const DAY_OF_RE = /\s*\(Erinnerung\s*[–-]\s*am\s*Tag\)\s*$/i;
+// Legacy „Signal:"-Prefix + " · in N Tagen" — Altdaten vor dem
+// Format-Switch am 15.5.2026. Wir parsen die auch noch raus damit
+// der User saubere Strings sieht ohne die DB migrieren zu müssen.
+const LEGACY_PREFIX_RE = /^Signal:\s*/i;
+const LEGACY_LEAD_RE = /\s*·\s*in\s+(\d+)\s*Tag(?:e?n)?\s*$/i;
+
+export interface LeadInfo {
+  display_text: string;
+  lead_days: number; // 0 = day-of
+}
+
+// Akzeptiert sowohl neues Format („… (Erinnerung – 7 Tage zuvor)") als
+// auch das Legacy-Format („Signal: … · in 7 Tagen"). Gibt einen
+// gereinigten Text + die Lead-Tage zurück.
+export function parseLeadInfo(text: string): LeadInfo {
+  let t = text;
+  let leadDays = 0;
+
+  // Neues Format (priorisiert).
+  const newLead = t.match(LEAD_RE);
+  if (newLead) {
+    leadDays = parseInt(newLead[1], 10);
+    t = t.replace(LEAD_RE, "").trim();
+    return { display_text: t, lead_days: leadDays };
+  }
+  const newDayOf = t.match(DAY_OF_RE);
+  if (newDayOf) {
+    t = t.replace(DAY_OF_RE, "").trim();
+    return { display_text: t, lead_days: 0 };
+  }
+
+  // Legacy-Format: „Signal: …" + ggf. „ · in N Tagen".
+  if (LEGACY_PREFIX_RE.test(t)) {
+    t = t.replace(LEGACY_PREFIX_RE, "").trim();
+  }
+  const legacyLead = t.match(LEGACY_LEAD_RE);
+  if (legacyLead) {
+    leadDays = parseInt(legacyLead[1], 10);
+    t = t.replace(LEGACY_LEAD_RE, "").trim();
+  }
+  return { display_text: t, lead_days: leadDays };
+}
+
+// Event-Datum = remind_at + lead_days (in Tagen). Bei lead_days=0 ist
+// es identisch zu remind_at.
+export function computeEventAt(remindAt: string, leadDays: number): string {
+  if (leadDays <= 0) return remindAt;
+  const d = new Date(remindAt);
+  d.setDate(d.getDate() + leadDays);
+  return d.toISOString();
 }
 
 // Open reminders + todos for the current user, sorted by date (overdue
@@ -101,18 +166,25 @@ export async function listInbox(): Promise<InboxRow[]> {
   if (todoRes.error) throw todoRes.error;
 
   const now = new Date();
-  const reminderRows: InboxRow[] = (remRes.data as Reminder[]).map((r) => ({
-    kind: "reminder",
-    id: r.id,
-    text: r.text,
-    // Für recurring Reminders ist `remind_at` der Original-Tag — wir
-    // rollen auf das nächste Vorkommen damit „heute überfällig" auch
-    // wirklich heute heißt und nicht „seit 2019".
-    due: nextOccurrence(r.remind_at, r.recurrence, now),
-    person_id: r.person_id,
-    recurrence: r.recurrence,
-    reminderType: r.type,
-  }));
+  const reminderRows: InboxRow[] = (remRes.data as Reminder[]).map((r) => {
+    const due = nextOccurrence(r.remind_at, r.recurrence, now);
+    const lead = parseLeadInfo(r.text);
+    return {
+      kind: "reminder",
+      id: r.id,
+      text: r.text,
+      // Für recurring Reminders ist `remind_at` der Original-Tag — wir
+      // rollen auf das nächste Vorkommen damit „heute überfällig" auch
+      // wirklich heute heißt und nicht „seit 2019".
+      due,
+      person_id: r.person_id,
+      recurrence: r.recurrence,
+      reminderType: r.type,
+      lead_days: lead.lead_days,
+      event_at: computeEventAt(due, lead.lead_days),
+      display_text: lead.display_text,
+    };
+  });
 
   const todoRows: InboxRow[] = (todoRes.data as Todo[]).map((t) => ({
     kind: "todo",

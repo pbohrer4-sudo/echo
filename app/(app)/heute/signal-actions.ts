@@ -75,7 +75,12 @@ export async function createSignalReminders(
     rows.push({
       user_id: user.id,
       person_id: personId,
-      text: `Signal: ${signalName}${personName ? ` · ${personName}` : ""} · in ${leadDays} Tag${leadDays === 1 ? "" : "en"}`,
+      // Text-Format: „<Event> · <Person> (Erinnerung – N Tage zuvor)".
+      // Kein „Signal:"-Prefix mehr — der User wollte das Wort raus weil
+      // es nichts erklärt. Das Suffix in Klammern markiert es eindeutig
+      // als Lead-Reminder, der Calendar-Marker-Parser leitet daraus
+      // das Event-Datum ab (= remind_at + leadDays).
+      text: `${signalName}${personName ? ` · ${personName}` : ""} (Erinnerung – ${leadDays} Tag${leadDays === 1 ? "" : "e"} zuvor)`,
       remind_at: leadDate.toISOString(),
       recurrence,
       type: "custom",
@@ -88,7 +93,7 @@ export async function createSignalReminders(
     rows.push({
       user_id: user.id,
       person_id: personId,
-      text: `Signal: ${signalName}${personName ? ` · ${personName}` : ""}`,
+      text: `${signalName}${personName ? ` · ${personName}` : ""} (Erinnerung – am Tag)`,
       remind_at: baseDate.toISOString(),
       recurrence,
       type: "custom",

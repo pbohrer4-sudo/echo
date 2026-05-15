@@ -52,7 +52,18 @@ function groupByDay(rows: InboxRow[]): Array<{ day: string; rows: InboxRow[] }> 
     if (!r.due) continue;
     const key = dateKey(r.due);
     const arr = map.get(key) ?? [];
-    arr.push(r);
+    // Visuelle Dedup pro (Tag · Person · display_text · lead_days):
+    // wenn der User dieselbe Erinnerung versehentlich doppelt
+    // angelegt hat, zeigen wir nur eine. Der × pro Row löscht trotzdem
+    // den jeweiligen Datensatz wenn der User aufräumen will.
+    const dedupeKey = `${r.person_id ?? ""}|${(r.display_text ?? r.text).toLowerCase()}|${r.lead_days ?? 0}`;
+    if (!arr.some(
+      (x) =>
+        `${x.person_id ?? ""}|${(x.display_text ?? x.text).toLowerCase()}|${x.lead_days ?? 0}` ===
+        dedupeKey,
+    )) {
+      arr.push(r);
+    }
     map.set(key, arr);
   }
   return [...map.entries()]
@@ -87,20 +98,29 @@ export default async function InboxPage() {
   }
   const upcomingGroups = groupByDay(upcoming);
 
-  // Kalender-Marker: aggregiert beide Buckets damit der Kalender
-  // sowohl heute-fällige (rot) als auch anstehende (action-Farbe)
-  // Tage anzeigt. Items ohne due werden ignoriert.
+  // Kalender-Marker: zeigt EVENT-Tage, nicht jeden Lead-Reminder
+  // einzeln. Wenn jemand „Hochzeitstag in 7 Tagen" hat plus „am Tag"
+  // soll der Kalender NUR auf den Hochzeitstag (22.6.) einen Dot
+  // setzen, nicht zusätzlich auf 15.6. Wir gruppieren also per
+  // event_at (für Reminders mit lead_days > 0) bzw. due (Todos /
+  // Day-of-Reminder). Dedupliziert pro (Tag · Person · display_text)
+  // damit identische Duplikate auch nur einen Dot ergeben.
   const markerMap = new Map<string, DayMarker>();
+  const seenEvent = new Set<string>();
   for (const r of [...due, ...upcoming]) {
-    if (!r.due) continue;
-    const key = dateKey(r.due);
-    const existing = markerMap.get(key);
-    const isDue = r.due <= cutoff;
+    const eventDate = r.event_at ?? r.due;
+    if (!eventDate) continue;
+    const dayKeyStr = dateKey(eventDate);
+    const dedupeKey = `${dayKeyStr}|${r.person_id ?? ""}|${(r.display_text ?? r.text).toLowerCase()}`;
+    if (seenEvent.has(dedupeKey)) continue;
+    seenEvent.add(dedupeKey);
+    const isDue = eventDate <= cutoff;
+    const existing = markerMap.get(dayKeyStr);
     if (existing) {
       existing.count += 1;
       if (isDue) existing.due = true;
     } else {
-      markerMap.set(key, { key, count: 1, due: isDue });
+      markerMap.set(dayKeyStr, { key: dayKeyStr, count: 1, due: isDue });
     }
   }
   const markers = [...markerMap.values()];
