@@ -71,6 +71,14 @@ export function PersonTimeline({
               <div>
                 <div className="tl-kind">{TYPE_LABEL[i.type] ?? i.type}</div>
                 {i.summary && <div className="tl-text">{i.summary}</div>}
+                {i.file_name && (
+                  <div className="tl-meta">
+                    📎 {i.file_name}
+                    {i.file_size_bytes != null &&
+                      ` · ${(i.file_size_bytes / 1024).toFixed(0)} KB`}
+                    {i.transcript && " · Transcript indiziert"}
+                  </div>
+                )}
                 <div className="tl-meta">
                   {i.sentiment ?? "neutral"}
                   {(i.topics?.length ?? 0) > 0 && ` · ${i.topics.join(" · ")}`}

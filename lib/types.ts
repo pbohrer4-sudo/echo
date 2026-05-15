@@ -601,11 +601,19 @@ export interface Interaction {
   type: InteractionType;
   source: InteractionSource;
   summary: string | null;
+  // Transcript des Meetings/Calls. Wird vom +Event-Upload-Pfad
+  // automatisch aus text/markdown-Files gefüllt — andere Formate
+  // (PDF, Audio) speichern nur das File und lassen transcript leer.
   transcript: string | null;
   sentiment: Sentiment | null;
   topics: string[];
   occurred_at: string;
   created_at: string;
+  // Datei-Anhang (Migration 0034). Path im 'life-events' Storage-Bucket.
+  file_path: string | null;
+  file_name: string | null;
+  file_size_bytes: number | null;
+  mime_type: string | null;
 }
 
 export interface Note {

@@ -129,17 +129,6 @@ export default async function InboxPage() {
 
         <WhatsappInboxStrip rows={waRows} />
 
-        {/* — Kalender-Übersicht (current + next month) — */}
-        {markers.length > 0 && (
-          <section className="rounded border border-rule bg-paper px-4 py-4">
-            <AgendaCalendar markers={markers} />
-            <p className="mt-3 text-[10px] text-ink-4">
-              Rote Punkte = heute fällig oder überfällig · graue Punkte =
-              anstehend. Klick auf einen Tag scrollt zur Liste.
-            </p>
-          </section>
-        )}
-
         <CtaProvider reminderIds={reminderIds}>
         {/* — Heute & Überfällig — */}
         <section className="space-y-3">
@@ -167,6 +156,17 @@ export default async function InboxPage() {
             </ul>
           )}
         </section>
+
+        {/* — Kalender-Übersicht (current + next month), zwischen Heute und Anstehend — */}
+        {markers.length > 0 && (
+          <section className="rounded border border-rule bg-paper px-4 py-4">
+            <AgendaCalendar markers={markers} />
+            <p className="mt-3 text-[10px] text-ink-4">
+              Rote Punkte = heute fällig oder überfällig · graue Punkte =
+              anstehend. Klick auf einen Tag scrollt zur Liste.
+            </p>
+          </section>
+        )}
 
         {/* — Anstehend — */}
         {upcomingGroups.length > 0 && (

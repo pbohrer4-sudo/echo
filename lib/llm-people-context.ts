@@ -77,6 +77,16 @@ interface LifeEventRow {
   life_events: { title: string; occurred_at: string; event_type: string } | null;
 }
 
+interface InteractionRow {
+  id: string;
+  person_ids: string[];
+  type: string;
+  summary: string | null;
+  transcript: string | null;
+  topics: string[] | null;
+  occurred_at: string;
+}
+
 export async function loadPeopleContext(
   supabase: SupabaseClient,
   limit: number,
@@ -148,6 +158,25 @@ export async function loadPeopleContext(
       .select("id, name")
       .is("deleted_at", null),
   ]);
+
+  // Separate Query für Interactions weil person_ids ein Array ist —
+  // wir müssen overlaps() benutzen statt in(). Die Daten gehen pro
+  // Person max 5 Stück in den Prompt, mit Transcript-Excerpt 400 Chars.
+  const interactionsRes = await supabase
+    .from("interactions")
+    .select("id, person_ids, type, summary, transcript, topics, occurred_at")
+    .overlaps("person_ids", ids)
+    .order("occurred_at", { ascending: false })
+    .limit(ids.length * 5);
+  const interactionsByPerson = new Map<string, InteractionRow[]>();
+  for (const row of (interactionsRes.data as InteractionRow[] | null) ?? []) {
+    for (const pid of row.person_ids ?? []) {
+      if (!ids.includes(pid)) continue;
+      const arr = interactionsByPerson.get(pid) ?? [];
+      if (arr.length < 5) arr.push(row);
+      interactionsByPerson.set(pid, arr);
+    }
+  }
 
   const tagsByPerson = groupBy<TagRow>(
     (tagsRes.data as TagRow[] | null) ?? [],
@@ -238,6 +267,21 @@ export async function loadPeopleContext(
       }))
       .filter((g) => g.place)
       .slice(0, 5),
+    recent_interactions: (interactionsByPerson.get(p.id) ?? []).map((i) => ({
+      date: i.occurred_at,
+      type: i.type,
+      summary: i.summary,
+      // Transcript auf 400 Zeichen kappen pro Interaktion, damit der
+      // Prompt nicht explodiert. Bei 5 Interaktionen × 60 Personen ×
+      // 400 Chars sind das ~120k Zeichen — viel, aber unter dem
+      // 200k-Anthropic-Context-Limit.
+      transcript_excerpt: i.transcript
+        ? i.transcript.length > 400
+          ? `${i.transcript.slice(0, 400).trim()}…`
+          : i.transcript
+        : null,
+      topics: i.topics ?? [],
+    })),
   }));
 }
 

@@ -609,6 +609,7 @@ function AddEventForm({
   );
   const [sentiment, setSentiment] = useState("");
   const [topics, setTopics] = useState("");
+  const [file, setFile] = useState<File | null>(null);
 
   function submit() {
     const fd = new FormData();
@@ -618,6 +619,7 @@ function AddEventForm({
     fd.set("occurred_at", occurredAt);
     if (sentiment) fd.set("sentiment", sentiment);
     if (topics) fd.set("topics", topics);
+    if (file) fd.set("file", file);
     startTransition(async () => {
       const res = await addEventAction(fd);
       if (!res.ok) setError(res.error ?? "Fehler");
@@ -688,12 +690,29 @@ function AddEventForm({
           />
         </label>
       </div>
+      <label className="space-y-1 block">
+        <Label>Anhang (optional)</Label>
+        <input
+          type="file"
+          accept=".txt,.md,.markdown,text/plain,text/markdown,application/pdf,audio/*,image/*"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          className="block w-full text-[11px] text-ink-2 file:mr-2 file:rounded file:border file:border-rule file:bg-paper-2 file:px-2 file:py-1 file:text-[11px] file:text-ink-2 hover:file:border-action"
+        />
+        {file && (
+          <p className="text-[10px] text-ink-4">
+            {file.name} · {(file.size / 1024).toFixed(0)} KB
+            {file.type.startsWith("text/") || file.type === "application/json"
+              ? " · Text wird automatisch als Transcript übernommen"
+              : ""}
+          </p>
+        )}
+      </label>
       <ErrorRow message={error} />
       <SubmitRow
         pending={pending}
         onSubmit={submit}
         onCancel={onDone}
-        disabled={!summary.trim()}
+        disabled={!summary.trim() && !file}
       />
     </div>
   );

@@ -44,6 +44,16 @@ export interface PersonContext {
   relationships: { label: string; related_name: string | null }[];
   life_events: { title: string; date: string; kind: string }[];
   geographies: { kind: string; place: string }[];
+  // Letzte Interaktionen (Treffen/Calls/Notes) mit Summary + ggf.
+  // hochgeladenem Transcript. Gibt dem LLM Gesprächs-Historie und
+  // damit Kontext für CTA-Vorschläge oder Erinnerungs-Antworten.
+  recent_interactions: {
+    date: string;
+    type: string;
+    summary: string | null;
+    transcript_excerpt: string | null;
+    topics: string[];
+  }[];
 }
 
 export interface OrganizationContext {
@@ -107,6 +117,23 @@ function renderLifeEvents(events: PersonContext["life_events"]): string {
       return `${year} ${e.title}`;
     })
     .join(" · ");
+}
+
+function renderInteractions(
+  items: PersonContext["recent_interactions"],
+): string {
+  // Eine Zeile pro Interaktion mit Datum + Type + Summary, danach
+  // optional Transcript-Ausschnitt indented. So bleibt der Prompt
+  // scannbar ohne dass Transcripte das Layout zerschießen.
+  return items
+    .map((i) => {
+      const head = `${i.date.slice(0, 10)} ${i.type}: ${i.summary ?? "—"}${
+        i.topics.length > 0 ? ` (${i.topics.join(", ")})` : ""
+      }`;
+      if (!i.transcript_excerpt) return `    · ${head}`;
+      return `    · ${head}\n      Transcript: ${i.transcript_excerpt}`;
+    })
+    .join("\n");
 }
 
 function renderAddresses(addrs: PersonContext["addresses"]): string {
@@ -201,6 +228,10 @@ function renderPeopleSection(people: PersonContext[]): string {
         details.push(`    Beziehungen: ${renderRelationships(p.relationships)}`);
       if (p.life_events.length > 0)
         details.push(`    Life-Events: ${renderLifeEvents(p.life_events)}`);
+      if (p.recent_interactions.length > 0) {
+        details.push(`    Letzte Interaktionen:`);
+        details.push(renderInteractions(p.recent_interactions));
+      }
       if (p.how_we_met)
         details.push(`    Kennengelernt: ${truncate(p.how_we_met, 160)}`);
       if (p.notes) details.push(`    Notes: ${truncate(p.notes, 280)}`);

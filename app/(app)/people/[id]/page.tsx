@@ -465,7 +465,7 @@ export default async function PersonDetailPage({
         {showProfileBody && (
           <section>
             <div className="section-head">
-              <span className="t-label">Timeline</span>
+              <span className="t-label">Notes</span>
               <span className="rule" />
               {!person.is_self && <AddEventButton personId={person.id} />}
             </div>

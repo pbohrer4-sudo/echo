@@ -237,6 +237,23 @@ type InteractionTypeLiteral = (typeof INTERACTION_TYPES)[number];
 const SENTIMENTS = ["positive", "neutral", "tense"] as const;
 type SentimentLiteral = (typeof SENTIMENTS)[number];
 
+// Welche Datei-Typen wir versuchen als Transcript zu extrahieren.
+// text/* und markdown lesen wir direkt; PDFs könnten via Anthropic
+// Vision extrahiert werden — das ist aber ein Mehraufwand pro Submit
+// (zusätzliche LLM-Latenz, eigener Pfad), den wir später nachziehen.
+// Vorerst nur text-Files. Andere Formate werden gespeichert ohne
+// Auto-Transcript; der User kann den Text manuell in summary tippen.
+function isExtractableText(mime: string | null): boolean {
+  if (!mime) return false;
+  return (
+    mime.startsWith("text/") ||
+    mime === "application/json" ||
+    mime === "application/markdown"
+  );
+}
+
+const ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024;
+
 export async function addEventAction(formData: FormData): Promise<Result> {
   const supabase = await createClient();
   const {
@@ -250,9 +267,12 @@ export async function addEventAction(formData: FormData): Promise<Result> {
   const occurredAtRaw = String(formData.get("occurred_at") ?? "").trim();
   const sentimentRaw = String(formData.get("sentiment") ?? "").trim();
   const topicsRaw = String(formData.get("topics") ?? "").trim();
+  const file = formData.get("file");
 
   if (!personId) return { ok: false, error: "person_id fehlt" };
-  if (!summary) return { ok: false, error: "Beschreibung fehlt" };
+  if (!summary && !(file instanceof File)) {
+    return { ok: false, error: "Beschreibung oder Datei nötig" };
+  }
 
   const type: InteractionTypeLiteral = (INTERACTION_TYPES as readonly string[]).includes(
     typeRaw,
@@ -266,8 +286,6 @@ export async function addEventAction(formData: FormData): Promise<Result> {
     ? (sentimentRaw as SentimentLiteral)
     : null;
 
-  // date-input → ISO mit 12:00 lokal damit das Datum stabil bleibt,
-  // egal in welcher Zeitzone der Server steht.
   const occurredAt = /^\d{4}-\d{2}-\d{2}$/.test(occurredAtRaw)
     ? new Date(`${occurredAtRaw}T12:00:00`).toISOString()
     : new Date().toISOString();
@@ -279,20 +297,85 @@ export async function addEventAction(formData: FormData): Promise<Result> {
         .filter(Boolean)
     : [];
 
-  const { error } = await supabase.from("interactions").insert({
-    user_id: user.id,
-    person_ids: [personId],
-    type,
-    source: "manual",
-    summary,
-    sentiment,
-    topics,
-    occurred_at: occurredAt,
-  });
-  if (error) return { ok: false, error: error.message };
+  // Datei-Upload (optional). Falls present:
+  //  1. Größe + MIME validieren (Bucket-Whitelist macht das nochmal).
+  //  2. In life-events-Bucket unter {user_id}/interactions/{id}/{name}.
+  //  3. Text-Files direkt in transcript packen damit der LLM-Kontext
+  //     sie sieht.
+  let filePath: string | null = null;
+  let fileName: string | null = null;
+  let fileSize: number | null = null;
+  let mimeType: string | null = null;
+  let transcript: string | null = null;
 
-  // last_contact_at synchron halten — sonst zeigt der Header
-  // veraltete Werte, wenn der User ein altes Treffen nachträgt.
+  if (file instanceof File && file.size > 0) {
+    if (file.size > ATTACHMENT_MAX_BYTES) {
+      return { ok: false, error: "Datei zu groß (max 25 MB)" };
+    }
+    mimeType = file.type || "application/octet-stream";
+    fileName = file.name || "upload";
+    fileSize = file.size;
+
+    // Datei-Bytes lesen und für eventuelles Transcript merken.
+    const arrayBuffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+
+    if (isExtractableText(mimeType)) {
+      try {
+        transcript = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+        // Auf 100k Chars cappen damit transcript nicht beliebig wächst
+        // und LLM-Prompt explodiert.
+        if (transcript.length > 100_000) {
+          transcript = `${transcript.slice(0, 100_000)}\n\n[…gekürzt nach 100k Zeichen…]`;
+        }
+      } catch {
+        transcript = null;
+      }
+    }
+  }
+
+  const { data: inserted, error } = await supabase
+    .from("interactions")
+    .insert({
+      user_id: user.id,
+      person_ids: [personId],
+      type,
+      source: "manual",
+      summary: summary || (fileName ? `Datei: ${fileName}` : null),
+      sentiment,
+      topics,
+      occurred_at: occurredAt,
+      transcript,
+      file_name: fileName,
+      file_size_bytes: fileSize,
+      mime_type: mimeType,
+    })
+    .select("id")
+    .single();
+  if (error || !inserted) {
+    return { ok: false, error: error?.message ?? "insert failed" };
+  }
+  const interactionId = (inserted as { id: string }).id;
+
+  // Datei jetzt hochladen — wir kennen die interaction_id und können
+  // den finalen Path setzen. Bei Upload-Fehler: row löschen damit
+  // wir keine dangling references hinterlassen.
+  if (file instanceof File && file.size > 0 && fileName) {
+    filePath = `${user.id}/interactions/${interactionId}/${fileName}`;
+    const { error: upErr } = await supabase.storage
+      .from("life-events")
+      .upload(filePath, file, { contentType: mimeType ?? undefined, upsert: false });
+    if (upErr) {
+      await supabase.from("interactions").delete().eq("id", interactionId);
+      return { ok: false, error: `Upload: ${upErr.message}` };
+    }
+    await supabase
+      .from("interactions")
+      .update({ file_path: filePath })
+      .eq("id", interactionId);
+  }
+
+  // last_contact_at synchron halten.
   const { data: existing } = await supabase
     .from("people")
     .select("last_contact_at")
