@@ -1,7 +1,62 @@
-import { listInbox, getPeopleMap } from "@/lib/inbox";
+import { listInbox, getPeopleMap, type InboxRow } from "@/lib/inbox";
 import { listUnreadWhatsapp } from "@/lib/whatsapp-inbox";
 import { InboxRowItem } from "./inbox-row";
 import { WhatsappInboxStrip } from "@/components/whatsapp-inbox-strip";
+
+// Reminders gelten erst als „offen" wenn sie heute oder früher fällig
+// sind. Zukünftige Erinnerungen (Geburtstage in 4 Wochen, Hochzeitstag
+// in 3 Monaten) tauchen in der „Anstehend"-Sektion auf — sichtbar
+// chronologisch, aber sie zählen nicht in die OFFEN-Anzahl und blockieren
+// nicht die mentale Bandbreite des Users.
+
+function endOfToday(): Date {
+  const d = new Date();
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+function dateKey(iso: string): string {
+  // YYYY-MM-DD (lokale Zeit). Für Gruppierung des Anstehend-Buckets
+  // damit Items am selben Tag zusammen erscheinen.
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function formatDateHeading(isoDay: string): string {
+  const [y, m, d] = isoDay.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.round(
+    (date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+  );
+  const weekday = date.toLocaleDateString("de-DE", { weekday: "long" });
+  const fmt = date.toLocaleDateString("de-DE", {
+    day: "numeric",
+    month: "long",
+  });
+  if (diffDays === 0) return `Heute · ${weekday}, ${fmt}`;
+  if (diffDays === 1) return `Morgen · ${weekday}, ${fmt}`;
+  if (diffDays < 7) return `${weekday}, ${fmt}`;
+  return `${weekday}, ${fmt}`;
+}
+
+function groupByDay(rows: InboxRow[]): Array<{ day: string; rows: InboxRow[] }> {
+  const map = new Map<string, InboxRow[]>();
+  for (const r of rows) {
+    if (!r.due) continue;
+    const key = dateKey(r.due);
+    const arr = map.get(key) ?? [];
+    arr.push(r);
+    map.set(key, arr);
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([day, rows]) => ({ day, rows }));
+}
 
 export default async function InboxPage() {
   const [rows, waRows] = await Promise.all([
@@ -14,6 +69,22 @@ export default async function InboxPage() {
   );
   const peopleMap = await getPeopleMap(personIds);
 
+  // Bucket: "due" = überfällig oder heute fällig + alle ohne Datum.
+  // "upcoming" = strikt in der Zukunft (ab morgen 00:00).
+  const cutoff = endOfToday().toISOString();
+  const due: InboxRow[] = [];
+  const upcoming: InboxRow[] = [];
+  for (const r of rows) {
+    if (!r.due) {
+      due.push(r);
+    } else if (r.due <= cutoff) {
+      due.push(r);
+    } else {
+      upcoming.push(r);
+    }
+  }
+  const upcomingGroups = groupByDay(upcoming);
+
   return (
     <div className="px-8 py-10">
       <div className="mx-auto max-w-3xl space-y-8">
@@ -23,32 +94,69 @@ export default async function InboxPage() {
             Reminders
           </h1>
           <p className="text-sm text-ink-3">
-            Erinnerungen, Aufgaben und ungelesene WhatsApp-Nachrichten — alles
-            an einem Ort.
+            Heute fällig oben. Anstehend chronologisch darunter — sichtbar,
+            aber zählt nicht als „offen" bis es soweit ist.
           </p>
         </header>
 
         <WhatsappInboxStrip rows={waRows} />
 
-        {rows.length === 0 ? (
-          <div className="rounded border border-rule bg-paper px-6 py-16 text-center">
-            <p className="text-sm text-ink-3">
-              Nichts offen. Sprich gerade etwas oder leg manuell an.
-            </p>
+        {/* — Heute & Überfällig — */}
+        <section className="space-y-3">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-lg font-medium text-ink-1">
+              Heute & Überfällig
+            </h2>
+            <p className="t-label">{due.length} offen</p>
           </div>
-        ) : (
-          <ul className="overflow-hidden rounded border border-rule bg-paper">
-            {rows.map((r) => (
-              <InboxRowItem
-                key={`${r.kind}-${r.id}`}
-                row={r}
-                personName={r.person_id ? peopleMap[r.person_id] ?? null : null}
-              />
-            ))}
-          </ul>
-        )}
+          {due.length === 0 ? (
+            <div className="rounded border border-rule bg-paper px-6 py-12 text-center">
+              <p className="text-sm text-ink-3">
+                Nichts offen. Heute ist alles abgehakt.
+              </p>
+            </div>
+          ) : (
+            <ul className="overflow-hidden rounded border border-rule bg-paper">
+              {due.map((r) => (
+                <InboxRowItem
+                  key={`${r.kind}-${r.id}`}
+                  row={r}
+                  personName={r.person_id ? peopleMap[r.person_id] ?? null : null}
+                />
+              ))}
+            </ul>
+          )}
+        </section>
 
-        <p className="t-label">{rows.length} offen</p>
+        {/* — Anstehend — */}
+        {upcomingGroups.length > 0 && (
+          <section className="space-y-3">
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-lg font-medium text-ink-1">Anstehend</h2>
+              <p className="t-label">{upcoming.length} geplant</p>
+            </div>
+            <div className="space-y-5">
+              {upcomingGroups.map((g) => (
+                <div key={g.day} className="space-y-2">
+                  <p className="text-[11px] uppercase tracking-wider text-ink-4">
+                    {formatDateHeading(g.day)}
+                  </p>
+                  <ul className="overflow-hidden rounded border border-rule bg-paper">
+                    {g.rows.map((r) => (
+                      <InboxRowItem
+                        key={`${r.kind}-${r.id}`}
+                        row={r}
+                        personName={
+                          r.person_id ? peopleMap[r.person_id] ?? null : null
+                        }
+                      />
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );
