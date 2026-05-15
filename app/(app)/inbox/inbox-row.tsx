@@ -9,6 +9,7 @@ import {
   deleteReminder,
   deleteTodo,
 } from "./actions";
+import { useReminderCtas } from "./cta-provider";
 
 const PRIORITY_TONE: Record<string, string> = {
   high: "border-bad/30 bg-bad/5 text-bad",
@@ -58,6 +59,7 @@ export function InboxRowItem({
 }) {
   const [pending, start] = useTransition();
   const due = fmtDue(row.due);
+  const { ctas, loading: ctasLoading } = useReminderCtas(row.id);
 
   function handleDone() {
     start(async () => {
@@ -74,58 +76,78 @@ export function InboxRowItem({
   }
 
   return (
-    <li className="flex items-start gap-4 border-b border-rule-soft px-4 py-3 last:border-0 hover:bg-paper-2">
-      <button
-        type="button"
-        onClick={handleDone}
-        disabled={pending}
-        aria-label="Als erledigt markieren"
-        className="mt-0.5 h-4 w-4 shrink-0 rounded-full border border-rule transition-colors hover:border-action hover:bg-action/10 disabled:opacity-50"
-      />
-
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-ink-1">{row.text}</span>
-          {row.kind === "todo" && row.priority && row.priority !== "medium" && (
-            <span
-              className={`rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${PRIORITY_TONE[row.priority] ?? ""}`}
-            >
-              {row.priority}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-4">
-          <span>{row.kind === "reminder" ? "Reminder" : "Todo"}</span>
-          {personName && row.person_id && (
-            <Link
-              href={`/people/${row.person_id}`}
-              className="hover:text-action"
-            >
-              {personName}
-            </Link>
-          )}
-          {row.recurrence && row.recurrence !== "once" && (
-            <span>· {row.recurrence}</span>
-          )}
-        </div>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <span
-          className={`font-mono text-xs tracking-wider ${due.tone}`}
-        >
-          {due.label}
-        </span>
+    <li className="border-b border-rule-soft last:border-0 hover:bg-paper-2">
+      <div className="flex items-start gap-4 px-4 py-3">
         <button
           type="button"
-          onClick={handleDelete}
+          onClick={handleDone}
           disabled={pending}
-          aria-label="Löschen"
-          className="text-sm text-ink-4 transition hover:text-bad disabled:opacity-50"
-        >
-          ×
-        </button>
+          aria-label="Als erledigt markieren"
+          className="mt-0.5 h-4 w-4 shrink-0 rounded-full border border-rule transition-colors hover:border-action hover:bg-action/10 disabled:opacity-50"
+        />
+
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-ink-1">{row.text}</span>
+            {row.kind === "todo" && row.priority && row.priority !== "medium" && (
+              <span
+                className={`rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${PRIORITY_TONE[row.priority] ?? ""}`}
+              >
+                {row.priority}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-4">
+            <span>{row.kind === "reminder" ? "Reminder" : "Todo"}</span>
+            {personName && row.person_id && (
+              <Link
+                href={`/people/${row.person_id}`}
+                className="hover:text-action"
+              >
+                {personName}
+              </Link>
+            )}
+            {row.recurrence && row.recurrence !== "once" && (
+              <span>· {row.recurrence}</span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <span className={`font-mono text-xs tracking-wider ${due.tone}`}>
+            {due.label}
+          </span>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={pending}
+            aria-label="Löschen"
+            className="text-sm text-ink-4 transition hover:text-bad disabled:opacity-50"
+          >
+            ×
+          </button>
+        </div>
       </div>
+
+      {row.kind === "reminder" && (ctas.length > 0 || ctasLoading) && (
+        <div className="flex flex-wrap items-center gap-2 px-4 pb-3 pl-12">
+          {ctasLoading && ctas.length === 0 && (
+            <span className="text-[10px] italic text-ink-4">
+              ECHO denkt nach…
+            </span>
+          )}
+          {ctas.map((cta) => (
+            <button
+              key={cta}
+              type="button"
+              className="rounded-full border border-action/40 bg-action-soft px-3 py-1 text-xs text-action transition hover:border-action hover:shadow-[0_0_0_3px_var(--action-ring)]"
+              title="CTA-Vorschlag (noch nicht verdrahtet)"
+            >
+              {cta}
+            </button>
+          ))}
+        </div>
+      )}
     </li>
   );
 }

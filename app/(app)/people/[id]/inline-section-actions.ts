@@ -94,10 +94,114 @@ export async function addRelationshipAction(
 }
 
 // ───────── Gifts (gift_idea) ─────────
-// UI-Pfad → REPLACE, weil der User manuell editiert. Voice-Pfad in
-// /api/extract/commit appendet weiterhin; die zwei Pfade haben
-// bewusst unterschiedliche Semantik (Briefing-Diskussion 2026-05-14).
+// gift_idea ist ein TEXT-Feld; mehrere Ideen werden mit ' · ' getrennt
+// (gleiche Konvention wie Voice-Extract in /api/extract/commit). Diese
+// Helpers parsen/serialisieren konsistent.
 
+const GIFT_SEPARATOR = " · ";
+
+function splitGifts(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(GIFT_SEPARATOR)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function joinGifts(items: string[]): string | null {
+  const cleaned = items.map((s) => s.trim()).filter(Boolean);
+  return cleaned.length ? cleaned.join(GIFT_SEPARATOR) : null;
+}
+
+async function readGiftIdea(
+  supabase: SupabaseLike,
+  personId: string,
+  userId: string,
+): Promise<string | null | undefined> {
+  const { data, error } = await supabase
+    .from("people")
+    .select("gift_idea")
+    .eq("id", personId)
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error || !data) return undefined;
+  return (data as { gift_idea: string | null }).gift_idea;
+}
+
+type SupabaseLike = Awaited<ReturnType<typeof createClient>>;
+
+// Einen neuen Geschenkidee-Eintrag anhängen (case-insensitive dedup).
+export async function addGiftIdeaAction(formData: FormData): Promise<Result> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "unauth" };
+
+  const personId = String(formData.get("person_id") ?? "").trim();
+  const value = String(formData.get("value") ?? "").trim();
+  if (!personId) return { ok: false, error: "person_id fehlt" };
+  if (!value) return { ok: false, error: "leerer Wert" };
+
+  const current = await readGiftIdea(supabase, personId, user.id);
+  if (current === undefined) return { ok: false, error: "Person nicht gefunden" };
+
+  const items = splitGifts(current);
+  if (items.some((it) => it.toLowerCase() === value.toLowerCase())) {
+    // schon da → ok, kein Fehler, kein Insert
+    return { ok: true };
+  }
+  items.push(value);
+
+  const { error } = await supabase
+    .from("people")
+    .update({ gift_idea: joinGifts(items) })
+    .eq("id", personId)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/people/${personId}`);
+  return { ok: true };
+}
+
+// Einen einzelnen Eintrag entfernen (case-insensitive Match).
+export async function removeGiftIdeaAction(
+  formData: FormData,
+): Promise<Result> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "unauth" };
+
+  const personId = String(formData.get("person_id") ?? "").trim();
+  const value = String(formData.get("value") ?? "").trim();
+  if (!personId) return { ok: false, error: "person_id fehlt" };
+  if (!value) return { ok: false, error: "leerer Wert" };
+
+  const current = await readGiftIdea(supabase, personId, user.id);
+  if (current === undefined) return { ok: false, error: "Person nicht gefunden" };
+
+  const items = splitGifts(current).filter(
+    (it) => it.toLowerCase() !== value.toLowerCase(),
+  );
+
+  const { error } = await supabase
+    .from("people")
+    .update({ gift_idea: joinGifts(items) })
+    .eq("id", personId)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/people/${personId}`);
+  return { ok: true };
+}
+
+// Legacy REPLACE-Pfad — von älteren UI-Pfaden noch benutzt, einfach
+// drinlassen damit nichts bricht. Setzt das ganze Feld auf einen Wert.
 export async function setGiftIdeaAction(formData: FormData): Promise<Result> {
   const supabase = await createClient();
   const {

@@ -19,11 +19,12 @@ import { LocationAutocomplete } from "@/components/location-autocomplete";
 import {
   addEventAction,
   addGeographyAction,
+  addGiftIdeaAction,
   addImportantDateAction,
   addRelationshipAction,
   addReminderAction,
   addTodoAction,
-  setGiftIdeaAction,
+  removeGiftIdeaAction,
 } from "./inline-section-actions";
 
 const inputClass =
@@ -454,51 +455,97 @@ function AddTodoForm({
   );
 }
 
-// ───────── Gifts (replace / edit) ─────────
-// Anders als die anderen +Buttons macht der hier REPLACE statt
-// APPEND, weil der User explizit ein einzelnes Feld bearbeitet.
-// Voice-Pfad in /api/extract/commit appendet weiterhin mit ' · '.
+// ───────── Gifts: Chips mit + / × ─────────
+// Mehrere Geschenkideen pro Person. Storage bleibt das alte
+// gift_idea-TEXT-Feld mit ' · '-Separator (kein Schema-Change), die
+// UI splittet vor dem Rendern auf. Add-Button öffnet ein Inline-Form
+// das einen NEUEN Eintrag anhängt; × auf einem Chip entfernt nur
+// diesen einen Eintrag.
 
-export function EditGiftButton({
+const GIFT_SEPARATOR = " · ";
+
+function splitGifts(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(GIFT_SEPARATOR)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export function GiftsList({
   personId,
   current,
 }: {
   personId: string;
   current: string | null;
 }) {
-  const label = current ? "Gift" : "Gift";
+  const items = splitGifts(current);
   return (
-    <InlineAddShell label={label}>
-      {(close) => (
-        <EditGiftForm
-          personId={personId}
-          initialValue={current ?? ""}
-          onDone={close}
-        />
-      )}
-    </InlineAddShell>
+    <div className="flex flex-wrap items-center gap-2">
+      {items.map((item) => (
+        <GiftChip key={item} personId={personId} value={item} />
+      ))}
+      <AddGiftButton personId={personId} />
+    </div>
   );
 }
 
-function EditGiftForm({
-  personId,
-  initialValue,
-  onDone,
-}: {
-  personId: string;
-  initialValue: string;
-  onDone: () => void;
-}) {
+function GiftChip({ personId, value }: { personId: string; value: string }) {
   const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [value, setValue] = useState(initialValue);
-
-  function submit() {
+  function remove() {
     const fd = new FormData();
     fd.set("person_id", personId);
     fd.set("value", value);
     startTransition(async () => {
-      const res = await setGiftIdeaAction(fd);
+      await removeGiftIdeaAction(fd);
+    });
+  }
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border border-rule bg-paper-2 px-3 py-1 text-sm text-ink-1 ${
+        pending ? "opacity-50" : ""
+      }`}
+    >
+      <span>{value}</span>
+      <button
+        type="button"
+        onClick={remove}
+        disabled={pending}
+        aria-label={`${value} entfernen`}
+        className="text-ink-4 transition hover:text-bad"
+      >
+        ×
+      </button>
+    </span>
+  );
+}
+
+export function AddGiftButton({ personId }: { personId: string }) {
+  return (
+    <InlineAddShell label="Gift">
+      {(close) => <AddGiftForm personId={personId} onDone={close} />}
+    </InlineAddShell>
+  );
+}
+
+function AddGiftForm({
+  personId,
+  onDone,
+}: {
+  personId: string;
+  onDone: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [value, setValue] = useState("");
+
+  function submit() {
+    if (!value.trim()) return;
+    const fd = new FormData();
+    fd.set("person_id", personId);
+    fd.set("value", value.trim());
+    startTransition(async () => {
+      const res = await addGiftIdeaAction(fd);
       if (!res.ok) setError(res.error ?? "Fehler");
       else onDone();
     });
@@ -508,24 +555,27 @@ function EditGiftForm({
     <div className="space-y-2">
       <label className="space-y-1 block">
         <Label>Geschenkidee</Label>
-        <textarea
+        <input
+          type="text"
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="z.B. Whisky 1990 · Buch über Bauhaus"
-          rows={2}
+          placeholder="z.B. Whisky 1990"
           autoFocus
-          className={`${inputClass} h-auto py-1.5`}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          className={inputClass}
         />
       </label>
-      <p className="text-[10px] text-ink-4">
-        Mehrere Ideen mit „ · " trennen. Leer = entfernen.
-      </p>
       <ErrorRow message={error} />
       <SubmitRow
         pending={pending}
         onSubmit={submit}
         onCancel={onDone}
-        disabled={false}
+        disabled={!value.trim()}
       />
     </div>
   );

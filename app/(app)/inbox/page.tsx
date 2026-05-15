@@ -3,6 +3,7 @@ import { listUnreadWhatsapp } from "@/lib/whatsapp-inbox";
 import { InboxRowItem } from "./inbox-row";
 import { WhatsappInboxStrip } from "@/components/whatsapp-inbox-strip";
 import { AgendaCalendar, type DayMarker } from "./agenda-calendar";
+import { CtaProvider } from "./cta-provider";
 
 // Reminders gelten erst als „offen" wenn sie heute oder früher fällig
 // sind. Zukünftige Erinnerungen (Geburtstage in 4 Wochen, Hochzeitstag
@@ -104,6 +105,14 @@ export default async function InboxPage() {
   }
   const markers = [...markerMap.values()];
 
+  // Reminder-IDs für den batched CTA-Fetch. Todos haben keine CTAs
+  // (anders strukturiert — die User-Aufgabe ist meistens schon die
+  // Aktion), also nur Reminders sammeln.
+  const reminderIds = [
+    ...due.filter((r) => r.kind === "reminder").map((r) => r.id),
+    ...upcoming.filter((r) => r.kind === "reminder").map((r) => r.id),
+  ];
+
   return (
     <div className="px-8 py-10">
       <div className="mx-auto max-w-3xl space-y-8">
@@ -131,6 +140,7 @@ export default async function InboxPage() {
           </section>
         )}
 
+        <CtaProvider reminderIds={reminderIds}>
         {/* — Heute & Überfällig — */}
         <section className="space-y-3">
           <div className="flex items-baseline justify-between">
@@ -187,6 +197,7 @@ export default async function InboxPage() {
             </div>
           </section>
         )}
+        </CtaProvider>
       </div>
     </div>
   );
