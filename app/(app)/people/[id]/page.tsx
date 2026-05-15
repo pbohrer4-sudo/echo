@@ -330,7 +330,16 @@ export default async function PersonDetailPage({
 
         {!person.is_self && <ClusterBlock personId={person.id} />}
 
-        {!person.is_self && <ChannelsList contacts={contacts} />}
+        {!person.is_self && (
+          <ChannelsList
+            contacts={contacts}
+            personId={person.id}
+            addresses={person.addresses ?? []}
+            linkedinUrl={person.linkedin_url}
+            currentLocation={person.current_location}
+            homeLocation={person.home_location}
+          />
+        )}
 
         {!person.is_self && (
           <DraftGenerator
@@ -349,15 +358,21 @@ export default async function PersonDetailPage({
 
         {!person.is_self && <LifeEventsBlock personId={person.id} />}
 
-        {showProfileBody && (person.addresses?.length ?? 0) > 0 && (
-          <section>
-            <div className="section-head">
-              <span className="t-label">Adressen</span>
-              <span className="rule" />
-            </div>
-            <AddressList addresses={person.addresses ?? []} />
-          </section>
-        )}
+        {/* Adressen sind jetzt Teil der Stammdaten-Section (oberhalb).
+            Multi-Address-Pflege läuft über /people/[id]/edit. Self-
+            Profile hat keine Stammdaten-Section, daher hier eingerückt
+            nur für self ein Fallback rendern. */}
+        {showProfileBody &&
+          person.is_self &&
+          (person.addresses?.length ?? 0) > 0 && (
+            <section>
+              <div className="section-head">
+                <span className="t-label">Adressen</span>
+                <span className="rule" />
+              </div>
+              <AddressList addresses={person.addresses ?? []} />
+            </section>
+          )}
 
         {showProfileBody && (
           <div className="grid gap-10 md:grid-cols-2">

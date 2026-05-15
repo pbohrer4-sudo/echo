@@ -1,18 +1,28 @@
-// „Weitere Kanäle"-Block auf Person-Detail (Phase 2 V3-Migration, 0030).
+// „Stammdaten"-Block auf Person-Detail. Fix-Slots für die wichtigsten
+// Stammdaten (Mobilfunk, Festnetz, Email, Adresse, LinkedIn, Website)
+// werden IMMER gerendert — auch wenn leer, damit der User auf einen
+// Blick sieht was noch fehlt. Zusätzliche Channels (Telegram, Signal,
+// Socials etc.) werden chronologisch darunter angehängt.
 //
-// Liegt einen Klick tiefer als Anrufen + WhatsApp aus der Action-Bar.
-// Datenquelle: person_contacts. Native-URI-Schemes wo möglich
-// (mailto:, sms:, tel:), sonst https-Link. Primary-Markierung bekommt
-// einen kleinen ★-Indikator.
+// Datenquelle: person_contacts + person.addresses + person.linkedin_url.
 
+import Link from "next/link";
 import {
   CONTACT_CHANNEL_LABELS,
+  type AddressEntry,
   type ContactChannel,
   type PersonContact,
 } from "@/lib/types";
 
 interface Props {
   contacts: PersonContact[];
+  // Optional damit die Stammdaten Adresse + Legacy linkedin_url
+  // mitrendern können. Beide kommen aus der Person-Row.
+  personId?: string;
+  addresses?: AddressEntry[];
+  linkedinUrl?: string | null;
+  currentLocation?: string | null;
+  homeLocation?: string | null;
 }
 
 interface ResolvedChannel {
@@ -23,7 +33,8 @@ interface ResolvedChannel {
   is_primary: boolean;
 }
 
-function buildHref(c: PersonContact): string | null {
+function buildHref(c: PersonContact | null): string | null {
+  if (!c) return null;
   const v = c.value.trim();
   if (!v) return null;
   const isUrl = v.startsWith("http://") || v.startsWith("https://");
@@ -113,21 +124,177 @@ function buildChannels(contacts: PersonContact[]): ResolvedChannel[] {
   return out;
 }
 
-export function ChannelsList({ contacts }: Props) {
-  const channels = buildChannels(contacts);
-  if (channels.length === 0) return null;
+// Fix-Slots der Stammdaten — diese erscheinen IMMER. Leere Slots
+// zeigen „—" und linken auf die Edit-Seite damit der User direkt
+// reinkommt und das Feld füllen kann.
+interface SlotRow {
+  key: string;
+  label: string;
+  icon: ContactChannel | "address";
+  value: string | null;
+  href: string | null;
+  is_primary?: boolean;
+}
+
+function formatAddress(a: AddressEntry): string {
+  const line1 = a.street ?? "";
+  const line2 = [a.postal_code, a.city].filter(Boolean).join(" ");
+  return [line1, line2, a.country].filter(Boolean).join(", ");
+}
+
+function findPhoneBy(
+  contacts: PersonContact[],
+  predicate: (c: PersonContact) => boolean,
+): PersonContact | null {
+  return contacts.find(predicate) ?? null;
+}
+
+export function ChannelsList({
+  contacts,
+  personId,
+  addresses,
+  linkedinUrl,
+  currentLocation,
+  homeLocation,
+}: Props) {
+  // Slot-Detection. Mobilfunk = phone mit subtype mobil/iphone;
+  // Festnetz = phone mit landline/festnetz; Email = primary email;
+  // Adresse = erste address ODER current_location / home_location als
+  // Fallback; LinkedIn = explizit person_contacts ODER legacy
+  // person.linkedin_url.
+  const mobilePhone = findPhoneBy(contacts, (c) => {
+    if (c.channel !== "phone") return false;
+    const s = c.subtype?.toLowerCase() ?? "";
+    return s.includes("mobil") || s.includes("iphone");
+  });
+  const landlinePhone = findPhoneBy(contacts, (c) => {
+    if (c.channel !== "phone") return false;
+    const s = c.subtype?.toLowerCase() ?? "";
+    return s.includes("landline") || s.includes("festnetz");
+  });
+  // Falls KEIN explicit Subtype gesetzt ist, fällt der Slot auf das
+  // erste verfügbare phone-Contact — sonst sähen Legacy-Daten ohne
+  // Subtype für immer leer aus.
+  const fallbackPhone =
+    !mobilePhone && !landlinePhone
+      ? findPhoneBy(contacts, (c) => c.channel === "phone")
+      : null;
+
+  const emailContact =
+    contacts.find((c) => c.channel === "email" && c.is_primary) ??
+    contacts.find((c) => c.channel === "email") ??
+    null;
+
+  const linkedinContact = contacts.find((c) => c.channel === "linkedin");
+  const linkedinValue = linkedinContact?.value ?? linkedinUrl ?? null;
+  const linkedinHref = linkedinValue
+    ? linkedinValue.startsWith("http")
+      ? linkedinValue
+      : `https://linkedin.com/in/${linkedinValue.replace(/^@/, "")}`
+    : null;
+
+  const websiteContact = contacts.find((c) => c.channel === "website");
+
+  // Adresse: erste vollständige Adresse aus addresses[], sonst
+  // current_location, sonst home_location.
+  const firstAddress =
+    (addresses ?? []).find(
+      (a) => a.street || a.city || a.postal_code || a.country,
+    ) ?? null;
+  const addressValue =
+    (firstAddress ? formatAddress(firstAddress) : "") ||
+    currentLocation ||
+    homeLocation ||
+    null;
+
+  const editHref = personId ? `/people/${personId}/edit` : "#";
+
+  const fixedSlots: SlotRow[] = [
+    {
+      key: "phone-mobile",
+      label: fallbackPhone ? "Telefon" : "Telefon (Mobilfunk)",
+      icon: "phone",
+      value: (mobilePhone ?? fallbackPhone)?.value ?? null,
+      href: buildHref(mobilePhone ?? fallbackPhone ?? null),
+      is_primary:
+        (mobilePhone ?? fallbackPhone)?.is_primary,
+    },
+    {
+      key: "phone-landline",
+      label: "Telefon (Festnetz)",
+      icon: "phone",
+      value: landlinePhone?.value ?? null,
+      href: buildHref(landlinePhone),
+      is_primary: landlinePhone?.is_primary,
+    },
+    {
+      key: "email",
+      label: "Email",
+      icon: "email",
+      value: emailContact?.value ?? null,
+      href: buildHref(emailContact),
+      is_primary: emailContact?.is_primary,
+    },
+    {
+      key: "address",
+      label: "Adresse",
+      icon: "address",
+      value: addressValue,
+      // Adressen haben keinen direkten URI-Scheme (mailto/tel) —
+      // wir linken auf Google Maps wenn gefüllt, damit der User
+      // klicken kann.
+      href: addressValue
+        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+            addressValue,
+          )}`
+        : null,
+    },
+    {
+      key: "linkedin",
+      label: "LinkedIn",
+      icon: "linkedin",
+      value: linkedinValue,
+      href: linkedinHref,
+    },
+    {
+      key: "website",
+      label: "Website",
+      icon: "website",
+      value: websiteContact?.value ?? null,
+      href: buildHref(websiteContact ?? null),
+    },
+  ];
+
+  // Verwendete Contact-IDs aufsammeln damit „Extra"-Liste sie nicht
+  // doppelt rendert.
+  const usedIds = new Set<string>(
+    [
+      mobilePhone,
+      landlinePhone,
+      fallbackPhone,
+      emailContact,
+      linkedinContact,
+      websiteContact,
+    ]
+      .filter((c): c is PersonContact => Boolean(c))
+      .map((c) => c.id),
+  );
+  const extras = buildChannels(contacts.filter((c) => !usedIds.has(c.id)));
 
   return (
-    <section id="weitere-kanaele" className="space-y-3">
+    <section id="stammdaten" className="space-y-3">
       <div className="section-head">
-        <span className="t-label">Weitere Kanäle</span>
+        <span className="t-label">Stammdaten</span>
         <span className="rule" />
       </div>
       <ul className="overflow-hidden rounded border border-rule bg-paper">
-        {channels.map((c, i) => (
+        {fixedSlots.map((s) => (
+          <SlotItem key={s.key} slot={s} editHref={editHref} />
+        ))}
+        {extras.map((c, i) => (
           <li
             key={`${c.type}-${i}-${c.value}`}
-            className="border-b border-rule-soft last:border-0"
+            className="border-t border-rule-soft"
           >
             <a
               href={c.href}
@@ -157,8 +324,57 @@ export function ChannelsList({ contacts }: Props) {
   );
 }
 
+function SlotItem({ slot, editHref }: { slot: SlotRow; editHref: string }) {
+  const filled = Boolean(slot.value);
+  const rowClass =
+    "flex items-center gap-3 px-4 py-2.5 transition hover:bg-paper-2 border-b border-rule-soft last:border-0";
+
+  if (filled && slot.href) {
+    return (
+      <li>
+        <a
+          href={slot.href}
+          target={slot.href.startsWith("http") ? "_blank" : undefined}
+          rel={slot.href.startsWith("http") ? "noopener noreferrer" : undefined}
+          className={rowClass}
+        >
+          <ChannelIcon type={slot.icon} />
+          <span className="text-sm text-ink-1">{slot.label}</span>
+          {slot.is_primary && (
+            <span
+              className="font-mono text-[9px] uppercase tracking-wider text-action"
+              title="Primärer Kontakt"
+              aria-hidden
+            >
+              ★
+            </span>
+          )}
+          <span className="ml-auto truncate font-mono text-xs text-ink-3">
+            {slot.value}
+          </span>
+        </a>
+      </li>
+    );
+  }
+
+  // Leerer Slot — klickbar als Link zur Edit-Seite damit der User
+  // schnell hin kann. Display: gedämpfte Schrift, „—" auf der rechten
+  // Seite, dezenter „bearbeiten"-Hint.
+  return (
+    <li>
+      <Link href={editHref} className={`${rowClass} text-ink-4`}>
+        <ChannelIcon type={slot.icon} />
+        <span className="text-sm">{slot.label}</span>
+        <span className="ml-auto truncate font-mono text-xs italic">
+          — hinzufügen
+        </span>
+      </Link>
+    </li>
+  );
+}
+
 // Inline SVG-Icons pro Channel-Typ — keine Icon-Library als Abhängigkeit.
-function ChannelIcon({ type }: { type: ContactChannel }) {
+function ChannelIcon({ type }: { type: ContactChannel | "address" }) {
   const props = {
     width: 16,
     height: 16,
@@ -172,6 +388,13 @@ function ChannelIcon({ type }: { type: ContactChannel }) {
     className: "shrink-0 text-ink-3",
   };
   switch (type) {
+    case "address":
+      return (
+        <svg {...props}>
+          <path d="M12 22s-8-7.5-8-13a8 8 0 1 1 16 0c0 5.5-8 13-8 13z" />
+          <circle cx="12" cy="9" r="3" />
+        </svg>
+      );
     case "email":
       return (
         <svg {...props}>
