@@ -20,6 +20,7 @@ import {
   resolveRelatedIds,
 } from "@/lib/relationships";
 import { resolveOrCreateOrganization } from "@/lib/organizations";
+import { addTagToPerson, getOrCreateTag } from "@/lib/tags";
 import type {
   ContactChannel,
   EmailEntry,
@@ -163,6 +164,54 @@ async function syncRelationshipsToV3(args: {
     if (error && !error.message.includes("duplicate key")) {
       console.error("[commit] syncRelationshipsToV3 row failed", error.message);
     }
+  }
+}
+
+// Tags + Passions persistieren. Tags landen in der V3-Struktur
+// (tags + person_tags via getOrCreateTag/addTagToPerson). Passions
+// schreiben wir direkt in die passions-Tabelle (keine Junction-
+// Table — Passion.name + person_id reicht).
+async function syncTagsAndPassions(args: {
+  supabase: V3SyncSupabase;
+  userId: string;
+  personId: string;
+  tags: string[];
+  passions: string[];
+}): Promise<void> {
+  // Tags: pro Name einmal getOrCreateTag + addTagToPerson. Beide
+  // Calls sind defensive (race-safe, idempotent), Errors werden
+  // geloggt aber blockieren den Commit nicht.
+  for (const raw of args.tags) {
+    const name = raw.trim();
+    if (!name) continue;
+    const tagRow = await getOrCreateTag({ name, cluster: "interests" });
+    if (!tagRow) continue;
+    const res = await addTagToPerson(args.personId, tagRow.id);
+    if (!res.ok) {
+      console.warn(
+        "[commit] addTagToPerson skipped",
+        { personId: args.personId, tag: name, reason: res.reason },
+      );
+    }
+  }
+
+  // Passions: direkter Insert. Bei Duplikat (23505) durchgehen lassen
+  // — der User hat denselben Passion schon im Profil und wir wollen
+  // nicht durch Voice-Spam stören.
+  const passionRows: Record<string, unknown>[] = [];
+  for (const raw of args.passions) {
+    const name = raw.trim();
+    if (!name) continue;
+    passionRows.push({
+      user_id: args.userId,
+      person_id: args.personId,
+      name,
+    });
+  }
+  if (passionRows.length === 0) return;
+  const { error } = await args.supabase.from("passions").insert(passionRows);
+  if (error) {
+    console.warn("[commit] passions insert failed", error.message);
   }
 }
 
@@ -317,6 +366,13 @@ export async function POST(request: Request) {
       userId: user.id,
       personId: data.id,
       addresses,
+    });
+    await syncTagsAndPassions({
+      supabase: supabase as unknown as V3SyncSupabase,
+      userId: user.id,
+      personId: data.id,
+      tags: stringArray(input.tags),
+      passions: stringArray(input.passions),
     });
 
     // Stash any relationships for Pass 1.7. We can't resolve them yet
@@ -514,6 +570,18 @@ export async function POST(request: Request) {
         addresses: addAddresses,
       });
     }
+
+    // V3 tags + passions (Voice-Update mit add_tags/add_passions).
+    const addPassions = stringArray(input.add_passions);
+    if (addTags.length || addPassions.length) {
+      await syncTagsAndPassions({
+        supabase: supabase as unknown as V3SyncSupabase,
+        userId: user.id,
+        personId: id,
+        tags: addTags,
+        passions: addPassions,
+      });
+    }
   }
 
   // Pass 1.7: relationships. Resolve every related_person_name against
@@ -526,6 +594,41 @@ export async function POST(request: Request) {
       newByName,
       rawRels: pendingRelEdges.map((e) => e.rawRel),
     });
+
+    // Auto-create für jedes related_person_name das noch nicht
+    // existiert. Vorher hat resolveMap.get(name) === undefined einfach
+    // den Edge gedroppt — Folge: User sagt „Felix ist Saskias Partner",
+    // Felix wird angelegt, Saskia nicht. Jetzt erstellen wir eine
+    // Minimal-Person (nur name + purpose=personal) und referenzieren
+    // die. Der User kann sie später per Detail-Seite oder Voice
+    // anreichern.
+    for (const e of pendingRelEdges) {
+      if (e.rawRel.id) continue; // explizite ID gewinnt
+      const name = e.rawRel.name?.trim();
+      if (!name) continue;
+      if (resolveMap.has(name)) continue; // schon aufgelöst
+      const { data: created, error: createErr } = await supabase
+        .from("people")
+        .insert({
+          user_id: user.id,
+          name,
+          purpose: "personal",
+        })
+        .select("id")
+        .single();
+      if (createErr || !created) {
+        console.warn(
+          "[commit] auto-create related person failed",
+          name,
+          createErr?.message,
+        );
+        continue;
+      }
+      const newId = (created as { id: string }).id;
+      resolveMap.set(name, newId);
+      newByName.set(name.toLowerCase(), newId);
+      commits.people += 1;
+    }
 
     const directedEdges: { from: string; to: string; label: string }[] = [];
     for (const e of pendingRelEdges) {

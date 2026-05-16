@@ -91,6 +91,7 @@ interface CallEdit {
 
   // create_person arrays
   tags?: ItemEdit<string>[];
+  passions?: ItemEdit<string>[];
   phones?: ItemEdit<PhoneEntry>[];
   emails?: ItemEdit<EmailEntry>[];
   addresses?: ItemEdit<AddressEntry>[];
@@ -100,6 +101,7 @@ interface CallEdit {
 
   // update_person additive arrays
   add_tags?: ItemEdit<string>[];
+  add_passions?: ItemEdit<string>[];
   add_phones?: ItemEdit<PhoneEntry>[];
   add_emails?: ItemEdit<EmailEntry>[];
   add_addresses?: ItemEdit<AddressEntry>[];
@@ -178,6 +180,7 @@ function makeEdit(call: ToolCall): CallEdit {
           ? { enabled: true, value: asString(input.met_location) }
           : undefined,
         tags: arr<string>(input.tags).map((v) => ({ enabled: true, value: v })),
+        passions: arr<string>(input.passions).map((v) => ({ enabled: true, value: v })),
         phones: arr<PhoneEntry>(input.phones).map((v) => ({
           enabled: true,
           value: { label: asString(v.label) || "mobile", value: asString(v.value) },
@@ -249,6 +252,7 @@ function makeEdit(call: ToolCall): CallEdit {
           ? { enabled: true, value: asString(input.met_location) }
           : undefined,
         add_tags: arr<string>(input.add_tags).map((v) => ({ enabled: true, value: v })),
+        add_passions: arr<string>(input.add_passions).map((v) => ({ enabled: true, value: v })),
         add_phones: arr<PhoneEntry>(input.add_phones).map((v) => ({
           enabled: true,
           value: { label: asString(v.label) || "mobile", value: asString(v.value) },
@@ -392,6 +396,7 @@ function applyEdit(edit: CallEdit): ToolCall {
       setIf("met_date", edit.met_date);
       setIf("met_location", edit.met_location);
       setArr("tags", edit.tags, (s) => !s.trim());
+      setArr("passions", edit.passions, (s) => !s.trim());
       setArr("phones", edit.phones, (p) => !p.value.trim());
       setArr("emails", edit.emails, (p) => !p.value.trim());
       setArr("addresses", edit.addresses, (a) => !(a.street?.trim() || a.city?.trim()));
@@ -417,6 +422,7 @@ function applyEdit(edit: CallEdit): ToolCall {
       setIf("met_date", edit.met_date);
       setIf("met_location", edit.met_location);
       setArr("add_tags", edit.add_tags, (s) => !s.trim());
+      setArr("add_passions", edit.add_passions, (s) => !s.trim());
       setArr("add_phones", edit.add_phones, (p) => !p.value.trim());
       setArr("add_emails", edit.add_emails, (p) => !p.value.trim());
       setArr("add_addresses", edit.add_addresses, (a) => !(a.street?.trim() || a.city?.trim()));
@@ -831,6 +837,30 @@ export function ExtractionConfirmation({
                           />
                         </ArrayRow>
                       ))}
+                      {edit.passions?.map((p, i) => (
+                        <ArrayRow
+                          key={`passion-${i}`}
+                          enabled={p.enabled}
+                          onToggle={(en) =>
+                            patchArrayItem<string>(idx, "passions", i, {
+                              enabled: en,
+                            })
+                          }
+                          label="Passion"
+                        >
+                          <input
+                            type="text"
+                            value={p.value}
+                            disabled={!p.enabled}
+                            onChange={(e) =>
+                              patchArrayItem<string>(idx, "passions", i, {
+                                value: e.target.value,
+                              })
+                            }
+                            className={inputCls}
+                          />
+                        </ArrayRow>
+                      ))}
                       {edit.phones?.map((p, i) => (
                         <ArrayRow
                           key={`phone-${i}`}
@@ -1227,6 +1257,30 @@ export function ExtractionConfirmation({
                             disabled={!t.enabled}
                             onChange={(e) =>
                               patchArrayItem<string>(idx, "add_tags", i, {
+                                value: e.target.value,
+                              })
+                            }
+                            className={inputCls}
+                          />
+                        </ArrayRow>
+                      ))}
+                      {edit.add_passions?.map((p, i) => (
+                        <ArrayRow
+                          key={`addpassion-${i}`}
+                          enabled={p.enabled}
+                          onToggle={(en) =>
+                            patchArrayItem<string>(idx, "add_passions", i, {
+                              enabled: en,
+                            })
+                          }
+                          label="+ Passion"
+                        >
+                          <input
+                            type="text"
+                            value={p.value}
+                            disabled={!p.enabled}
+                            onChange={(e) =>
+                              patchArrayItem<string>(idx, "add_passions", i, {
                                 value: e.target.value,
                               })
                             }

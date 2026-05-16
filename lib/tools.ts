@@ -36,7 +36,13 @@ export const EXTRACTION_TOOLS: Anthropic.Tool[] = [
           type: "array",
           items: { type: "string" },
           description:
-            "Hobbys, Vorlieben, Gemeinsamkeiten, Themen — alles womit der Nutzer Personen später wiederfinden will. Beispiele: 'Tennis', 'Vegetarier', 'Kunde', 'München'.",
+            "TOPIC- / KONTEXT-Marker (NICHT Hobbys/Sport/Kunst — die gehören in passions). Beispiele: 'B2B', 'Kunde', 'Investor-Kontakt', 'München-Szene', 'Newsletter', 'Family-Office'. Eher Tag wie auf einer Karteikarte.",
+        },
+        passions: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Identitäts-stiftende Hobbys / Sport / Kunst / Leidenschaften die die Person ausmachen. Beispiele: 'Tennis', 'Boxen', 'Klavier', 'Klettern', 'Elektronische Musik', 'Kochen', 'Yoga'. Max 5 pro Person. Voice-Beispiel: 'Felix spielt Tennis und boxt' → passions=['Tennis','Boxen']. NIEMALS in tags packen.",
         },
         notes: {
           type: "string",
@@ -222,7 +228,13 @@ export const EXTRACTION_TOOLS: Anthropic.Tool[] = [
           type: "array",
           items: { type: "string" },
           description:
-            "Wird zu existierenden Tags hinzugefügt. Duplikate werden gefiltert.",
+            "TOPIC-/KONTEXT-Marker zu existierenden Tags hinzufügen (NICHT Hobbys — die in add_passions). Beispiele: 'B2B', 'Kunde', 'Investor-Kontakt'. Duplikate gefiltert.",
+        },
+        add_passions: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Identitäts-stiftende Hobbys / Sport / Kunst hinzufügen (z.B. 'Tennis', 'Klavier', 'Klettern'). Voice-Beispiel: 'Felix spielt jetzt auch Tennis' → add_passions=['Tennis']. Max 5 pro Person — Server begrenzt automatisch.",
         },
         add_phones: {
           type: "array",
