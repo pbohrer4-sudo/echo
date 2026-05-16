@@ -36,6 +36,12 @@ export async function addImportantDateAction(
   const label = String(formData.get("label") ?? "").trim();
   const date = String(formData.get("date") ?? "").trim();
   const remind = String(formData.get("remind") ?? "") === "on";
+  // Lead-Tage konfigurierbar (0..365). Vorher hart 7 — User wollte
+  // eigene Wahl, z.B. „am Tag" (0) oder „1 Monat vorher" (30).
+  const leadRaw = String(formData.get("remind_lead_days") ?? "7").trim();
+  const leadDays = remind
+    ? Math.max(0, Math.min(365, parseInt(leadRaw, 10) || 0))
+    : undefined;
 
   if (!personId || !label || !date) return { ok: false, error: "Feld fehlt" };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -53,7 +59,7 @@ export async function addImportantDateAction(
   const existing = (row.important_dates ?? []) as ImportantDate[];
   const next: ImportantDate[] = [
     ...existing,
-    { label, date, remind, remind_lead_days: remind ? 7 : undefined },
+    { label, date, remind, remind_lead_days: leadDays },
   ];
 
   const { error } = await supabase

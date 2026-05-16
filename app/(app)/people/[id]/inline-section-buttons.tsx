@@ -102,6 +102,18 @@ export function AddDateButton({ personId }: { personId: string }) {
   );
 }
 
+// Vorgegebene Lead-Time-Optionen — entspricht REMIND_LEAD_OPTIONS aus
+// lib/types.ts. Default 7 (eine Woche vorher) — bewährt für
+// Geburtstag/Hochzeitstag damit man noch Geschenk besorgen kann.
+const LEAD_OPTIONS: { value: number; label: string }[] = [
+  { value: 0, label: "Am Tag" },
+  { value: 1, label: "1 Tag vorher" },
+  { value: 3, label: "3 Tage vorher" },
+  { value: 7, label: "1 Woche vorher" },
+  { value: 14, label: "2 Wochen vorher" },
+  { value: 30, label: "1 Monat vorher" },
+];
+
 function AddDateForm({
   personId,
   onDone,
@@ -115,6 +127,7 @@ function AddDateForm({
   const [customLabel, setCustomLabel] = useState("");
   const [date, setDate] = useState("");
   const [remind, setRemind] = useState(true);
+  const [leadDays, setLeadDays] = useState<number>(7);
 
   const isCustom = label === "andere";
   const effectiveLabel = isCustom ? customLabel.trim() || "andere" : label;
@@ -124,7 +137,10 @@ function AddDateForm({
     fd.set("person_id", personId);
     fd.set("label", effectiveLabel);
     fd.set("date", date);
-    if (remind) fd.set("remind", "on");
+    if (remind) {
+      fd.set("remind", "on");
+      fd.set("remind_lead_days", String(leadDays));
+    }
     startTransition(async () => {
       const res = await addImportantDateAction(fd);
       if (!res.ok) setError(res.error ?? "Fehler");
@@ -177,8 +193,24 @@ function AddDateForm({
           checked={remind}
           onChange={(e) => setRemind(e.target.checked)}
         />
-        Jährlich erinnern (7 Tage vorher)
+        Jährlich erinnern
       </label>
+      {remind && (
+        <label className="space-y-1 block">
+          <Label>Vorlauf</Label>
+          <select
+            value={leadDays}
+            onChange={(e) => setLeadDays(parseInt(e.target.value, 10))}
+            className={inputClass}
+          >
+            {LEAD_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <ErrorRow message={error} />
       <SubmitRow pending={pending} onSubmit={submit} onCancel={onDone} />
     </div>
