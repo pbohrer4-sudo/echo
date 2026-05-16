@@ -369,7 +369,9 @@ function ChannelCard({
     );
   }
 
-  // Populated: gemeinsame Card, oben = call, unten = edit.
+  // Populated: kompakte Card, Icon oben (mittig), Nummer unten als
+  // klickbar-zur-Edit. Das Channel-Wort (Telefon / WhatsApp) ist
+  // bewusst weg — der User erkennt das Icon und die Card-Farbe.
   return (
     <div
       className="flex min-h-12 flex-col overflow-hidden rounded"
@@ -378,23 +380,25 @@ function ChannelCard({
       {href ? (
         <a
           href={href}
-          className="flex flex-1 items-center justify-center gap-2 px-2 py-1.5 text-sm font-medium hover:opacity-90"
+          className="flex items-center justify-center pt-2 hover:opacity-90"
           aria-label={`${label} – anrufen`}
+          title={label}
         >
           {icon}
-          <span>{label}</span>
         </a>
       ) : (
-        <span className="flex flex-1 items-center justify-center gap-2 px-2 py-1.5 text-sm font-medium opacity-70">
+        <span
+          className="flex items-center justify-center pt-2 opacity-70"
+          title={label}
+        >
           {icon}
-          <span>{label}</span>
         </span>
       )}
       <button
         type="button"
         onClick={onEdit}
         title="Nummer bearbeiten"
-        className="px-2 pb-2 text-[11px] font-normal underline underline-offset-2 opacity-90 transition hover:opacity-100"
+        className="px-2 pb-2 pt-0.5 text-xs font-medium underline underline-offset-2 opacity-95 transition hover:opacity-100"
       >
         {value}
       </button>

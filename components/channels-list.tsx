@@ -212,12 +212,11 @@ export function ChannelsList({
   const fixedSlots: SlotRow[] = [
     {
       key: "phone-mobile",
-      label: fallbackPhone ? "Telefon" : "Telefon (Mobilfunk)",
+      label: "Telefon (Mobilfunk)",
       icon: "phone",
       value: (mobilePhone ?? fallbackPhone)?.value ?? null,
       href: buildHref(mobilePhone ?? fallbackPhone ?? null),
-      is_primary:
-        (mobilePhone ?? fallbackPhone)?.is_primary,
+      is_primary: (mobilePhone ?? fallbackPhone)?.is_primary,
     },
     {
       key: "phone-landline",
@@ -279,7 +278,14 @@ export function ChannelsList({
       .filter((c): c is PersonContact => Boolean(c))
       .map((c) => c.id),
   );
-  const extras = buildChannels(contacts.filter((c) => !usedIds.has(c.id)));
+  // Phone-Channel komplett aus den Extras rauslassen: die Stammdaten
+  // haben zwei feste Phone-Slots (Mobilfunk + Festnetz), weitere
+  // Telefonnummern landen sonst als loses „Telefon"-Item darunter und
+  // verwirren („wieso drei Telefon-Zeilen?"). Wer mehr als zwei Nummern
+  // pflegen will, macht das über /people/[id]/edit.
+  const extras = buildChannels(
+    contacts.filter((c) => !usedIds.has(c.id) && c.channel !== "phone"),
+  );
 
   return (
     <section id="stammdaten" className="space-y-3">
