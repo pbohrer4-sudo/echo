@@ -18,3 +18,24 @@ Optionen:
 Architektur-Idee: Jeder CTA-Vorschlag hat einen `kind` (research /
 draft / book) den die LLM-API zusätzlich zum Text liefert, damit der
 Client den richtigen Handler triggern kann.
+
+## QR-Code scannen + automatisch Person anlegen
+
+Stand `512f5c6`: Self-Profile zeigt einen vCard-QR-Code zum Teilen
+(`components/share-vcard.tsx`). Beim Empfänger landet das im
+nativen Kontakt-Import des Telefons — funktioniert für Nicht-Echo-
+User out-of-the-box.
+
+Zu bauen: Wenn der Empfänger ECHO benutzt, sollte er den QR-Code
+INNERHALB der App scannen können und die Person inkl. aller
+strukturierten Felder direkt im CRM landen.
+
+Architektur:
+- Neuer Button „QR scannen" auf /people/new neben dem Voice-Capture.
+- Browser-BarcodeDetector-API wo verfügbar (Chrome, Edge), sonst
+  Fallback auf html5-qrcode (kleine Lib, ~30kb).
+- Geparster vCard-String → parseVcards() (existiert bereits in
+  lib/vcard.ts) → Quick-Add-Form pre-filled → Bestätigen.
+- Bonus: vCard kann Custom-X-Fields tragen. Echo könnte
+  X-ECHO-PURPOSE / X-ECHO-PASSIONS etc. einfügen die parseVcards
+  versteht und in die strukturierten Felder schreibt.
