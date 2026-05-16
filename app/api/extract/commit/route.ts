@@ -808,7 +808,16 @@ export async function POST(request: Request) {
   revalidatePath("/people");
   revalidatePath("/inbox");
 
-  return NextResponse.json({ ok: true, commits });
+  // newByName-Map zurückgeben damit der Client die grünen
+  // „Person angelegt"-Chips zu klickbaren Links auf /people/[id]
+  // machen kann. Key = lower-case Name (so wie er reingegeben wurde),
+  // Value = UUID. Enthält sowohl explizit create_person'te Personen
+  // als auch Auto-Create-Stubs aus dem Relationships-Pass.
+  const createdByName: Record<string, string> = {};
+  for (const [name, id] of newByName.entries()) {
+    createdByName[name] = id;
+  }
+  return NextResponse.json({ ok: true, commits, created_person_ids: createdByName });
 }
 
 function scopeOr(v: unknown, fallback: "work" | "personal" | "both") {

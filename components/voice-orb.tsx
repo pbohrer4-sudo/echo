@@ -154,12 +154,17 @@ const ACTION_LABEL: Record<string, string> = {
 };
 
 // Holt — wenn möglich — die Person-UUID aus einem Tool-Call damit der
-// Success-Chip direkt auf /people/[id] linken kann. Liefert null für
-// create_person (Server vergibt die ID erst beim Commit, wir kriegen
-// sie momentan nicht zurück) und für tools ohne Person-Bezug.
+// Success-Chip direkt auf /people/[id] linken kann. Für create_person
+// erwarten wir _created_person_id, das wir client-seitig nach dem
+// Commit aus der Server-Response (created_person_ids) reinpatchen.
 function personIdFromCall(call: ToolCall): string | null {
   const input = call.input as Record<string, unknown>;
   switch (call.name) {
+    case "create_person":
+      return typeof input._created_person_id === "string" &&
+        input._created_person_id
+        ? input._created_person_id
+        : null;
     case "update_person":
       return typeof input.id === "string" && input.id ? input.id : null;
     case "log_interaction": {
@@ -175,7 +180,6 @@ function personIdFromCall(call: ToolCall): string | null {
       return typeof input.person_id === "string" && input.person_id
         ? input.person_id
         : null;
-    case "create_person":
     default:
       return null;
   }
@@ -584,12 +588,29 @@ export function VoiceOrb() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error ?? `Commit ${res.status}`);
       }
+      // Server liefert created_person_ids: { lower-name → uuid }.
+      // Wir reichen die UUID in jeden create_person-Call hoch (als
+      // synthetisches input.id), damit personIdFromCall() die grünen
+      // Chips zu /people/[id]-Links machen kann.
+      const data = (await res.json().catch(() => ({}))) as {
+        created_person_ids?: Record<string, string>;
+      };
+      const idsByName = data.created_person_ids ?? {};
+      const enrichedCalls: ToolCall[] = editedCalls.map((c) => {
+        if (c.name !== "create_person") return c;
+        const input = c.input as Record<string, unknown>;
+        const name =
+          typeof input.name === "string" ? input.name.trim().toLowerCase() : "";
+        const id = name ? idsByName[name] : undefined;
+        if (!id) return c;
+        return { ...c, input: { ...input, _created_person_id: id } };
+      });
       // Append a transcript record so the user can see what got saved
       // when they scroll back later. This is the "und gemacht wurde"
       // half of the LLM-style history.
       setTranscript((prev) => [
         ...prev,
-        { kind: "actions", calls: editedCalls, ts: Date.now() },
+        { kind: "actions", calls: enrichedCalls, ts: Date.now() },
       ]);
       setPendingToolCalls([]);
       setOrbState("idle");
