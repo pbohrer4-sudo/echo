@@ -84,6 +84,10 @@ interface CallEdit {
   role?: ScalarEdit;
   scope?: ScalarEdit;
   notes?: ScalarEdit;
+  gift_idea?: ScalarEdit;
+  how_we_met?: ScalarEdit;
+  met_date?: ScalarEdit;
+  met_location?: ScalarEdit;
 
   // create_person arrays
   tags?: ItemEdit<string>[];
@@ -161,6 +165,18 @@ function makeEdit(call: ToolCall): CallEdit {
         notes: input.notes
           ? { enabled: true, value: asString(input.notes) }
           : undefined,
+        gift_idea: input.gift_idea
+          ? { enabled: true, value: asString(input.gift_idea) }
+          : undefined,
+        how_we_met: input.how_we_met
+          ? { enabled: true, value: asString(input.how_we_met) }
+          : undefined,
+        met_date: input.met_date
+          ? { enabled: true, value: asString(input.met_date) }
+          : undefined,
+        met_location: input.met_location
+          ? { enabled: true, value: asString(input.met_location) }
+          : undefined,
         tags: arr<string>(input.tags).map((v) => ({ enabled: true, value: v })),
         phones: arr<PhoneEntry>(input.phones).map((v) => ({
           enabled: true,
@@ -219,6 +235,18 @@ function makeEdit(call: ToolCall): CallEdit {
           : undefined,
         notes: input.notes !== undefined
           ? { enabled: true, value: asString(input.notes) }
+          : undefined,
+        gift_idea: input.gift_idea !== undefined
+          ? { enabled: true, value: asString(input.gift_idea) }
+          : undefined,
+        how_we_met: input.how_we_met !== undefined
+          ? { enabled: true, value: asString(input.how_we_met) }
+          : undefined,
+        met_date: input.met_date !== undefined
+          ? { enabled: true, value: asString(input.met_date) }
+          : undefined,
+        met_location: input.met_location !== undefined
+          ? { enabled: true, value: asString(input.met_location) }
           : undefined,
         add_tags: arr<string>(input.add_tags).map((v) => ({ enabled: true, value: v })),
         add_phones: arr<PhoneEntry>(input.add_phones).map((v) => ({
@@ -359,6 +387,10 @@ function applyEdit(edit: CallEdit): ToolCall {
       setIf("role", edit.role);
       setIf("scope", edit.scope);
       setIf("notes", edit.notes);
+      setIf("gift_idea", edit.gift_idea);
+      setIf("how_we_met", edit.how_we_met);
+      setIf("met_date", edit.met_date);
+      setIf("met_location", edit.met_location);
       setArr("tags", edit.tags, (s) => !s.trim());
       setArr("phones", edit.phones, (p) => !p.value.trim());
       setArr("emails", edit.emails, (p) => !p.value.trim());
@@ -380,6 +412,10 @@ function applyEdit(edit: CallEdit): ToolCall {
       setIf("role", edit.role);
       setIf("scope", edit.scope);
       setIf("notes", edit.notes);
+      setIf("gift_idea", edit.gift_idea);
+      setIf("how_we_met", edit.how_we_met);
+      setIf("met_date", edit.met_date);
+      setIf("met_location", edit.met_location);
       setArr("add_tags", edit.add_tags, (s) => !s.trim());
       setArr("add_phones", edit.add_phones, (p) => !p.value.trim());
       setArr("add_emails", edit.add_emails, (p) => !p.value.trim());
@@ -682,6 +718,90 @@ export function ExtractionConfirmation({
                             disabled={!edit.notes.enabled}
                             onChange={(e) =>
                               patchScalar(idx, "notes", {
+                                value: e.target.value,
+                              })
+                            }
+                            className={inputCls}
+                          />
+                        </ScalarRow>
+                      )}
+                      {edit.gift_idea && (
+                        <ScalarRow
+                          enabled={edit.gift_idea.enabled}
+                          onToggle={(en) =>
+                            patchScalar(idx, "gift_idea", { enabled: en })
+                          }
+                          label="Gift"
+                        >
+                          <input
+                            type="text"
+                            value={edit.gift_idea.value}
+                            disabled={!edit.gift_idea.enabled}
+                            onChange={(e) =>
+                              patchScalar(idx, "gift_idea", {
+                                value: e.target.value,
+                              })
+                            }
+                            className={inputCls}
+                          />
+                        </ScalarRow>
+                      )}
+                      {edit.how_we_met && (
+                        <ScalarRow
+                          enabled={edit.how_we_met.enabled}
+                          onToggle={(en) =>
+                            patchScalar(idx, "how_we_met", { enabled: en })
+                          }
+                          label="Kennengelernt"
+                        >
+                          <input
+                            type="text"
+                            value={edit.how_we_met.value}
+                            disabled={!edit.how_we_met.enabled}
+                            onChange={(e) =>
+                              patchScalar(idx, "how_we_met", {
+                                value: e.target.value,
+                              })
+                            }
+                            className={inputCls}
+                          />
+                        </ScalarRow>
+                      )}
+                      {edit.met_date && (
+                        <ScalarRow
+                          enabled={edit.met_date.enabled}
+                          onToggle={(en) =>
+                            patchScalar(idx, "met_date", { enabled: en })
+                          }
+                          label="Treff-Datum"
+                        >
+                          <input
+                            type="text"
+                            value={edit.met_date.value}
+                            disabled={!edit.met_date.enabled}
+                            onChange={(e) =>
+                              patchScalar(idx, "met_date", {
+                                value: e.target.value,
+                              })
+                            }
+                            className={inputCls}
+                          />
+                        </ScalarRow>
+                      )}
+                      {edit.met_location && (
+                        <ScalarRow
+                          enabled={edit.met_location.enabled}
+                          onToggle={(en) =>
+                            patchScalar(idx, "met_location", { enabled: en })
+                          }
+                          label="Treff-Ort"
+                        >
+                          <input
+                            type="text"
+                            value={edit.met_location.value}
+                            disabled={!edit.met_location.enabled}
+                            onChange={(e) =>
+                              patchScalar(idx, "met_location", {
                                 value: e.target.value,
                               })
                             }
@@ -999,6 +1119,90 @@ export function ExtractionConfirmation({
                             disabled={!edit.notes.enabled}
                             onChange={(e) =>
                               patchScalar(idx, "notes", {
+                                value: e.target.value,
+                              })
+                            }
+                            className={inputCls}
+                          />
+                        </ScalarRow>
+                      )}
+                      {edit.gift_idea && (
+                        <ScalarRow
+                          enabled={edit.gift_idea.enabled}
+                          onToggle={(en) =>
+                            patchScalar(idx, "gift_idea", { enabled: en })
+                          }
+                          label="Gift"
+                        >
+                          <input
+                            type="text"
+                            value={edit.gift_idea.value}
+                            disabled={!edit.gift_idea.enabled}
+                            onChange={(e) =>
+                              patchScalar(idx, "gift_idea", {
+                                value: e.target.value,
+                              })
+                            }
+                            className={inputCls}
+                          />
+                        </ScalarRow>
+                      )}
+                      {edit.how_we_met && (
+                        <ScalarRow
+                          enabled={edit.how_we_met.enabled}
+                          onToggle={(en) =>
+                            patchScalar(idx, "how_we_met", { enabled: en })
+                          }
+                          label="Kennengelernt"
+                        >
+                          <input
+                            type="text"
+                            value={edit.how_we_met.value}
+                            disabled={!edit.how_we_met.enabled}
+                            onChange={(e) =>
+                              patchScalar(idx, "how_we_met", {
+                                value: e.target.value,
+                              })
+                            }
+                            className={inputCls}
+                          />
+                        </ScalarRow>
+                      )}
+                      {edit.met_date && (
+                        <ScalarRow
+                          enabled={edit.met_date.enabled}
+                          onToggle={(en) =>
+                            patchScalar(idx, "met_date", { enabled: en })
+                          }
+                          label="Treff-Datum"
+                        >
+                          <input
+                            type="text"
+                            value={edit.met_date.value}
+                            disabled={!edit.met_date.enabled}
+                            onChange={(e) =>
+                              patchScalar(idx, "met_date", {
+                                value: e.target.value,
+                              })
+                            }
+                            className={inputCls}
+                          />
+                        </ScalarRow>
+                      )}
+                      {edit.met_location && (
+                        <ScalarRow
+                          enabled={edit.met_location.enabled}
+                          onToggle={(en) =>
+                            patchScalar(idx, "met_location", { enabled: en })
+                          }
+                          label="Treff-Ort"
+                        >
+                          <input
+                            type="text"
+                            value={edit.met_location.value}
+                            disabled={!edit.met_location.enabled}
+                            onChange={(e) =>
+                              patchScalar(idx, "met_location", {
                                 value: e.target.value,
                               })
                             }
