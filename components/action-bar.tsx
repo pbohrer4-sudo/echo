@@ -394,7 +394,7 @@ function ChannelCard({
         type="button"
         onClick={onEdit}
         title="Nummer bearbeiten"
-        className="border-t border-white/20 px-2 py-1 text-[11px] font-normal opacity-90 transition hover:bg-white/10 hover:opacity-100"
+        className="px-2 pb-2 text-[11px] font-normal underline underline-offset-2 opacity-90 transition hover:opacity-100"
       >
         {value}
       </button>
