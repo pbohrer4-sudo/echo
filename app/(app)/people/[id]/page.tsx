@@ -27,6 +27,7 @@ import { getProfileDepth } from "@/lib/profile-depth";
 import { AxisBadges } from "@/components/axis-badges";
 import { ActionBar } from "@/components/action-bar";
 import { ChannelsList } from "@/components/channels-list";
+import { ShareVCard } from "@/components/share-vcard";
 import { DraftGenerator } from "@/components/draft-generator";
 import { SuggestionStack } from "./suggestion-stack";
 import { ClusterBlock } from "./cluster-block";
@@ -320,6 +321,10 @@ export default async function PersonDetailPage({
           >
             <TabStatusOverview status={tabStatus} />
           </div>
+        )}
+
+        {showProfileBody && person.is_self && (
+          <ShareVCard person={person} contacts={contacts} />
         )}
 
         {!person.is_self && (

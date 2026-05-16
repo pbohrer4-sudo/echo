@@ -350,3 +350,137 @@ function parseBlock(block: string): VCardContact | null {
   if (!contact.name) return null;
   return contact;
 }
+
+// ─────────────────────────── Builder ───────────────────────────
+// vCard 3.0 Output für QR-Codes / .vcf-Download. Wir generieren das
+// Spec-Subset das echo aktiv nutzt: N + FN, ORG, TITLE, TEL (mit
+// TYPE), EMAIL (mit TYPE), URL, ADR, BDAY, NOTE. Output ist CRLF-
+// terminiert (vCard-Standard); QR-Encoder sind damit OK.
+
+import type { Person, PersonContact, ContactChannel as Channel } from "@/lib/types";
+
+function vEscape(v: string): string {
+  return v
+    .replace(/\\/g, "\\\\")
+    .replace(/\n/g, "\\n")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,");
+}
+
+function splitFullName(full: string): { first: string; last: string } {
+  const parts = full.trim().split(/\s+/);
+  if (parts.length === 0) return { first: "", last: "" };
+  if (parts.length === 1) return { first: parts[0], last: "" };
+  return {
+    first: parts.slice(0, -1).join(" "),
+    last: parts[parts.length - 1],
+  };
+}
+
+function vCardPhoneType(c: PersonContact): string {
+  const sub = c.subtype?.toLowerCase() ?? "";
+  if (sub.includes("mobil") || sub.includes("iphone")) return "CELL";
+  if (sub.includes("landline") || sub.includes("festnetz")) return "HOME";
+  if (sub.includes("work") || sub.includes("arbeit") || sub.includes("office"))
+    return "WORK";
+  if (sub.includes("fax")) return "FAX";
+  return "VOICE";
+}
+
+function vCardEmailType(c: PersonContact): string {
+  const sub = c.subtype?.toLowerCase() ?? "";
+  if (sub.includes("work") || sub.includes("arbeit") || sub.includes("office"))
+    return "WORK";
+  if (sub.includes("private") || sub.includes("privat")) return "HOME";
+  return "INTERNET";
+}
+
+function socialUrl(channel: Channel, value: string): string | null {
+  const v = value.trim();
+  if (!v) return null;
+  if (v.startsWith("http://") || v.startsWith("https://")) return v;
+  switch (channel) {
+    case "linkedin":
+      return `https://linkedin.com/in/${v.replace(/^@/, "")}`;
+    case "instagram":
+      return `https://instagram.com/${v.replace(/^@/, "")}`;
+    case "twitter":
+      return `https://twitter.com/${v.replace(/^@/, "")}`;
+    case "github":
+      return `https://github.com/${v.replace(/^@/, "")}`;
+    case "telegram":
+      return `https://t.me/${v.replace(/^@/, "")}`;
+    case "calendly":
+      return `https://calendly.com/${v.replace(/^@/, "")}`;
+    case "website":
+      return `https://${v}`;
+    default:
+      return null;
+  }
+}
+
+export function buildVCard({
+  person,
+  contacts,
+}: {
+  person: Person;
+  contacts: PersonContact[];
+}): string {
+  const { first, last } = splitFullName(person.name);
+  const lines: string[] = [];
+  lines.push("BEGIN:VCARD");
+  lines.push("VERSION:3.0");
+  lines.push(`N:${vEscape(last)};${vEscape(first)};;;`);
+  lines.push(`FN:${vEscape(person.name)}`);
+  if (person.company) lines.push(`ORG:${vEscape(person.company)}`);
+  if (person.role) lines.push(`TITLE:${vEscape(person.role)}`);
+  if (person.notes) lines.push(`NOTE:${vEscape(person.notes)}`);
+
+  for (const c of contacts) {
+    if (c.channel === "phone") {
+      lines.push(`TEL;TYPE=${vCardPhoneType(c)}:${vEscape(c.value)}`);
+    } else if (c.channel === "whatsapp") {
+      lines.push(`TEL;TYPE=CELL:${vEscape(c.value)}`);
+    } else if (c.channel === "sms") {
+      lines.push(`TEL;TYPE=CELL,TEXT:${vEscape(c.value)}`);
+    } else if (c.channel === "email") {
+      lines.push(`EMAIL;TYPE=${vCardEmailType(c)}:${vEscape(c.value)}`);
+    } else {
+      const url = socialUrl(c.channel, c.value);
+      if (url) lines.push(`URL:${vEscape(url)}`);
+    }
+  }
+
+  // Legacy linkedin_url als URL anhängen, falls keine
+  // person_contacts-Row für LinkedIn existiert.
+  const hasLinkedinContact = contacts.some((c) => c.channel === "linkedin");
+  if (!hasLinkedinContact && person.linkedin_url) {
+    lines.push(`URL:${vEscape(person.linkedin_url)}`);
+  }
+
+  // Adressen aus JSONB (max 3, sonst wird der QR-Code zu dicht).
+  for (const a of (person.addresses ?? []).slice(0, 3)) {
+    const street = vEscape(a.street ?? "");
+    const city = vEscape(a.city ?? "");
+    const postal = vEscape(a.postal_code ?? "");
+    const country = vEscape(a.country ?? "");
+    if (!street && !city && !postal && !country) continue;
+    const adr = ["", "", street, city, "", postal, country].join(";");
+    const sub = a.label?.toLowerCase() ?? "";
+    let type = "OTHER";
+    if (sub.includes("home") || sub.includes("zuhause")) type = "HOME";
+    else if (sub.includes("work") || sub.includes("arbeit")) type = "WORK";
+    lines.push(`ADR;TYPE=${type}:${adr}`);
+  }
+
+  // Geburtstag aus important_dates (Label „Geburtstag*").
+  const bday = (person.important_dates ?? []).find((d) =>
+    d?.label?.toLowerCase().includes("geburtstag"),
+  );
+  if (bday?.date && /^\d{4}-\d{2}-\d{2}$/.test(bday.date)) {
+    lines.push(`BDAY:${bday.date}`);
+  }
+
+  lines.push("END:VCARD");
+  return lines.join("\r\n");
+}
