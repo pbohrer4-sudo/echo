@@ -159,7 +159,7 @@ export default async function InboxPage() {
             <p className="t-label">{due.length} offen</p>
           </div>
           {due.length === 0 ? (
-            <div className="rounded border border-rule bg-paper px-6 py-12 text-center">
+            <div className="rounded border border-rule bg-paper px-6 py-5 text-center">
               <p className="text-sm text-ink-3">
                 Nichts offen. Heute ist alles abgehakt.
               </p>
