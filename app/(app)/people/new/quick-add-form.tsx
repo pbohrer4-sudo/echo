@@ -182,8 +182,8 @@ export function QuickAddForm({
           />
         </Field>
 
-        {/* — Zweck — */}
-        <Field label="Zweck" hint="Wo gehört diese Person in dein Leben?">
+        {/* — Purpose — */}
+        <Field label="Purpose" hint="Wo gehört diese Person in dein Leben?">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {(Object.keys(PURPOSE_LABELS) as Purpose[]).map((p) => (
               <button
@@ -207,9 +207,9 @@ export function QuickAddForm({
           </div>
         </Field>
 
-        {/* — Tiefe — */}
+        {/* — Depth — */}
         <Field
-          label="Tiefe"
+          label="Depth"
           hint={`„AI entscheidet" wenn du es nicht weißt — ${APP_CONFIG.PUBLIC_NAME} berechnet aus Interaktionen.`}
         >
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

@@ -103,9 +103,9 @@ const COLUMNS: ColumnDef[] = [
   { key: "avatar", label: "Avatar", always: true, default: true, gridCol: "40px", pinned: "start" },
   { key: "name", label: "Name", always: true, default: true, sortKey: "name", gridCol: "minmax(180px,1.6fr)", pinned: "start" },
   { key: "company", label: "Firma · Rolle", default: true, sortKey: "company", gridCol: "minmax(140px,1fr)" },
-  { key: "purpose", label: "Zweck", default: true, gridCol: "100px" },
-  { key: "mode", label: "Modus", default: true, gridCol: "100px" },
-  { key: "depth", label: "Tiefe", default: false, gridCol: "110px" },
+  { key: "purpose", label: "Purpose", default: true, gridCol: "100px" },
+  { key: "mode", label: "Mode", default: true, gridCol: "100px" },
+  { key: "depth", label: "Depth", default: false, gridCol: "110px" },
   { key: "cadence", label: "Cadence", default: false, gridCol: "80px", align: "right" },
   { key: "last_contact", label: "Letzter Kontakt", default: true, sortKey: "last_contact_at", gridCol: "110px" },
   { key: "current_location", label: "Stadt", default: false, gridCol: "120px" },
@@ -469,7 +469,7 @@ export function PeopleTable({
         />
 
         <FilterSelect
-          label="Modus"
+          label="Mode"
           value={modeFilter}
           onChange={(v) => setModeFilter(v as "all" | Mode)}
           options={[
@@ -482,7 +482,7 @@ export function PeopleTable({
         />
 
         <FilterSelect
-          label="Zweck"
+          label="Purpose"
           value={purposeFilter}
           onChange={(v) => setPurposeFilter(v as "all" | Purpose)}
           options={[
@@ -495,7 +495,7 @@ export function PeopleTable({
         />
 
         <FilterSelect
-          label="Tiefe"
+          label="Depth"
           value={depthFilter}
           onChange={(v) => setDepthFilter(v as "all" | Depth)}
           options={[

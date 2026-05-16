@@ -118,7 +118,7 @@ function DepthBadge({
     });
   }
 
-  const label = value ? DEPTH_LABELS[value] : "Tiefe?";
+  const label = value ? DEPTH_LABELS[value] : "Depth?";
   const muted = !value;
 
   return (
@@ -132,10 +132,10 @@ function DepthBadge({
             ? "border-dashed border-rule bg-paper text-ink-3 hover:border-ink-3 hover:text-ink-1"
             : "border-action/30 bg-action-soft text-ink-1 hover:border-action"
         } ${pending ? "opacity-50" : ""}`}
-        aria-label="Tiefe wählen"
+        aria-label="Depth wählen"
       >
         <span className="t-label" style={{ letterSpacing: "0.05em" }}>
-          Tiefe
+          Depth
         </span>
         <span>{label}</span>
         {source === "manual_override" && value && (
@@ -149,7 +149,7 @@ function DepthBadge({
       </button>
       {open && (
         <Popover>
-          <PopoverHeader>Tiefe der Beziehung</PopoverHeader>
+          <PopoverHeader>Depth of relationship</PopoverHeader>
           {(Object.keys(DEPTH_LABELS) as Depth[]).map((d) => (
             <OptionRow
               key={d}
@@ -203,7 +203,7 @@ function PurposeBadge({
     });
   }
 
-  const label = value ? PURPOSE_LABELS[value] : "Zweck?";
+  const label = value ? PURPOSE_LABELS[value] : "Purpose?";
   const muted = !value;
 
   return (
@@ -217,16 +217,16 @@ function PurposeBadge({
             ? "border-dashed border-rule bg-paper text-ink-3 hover:border-ink-3 hover:text-ink-1"
             : "border-signal/40 bg-signal-soft text-ink-1 hover:border-signal"
         } ${pending ? "opacity-50" : ""}`}
-        aria-label="Zweck wählen"
+        aria-label="Purpose wählen"
       >
         <span className="t-label" style={{ letterSpacing: "0.05em" }}>
-          Zweck
+          Purpose
         </span>
         <span>{label}</span>
       </button>
       {open && (
         <Popover>
-          <PopoverHeader>Zweck dieser Beziehung</PopoverHeader>
+          <PopoverHeader>Purpose of relationship</PopoverHeader>
           {(Object.keys(PURPOSE_LABELS) as Purpose[]).map((p) => (
             <OptionRow
               key={p}
@@ -285,16 +285,16 @@ function ModeBadge({
             ? "border-rule bg-paper-2 text-ink-3 hover:border-ink-3"
             : "border-rule bg-paper text-ink-1 hover:border-action hover:text-action"
         } ${pending ? "opacity-50" : ""}`}
-        aria-label="Modus wählen"
+        aria-label="Mode wählen"
       >
         <span className="t-label" style={{ letterSpacing: "0.05em" }}>
-          Modus
+          Mode
         </span>
         <span>{MODE_LABELS[value]}</span>
       </button>
       {open && (
         <Popover>
-          <PopoverHeader>Modus der Beziehung</PopoverHeader>
+          <PopoverHeader>Mode of relationship</PopoverHeader>
           {(Object.keys(MODE_LABELS) as Mode[]).map((m) => (
             <OptionRow
               key={m}

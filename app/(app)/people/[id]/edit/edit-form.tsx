@@ -337,9 +337,9 @@ export function EditPersonForm({
           </Field>
         </div>
 
-        {/* — Zweck — */}
+        {/* — Purpose — */}
         <input type="hidden" name="purpose" value={purpose} />
-        <Field label="Zweck" hint="Wo gehört diese Person in dein Leben?">
+        <Field label="Purpose" hint="Wo gehört diese Person in dein Leben?">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {(Object.keys(PURPOSE_LABELS) as Purpose[]).map((p) => (
               <button
@@ -363,10 +363,10 @@ export function EditPersonForm({
           </div>
         </Field>
 
-        {/* — Tiefe — */}
+        {/* — Depth — */}
         <input type="hidden" name="depth" value={depth} />
         <Field
-          label="Tiefe"
+          label="Depth"
           hint="AI entscheidet wenn unklar — berechnet aus Interaktionen."
         >
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -410,7 +410,7 @@ export function EditPersonForm({
 
         {/* — Modus — */}
         <input type="hidden" name="mode" value={mode} />
-        <Field label="Modus" hint="In welchem Zustand ist die Beziehung gerade?">
+        <Field label="Mode" hint="In welchem Zustand ist die Beziehung gerade?">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {(Object.keys(MODE_LABELS) as Mode[]).map((m) => (
               <button

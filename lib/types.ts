@@ -845,27 +845,27 @@ export type InteractionDirection = "inbound" | "outbound" | "mutual";
 // UI-Helper — Labels (deutsch) für die drei Achsen.
 
 export const DEPTH_LABELS: Record<Depth, string> = {
-  inner_5: "Innerer Kreis",
-  trusted_15: "Vertrauter Kreis",
-  active_50: "Aktiver Kreis",
-  network_150: "Netzwerk",
-  periphery_500: "Peripherie",
+  inner_5: "Inner Circle",
+  trusted_15: "Trusted Circle",
+  active_50: "Active Circle",
+  network_150: "Network",
+  periphery_500: "Periphery",
 };
 
 export const PURPOSE_LABELS: Record<Purpose, string> = {
-  personal: "Privat",
-  family: "Familie",
-  business_active: "Business aktiv",
-  business_latent: "Business latent",
-  aspirational: "Aufbau",
+  personal: "Personal",
+  family: "Family",
+  business_active: "Business Active",
+  business_latent: "Business Latent",
+  aspirational: "Aspirational",
 };
 
 export const MODE_LABELS: Record<Mode, string> = {
-  active: "Aktiv",
-  nurture: "Pflege",
-  dormant: "Ruhend",
-  reconnect: "Wiederbeleben",
-  archive: "Archiviert",
+  active: "Active",
+  nurture: "Nurture",
+  dormant: "Dormant",
+  reconnect: "Reconnect",
+  archive: "Archived",
 };
 
 // Section-Header-Beschreibungen für Passions + Circles (V3 Info-Icons).
