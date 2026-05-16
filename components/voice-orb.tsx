@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ToolCall } from "@/lib/tools";
 import type { BusinessCardData } from "@/lib/business-card";
@@ -151,6 +152,34 @@ const ACTION_LABEL: Record<string, string> = {
   create_reminder: "Erinnerung gesetzt",
   create_todo: "Aufgabe angelegt",
 };
+
+// Holt — wenn möglich — die Person-UUID aus einem Tool-Call damit der
+// Success-Chip direkt auf /people/[id] linken kann. Liefert null für
+// create_person (Server vergibt die ID erst beim Commit, wir kriegen
+// sie momentan nicht zurück) und für tools ohne Person-Bezug.
+function personIdFromCall(call: ToolCall): string | null {
+  const input = call.input as Record<string, unknown>;
+  switch (call.name) {
+    case "update_person":
+      return typeof input.id === "string" && input.id ? input.id : null;
+    case "log_interaction": {
+      const ids = input.person_ids;
+      if (Array.isArray(ids) && typeof ids[0] === "string" && ids[0]) {
+        return ids[0];
+      }
+      return null;
+    }
+    case "create_note":
+    case "create_reminder":
+    case "create_todo":
+      return typeof input.person_id === "string" && input.person_id
+        ? input.person_id
+        : null;
+    case "create_person":
+    default:
+      return null;
+  }
+}
 
 function summarizeAction(call: ToolCall): string {
   const input = call.input as Record<string, unknown>;
@@ -883,27 +912,58 @@ export function VoiceOrb() {
                         key={idx}
                         className="flex flex-wrap items-center gap-2 self-start"
                       >
-                        {item.calls.map((c, ci) => (
-                          <span
-                            key={ci}
-                            className="inline-flex items-center gap-2 rounded border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider"
-                            style={{
-                              borderColor: "oklch(58% 0.10 145)",
-                              color: "oklch(28% 0.06 145)",
-                              background: "oklch(95% 0.03 145)",
-                            }}
-                          >
-                            <span>✓</span>
-                            <span className="font-sans normal-case tracking-normal">
-                              {ACTION_LABEL[c.name] ?? c.name}
-                              {summarizeAction(c) && (
-                                <span className="ml-1 text-ink-3">
-                                  · {summarizeAction(c)}
-                                </span>
-                              )}
+                        {item.calls.map((c, ci) => {
+                          const pid = personIdFromCall(c);
+                          const chipStyle = {
+                            borderColor: "oklch(58% 0.10 145)",
+                            color: "oklch(28% 0.06 145)",
+                            background: "oklch(95% 0.03 145)",
+                          } as const;
+                          const summary = summarizeAction(c);
+                          const body = (
+                            <>
+                              <span>✓</span>
+                              <span className="font-sans normal-case tracking-normal">
+                                {ACTION_LABEL[c.name] ?? c.name}
+                                {summary && (
+                                  <span
+                                    className={`ml-1 ${
+                                      pid
+                                        ? "text-ink-2 underline underline-offset-2 decoration-dotted"
+                                        : "text-ink-3"
+                                    }`}
+                                  >
+                                    · {summary}
+                                  </span>
+                                )}
+                              </span>
+                            </>
+                          );
+                          const chipCls =
+                            "inline-flex items-center gap-2 rounded border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider";
+                          if (pid) {
+                            return (
+                              <Link
+                                key={ci}
+                                href={`/people/${pid}`}
+                                className={`${chipCls} transition hover:shadow-[0_0_0_3px_oklch(90%_0.06_145)]`}
+                                style={chipStyle}
+                                title="Zur Person springen"
+                              >
+                                {body}
+                              </Link>
+                            );
+                          }
+                          return (
+                            <span
+                              key={ci}
+                              className={chipCls}
+                              style={chipStyle}
+                            >
+                              {body}
                             </span>
-                          </span>
-                        ))}
+                          );
+                        })}
                       </div>
                     );
                   }
