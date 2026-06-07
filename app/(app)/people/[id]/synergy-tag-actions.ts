@@ -40,6 +40,43 @@ function getClient(apiKey?: string | null): Anthropic {
   return sharedClient;
 }
 
+// Remove a single synergy keyword tag (quick × on the chip).
+export async function removeSynergyTag(
+  personId: string,
+  tag: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Nicht angemeldet" };
+
+  const { data: person } = await supabase
+    .from("people")
+    .select("synergy_tags")
+    .eq("id", personId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!person) return { ok: false, error: "Person nicht gefunden" };
+
+  const current = Array.isArray(person.synergy_tags)
+    ? (person.synergy_tags as string[])
+    : [];
+  const next = current.filter(
+    (t) => t.toLowerCase() !== tag.toLowerCase(),
+  );
+
+  const { error } = await supabase
+    .from("people")
+    .update({ synergy_tags: next })
+    .eq("id", personId)
+    .eq("user_id", user.id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/people/${personId}`);
+  return { ok: true };
+}
+
 export async function extractSynergyTags(
   personId: string,
 ): Promise<{ ok: boolean; error?: string; tags?: string[] }> {

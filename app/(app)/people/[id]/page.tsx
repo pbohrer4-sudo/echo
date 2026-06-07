@@ -35,6 +35,7 @@ import { DraftGenerator } from "@/components/draft-generator";
 import { SuggestionStack } from "./suggestion-stack";
 import { ClusterBlock } from "./cluster-block";
 import { SynergyTagsButton } from "./synergy-tags-button";
+import { SynergyTagChips } from "./synergy-tag-chips";
 import { LifeEventsBlock } from "./life-events-block";
 import { GamificationDashboard } from "./gamification-dashboard";
 import { APP_CONFIG } from "@/lib/config";
@@ -383,20 +384,13 @@ export default async function PersonDetailPage({
               <span className="rule" />
               <SynergyTagsButton personId={person.id} />
             </div>
-            {/* AI-Schlagworte: klickbar → filtert die People-Liste. */}
+            {/* AI-Schlagworte: klickbar → filtert die People-Liste,
+                × → schnell entfernen. */}
             {(person.synergy_tags?.length ?? 0) > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {person.synergy_tags.map((t) => (
-                  <Link
-                    key={t}
-                    href={`/people?synergy=${encodeURIComponent(t.toLowerCase())}`}
-                    className="tag transition hover:border-action hover:text-action"
-                  >
-                    <span className="dot" />
-                    {t}
-                  </Link>
-                ))}
-              </div>
+              <SynergyTagChips
+                personId={person.id}
+                tags={person.synergy_tags}
+              />
             )}
             <ul className="space-y-1.5">
               {person.synergies.map((s, i) => (
