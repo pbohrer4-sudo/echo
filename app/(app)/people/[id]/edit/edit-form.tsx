@@ -527,7 +527,7 @@ export function EditPersonForm({
             </Field>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Vermittelt durch">
+            <Field label="Vermittelt von">
               <input type="hidden" name="introduced_by" value={introducedByRef?.name ?? ""} />
               <input type="hidden" name="introduced_by_person_id" value={introducedByRef?.id ?? ""} />
               <PersonLookup
@@ -538,7 +538,7 @@ export function EditPersonForm({
                 placeholder="Person suchen oder neu anlegen"
               />
             </Field>
-            <Field label="Zusammen getroffen mit">
+            <Field label="Kennengelernt mit">
               <input type="hidden" name="met_with" value={metWithRef?.name ?? ""} />
               <input type="hidden" name="met_with_person_id" value={metWithRef?.id ?? ""} />
               <PersonLookup

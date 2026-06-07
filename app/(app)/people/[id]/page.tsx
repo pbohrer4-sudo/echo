@@ -475,7 +475,7 @@ export default async function PersonDetailPage({
                     : `— (angelegt ${new Date(person.created_at).toLocaleDateString("de-DE")})`}
                 </OriginRow>
                 {person.introduced_by && (
-                  <OriginRow label="Vermittelt">
+                  <OriginRow label="Vermittelt von">
                     {person.introduced_by_person_id ? (
                       <Link
                         href={`/people/${person.introduced_by_person_id}`}
@@ -489,7 +489,7 @@ export default async function PersonDetailPage({
                   </OriginRow>
                 )}
                 {person.met_with && (
-                  <OriginRow label="Mit">
+                  <OriginRow label="Kennengelernt mit">
                     {person.met_with_person_id ? (
                       <Link
                         href={`/people/${person.met_with_person_id}`}
