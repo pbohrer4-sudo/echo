@@ -40,12 +40,10 @@ export function emptyDraftClusterState(): DraftClusterState {
   };
 }
 
-// 'origin' → Origin section, 'potential' → Synergien section (2026-06-07).
-// 'reminders' (Signals) stays here in the draft editor.
-const CLUSTER_ORDER: TagCluster[] = [
-  "reminders",
-  "interests",
-];
+// 'origin' → Origin section, 'potential' → Synergien section,
+// 'reminders' → Signals (date/reminder section) (2026-06-07).
+// Only 'interests' remains a tag cluster.
+const CLUSTER_ORDER: TagCluster[] = ["interests"];
 
 interface Props {
   state: DraftClusterState;

@@ -65,8 +65,8 @@ export function ClusterEditor({
   personCircles,
   allCircles,
 }: Props) {
-  const reminderTags = tags.filter((t) => t.cluster === "reminders");
-
+  // Signals is no longer a tag cluster — it's the date/reminder section
+  // (migrated up from "Wichtige Daten", rendered in the detail page).
   return (
     <div className="space-y-4">
       <TagsBlock personId={personId} personName={personName} tags={tags} />
@@ -76,16 +76,6 @@ export function ClusterEditor({
         personCircles={personCircles}
         allCircles={allCircles}
       />
-      {/* Signals — eigene Zeile direkt unter Circles. */}
-      <section className="space-y-3">
-        <TagClusterRow
-          cluster="reminders"
-          tags={reminderTags}
-          personId={personId}
-          personName={personName}
-          disabled={false}
-        />
-      </section>
     </div>
   );
 }

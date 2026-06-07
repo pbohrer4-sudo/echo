@@ -374,6 +374,28 @@ export default async function PersonDetailPage({
 
         {!person.is_self && <ClusterBlock personId={person.id} />}
 
+        {/* Signals — dated events + reminders. Migrated up from the old
+            "Wichtige Daten" section (Patrick 2026-06-07): same date/
+            reminder logic, now the primary Signals surface near the top. */}
+        {showProfileBody && (
+          <section>
+            <div className="section-head">
+              <span className="t-label">Signals</span>
+              <span className="rule" />
+              {!person.is_self && (
+                <AddDateButton
+                  personId={person.id}
+                  customLabels={customDateLabels}
+                />
+              )}
+            </div>
+            <DateList
+              dates={person.important_dates ?? []}
+              personId={person.id}
+            />
+          </section>
+        )}
+
         {!person.is_self && (
           <ChannelsList
             contacts={contacts}
@@ -527,41 +549,22 @@ export default async function PersonDetailPage({
           )}
 
         {showProfileBody && (
-          <div className="grid gap-10 md:grid-cols-2">
-            <section>
-              <div className="section-head">
-                <span className="t-label">Wichtige Daten</span>
-                <span className="rule" />
-                {!person.is_self && (
-                  <AddDateButton
-                    personId={person.id}
-                    customLabels={customDateLabels}
-                  />
-                )}
-              </div>
-              <DateList
-                dates={person.important_dates ?? []}
-                personId={person.id}
-              />
-            </section>
-
-            <section>
-              <div className="section-head">
-                <span className="t-label">Beziehungen</span>
-                <span className="rule" />
-                {!person.is_self && (
-                  <AddRelationshipButton
-                    personId={person.id}
-                    candidatePeople={candidateRelationshipPeople}
-                  />
-                )}
-              </div>
-              <RelationshipList
-                relationships={relationships}
-                peopleMap={peopleMap}
-              />
-            </section>
-          </div>
+          <section>
+            <div className="section-head">
+              <span className="t-label">Beziehungen</span>
+              <span className="rule" />
+              {!person.is_self && (
+                <AddRelationshipButton
+                  personId={person.id}
+                  candidatePeople={candidateRelationshipPeople}
+                />
+              )}
+            </div>
+            <RelationshipList
+              relationships={relationships}
+              peopleMap={peopleMap}
+            />
+          </section>
         )}
 
         {/* Stakeholder/Klassifizierung/Interessen-Sektionen entfernt in 0025
