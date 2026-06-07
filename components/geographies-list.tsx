@@ -14,6 +14,8 @@ interface Props {
 }
 
 const GROUP_ORDER: GeoType[] = [
+  "wohnsitz_1",
+  "wohnsitz_2",
   "residence",
   "current_location",
   "professional_hub",
