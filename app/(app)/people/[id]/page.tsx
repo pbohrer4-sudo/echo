@@ -374,6 +374,27 @@ export default async function PersonDetailPage({
 
         {!person.is_self && <ClusterBlock personId={person.id} />}
 
+        {/* Synergien — unter Circles, über Signals (Patrick 2026-06-07). */}
+        {!person.is_self && (person.synergies?.length ?? 0) > 0 && (
+          <section>
+            <div className="section-head">
+              <span className="t-label">Synergien</span>
+              <span className="rule" />
+            </div>
+            <ul className="space-y-1.5">
+              {person.synergies.map((s, i) => (
+                <li
+                  key={i}
+                  className="flex gap-2 text-sm leading-relaxed text-ink-1"
+                >
+                  <span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-action" />
+                  <span>{s}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {/* Signals — dated events + reminders. Migrated up from the old
             "Wichtige Daten" section (Patrick 2026-06-07): same date/
             reminder logic, now the primary Signals surface near the top. */}
@@ -508,27 +529,6 @@ export default async function PersonDetailPage({
               </dl>
             </section>
           )}
-
-        {!person.is_self && (person.synergies?.length ?? 0) > 0 && (
-          <section>
-            <div className="section-head">
-              <span className="t-label">Synergien</span>
-              <span className="rule" />
-            </div>
-            <ul className="space-y-1.5">
-              {person.synergies.map((s, i) => (
-                <li
-                  key={i}
-                  className="flex gap-2 text-sm leading-relaxed text-ink-1"
-                >
-                  <span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-action" />
-                  <span>{s}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
 
         {!person.is_self && <LifeEventsBlock personId={person.id} />}
 
