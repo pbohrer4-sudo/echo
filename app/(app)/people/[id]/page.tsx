@@ -383,6 +383,54 @@ export default async function PersonDetailPage({
           />
         )}
 
+        {!person.is_self &&
+          (person.how_we_met ||
+            person.met_location ||
+            person.met_date ||
+            person.introduced_by ||
+            person.met_with) && (
+            <section>
+              <div className="section-head">
+                <span className="t-label">Origin</span>
+                <span className="rule" />
+              </div>
+              <dl className="kv">
+                {person.how_we_met && (
+                  <div className="contents">
+                    <dt>Wie</dt>
+                    <dd className="whitespace-pre-wrap">{person.how_we_met}</dd>
+                  </div>
+                )}
+                {person.met_location && (
+                  <div className="contents">
+                    <dt>Wo</dt>
+                    <dd>{person.met_location}</dd>
+                  </div>
+                )}
+                <div className="contents">
+                  <dt>Wann</dt>
+                  <dd>
+                    {person.met_date
+                      ? new Date(person.met_date).toLocaleDateString("de-DE")
+                      : `— (angelegt ${new Date(person.created_at).toLocaleDateString("de-DE")})`}
+                  </dd>
+                </div>
+                {person.introduced_by && (
+                  <div className="contents">
+                    <dt>Vermittelt</dt>
+                    <dd>{person.introduced_by}</dd>
+                  </div>
+                )}
+                {person.met_with && (
+                  <div className="contents">
+                    <dt>Mit</dt>
+                    <dd>{person.met_with}</dd>
+                  </div>
+                )}
+              </dl>
+            </section>
+          )}
+
         {!person.is_self && <LifeEventsBlock personId={person.id} />}
 
         {/* Adressen sind jetzt Teil der Stammdaten-Section (oberhalb).

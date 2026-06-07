@@ -53,9 +53,11 @@ interface Props {
 }
 
 // Signals (reminders cluster) is rendered as its own row UNDER Circles
-// (Patrick 2026-06-07 — it felt too similar to "Wichtige Daten" inside
-// the Tags grid). The Tags grid now only holds the non-time clusters.
-const CLUSTER_ORDER: TagCluster[] = ["interests", "potential", "origin"];
+// (Patrick 2026-06-07). The 'origin' cluster was removed entirely — its
+// info now lives in the dedicated "Origin" section (how_we_met / met_date
+// / met_location / introduced_by / met_with). The Tags grid now only
+// holds interests + potential.
+const CLUSTER_ORDER: TagCluster[] = ["interests", "potential"];
 
 export function ClusterEditor({
   personId,

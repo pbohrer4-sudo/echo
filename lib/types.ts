@@ -398,6 +398,10 @@ export interface Person {
   met_date: string | null;
   met_location: string | null;
   met_location_geo: LocationGeo | null;
+  // Origin consolidation (2026-06-07): wer vermittelt hat + mit wem
+  // zusammen man die Person getroffen hat. Freitext.
+  introduced_by: string | null;
+  met_with: string | null;
   // 3-Achsen (Briefing 4.1-4.3).
   depth: Depth | null;
   depth_source: DepthSource;

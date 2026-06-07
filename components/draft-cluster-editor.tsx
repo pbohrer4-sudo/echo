@@ -40,11 +40,12 @@ export function emptyDraftClusterState(): DraftClusterState {
   };
 }
 
+// 'origin' removed (2026-06-07) — now its own "Origin" section.
+// 'reminders' (Signals) stays here in the draft editor for now.
 const CLUSTER_ORDER: TagCluster[] = [
   "reminders",
   "interests",
   "potential",
-  "origin",
 ];
 
 interface Props {

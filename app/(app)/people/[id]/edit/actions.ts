@@ -151,6 +151,8 @@ export async function updatePerson(personId: string, formData: FormData) {
   const linkedinUrl = trimOrNull(formData.get("linkedin_url"));
   const howWeMet = trimOrNull(formData.get("how_we_met"));
   const giftIdea = trimOrNull(formData.get("gift_idea"));
+  const introducedBy = trimOrNull(formData.get("introduced_by"));
+  const metWith = trimOrNull(formData.get("met_with"));
   const metDate = dateOrNull(formData.get("met_date"));
   const metLocation = trimOrNull(formData.get("met_location"));
   const metLocationGeo = parseLocationGeo(formData.get("met_location_geo"));
@@ -217,6 +219,8 @@ export async function updatePerson(personId: string, formData: FormData) {
     linkedin_url: linkedinUrl,
     how_we_met: howWeMet,
     gift_idea: giftIdea,
+    introduced_by: introducedBy,
+    met_with: metWith,
     met_date: metDate,
     met_location: metLocation,
     met_location_geo: metLocationGeo,

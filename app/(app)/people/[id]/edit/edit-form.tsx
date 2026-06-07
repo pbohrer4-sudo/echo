@@ -122,6 +122,8 @@ export function EditPersonForm({
   const [howWeMet, setHowWeMet] = useState(person.how_we_met ?? "");
   const [giftIdea, setGiftIdea] = useState(person.gift_idea ?? "");
   const [metDate, setMetDate] = useState(person.met_date ?? "");
+  const [introducedBy, setIntroducedBy] = useState(person.introduced_by ?? "");
+  const [metWith, setMetWith] = useState(person.met_with ?? "");
   const [purpose, setPurpose] = useState<Purpose | "">(person.purpose ?? "");
   const [depth, setDepth] = useState<Depth | "auto">(
     person.depth ?? "auto",
@@ -462,16 +464,72 @@ export function EditPersonForm({
           value={JSON.stringify(cluster)}
         />
 
-        {/* — Wie wir uns kennengelernt haben — */}
-        <Field label="Wie wir uns kennengelernt haben">
-          <textarea
-            name="how_we_met"
-            rows={3}
-            value={howWeMet}
-            onChange={(e) => setHowWeMet(e.target.value)}
-            className="w-full rounded border border-rule bg-paper px-3 py-2 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20"
-          />
-        </Field>
+        {/* — Origin: wie/wo/wann/durch-wen/mit-wem kennengelernt.
+            Eine zusammenhängende Sektion statt verstreuter Felder. — */}
+        <section className="space-y-3">
+          <div className="section-head">
+            <span className="t-label">Origin</span>
+            <span className="rule" />
+          </div>
+          <Field label="Wie kennengelernt">
+            <textarea
+              name="how_we_met"
+              rows={2}
+              value={howWeMet}
+              onChange={(e) => setHowWeMet(e.target.value)}
+              placeholder="Kurz: Kontext / Anlass des ersten Treffens"
+              className="w-full rounded border border-rule bg-paper px-3 py-2 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20"
+            />
+          </Field>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Wo getroffen">
+              <LocationAutocomplete
+                name="met_location"
+                defaultValue={person.met_location ?? ""}
+                defaultGeo={person.met_location_geo}
+                className={inputClass}
+              />
+            </Field>
+            <Field
+              label="Wann getroffen"
+              hint={
+                !metDate && person.created_at
+                  ? `Kein Datum — Kontakt angelegt am ${new Date(person.created_at).toLocaleDateString("de-DE")}.`
+                  : undefined
+              }
+            >
+              <input
+                type="date"
+                name="met_date"
+                value={metDate}
+                onChange={(e) => setMetDate(e.target.value)}
+                className={inputClass}
+              />
+            </Field>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Vermittelt durch">
+              <input
+                type="text"
+                name="introduced_by"
+                value={introducedBy}
+                onChange={(e) => setIntroducedBy(e.target.value)}
+                placeholder="Name der Person, die vermittelt hat"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Zusammen getroffen mit">
+              <input
+                type="text"
+                name="met_with"
+                value={metWith}
+                onChange={(e) => setMetWith(e.target.value)}
+                placeholder="Wer war noch dabei?"
+                className={inputClass}
+              />
+            </Field>
+          </div>
+        </section>
 
         {/* — Gifts: was man dieser Person zum nächsten Anlass schenken könnte. */}
         <Field label="Gifts">
@@ -484,26 +542,6 @@ export function EditPersonForm({
             className={inputClass}
           />
         </Field>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Datum des Treffens">
-            <input
-              type="date"
-              name="met_date"
-              value={metDate}
-              onChange={(e) => setMetDate(e.target.value)}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Ort des Treffens">
-            <LocationAutocomplete
-              name="met_location"
-              defaultValue={person.met_location ?? ""}
-              defaultGeo={person.met_location_geo}
-              className={inputClass}
-            />
-          </Field>
-        </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Aktueller Wohnort">
