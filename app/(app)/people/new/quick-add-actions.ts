@@ -67,12 +67,20 @@ export async function createPersonQuick(formData: FormData) {
   // Einziges Pflichtfeld: Name. Alles andere optional damit Quick-Add
   // wirklich quick ist — Detail-Page erlaubt nachträgliches Ergänzen.
   const name = trimOrNull(formData.get("name"));
+  const primaryLanguage = trimOrNull(formData.get("primary_language"));
   const howWeMet = trimOrNull(formData.get("how_we_met"));
   const purposeRaw = formData.get("purpose");
   const depthRaw = formData.get("depth"); // "auto" oder ein Depth-Wert
 
   if (!name) {
     redirect(`/people/new?error=${encodeURIComponent("Name fehlt")}`);
+  }
+  // Sprache ist Pflicht beim Anlegen. Settings-Default befüllt das Feld
+  // vor, sodass 90%-Eine-Sprache-Nutzer nicht jedes Mal klicken müssen.
+  if (!primaryLanguage) {
+    redirect(
+      `/people/new?error=${encodeURIComponent("Hauptsprache fehlt")}`,
+    );
   }
   const purpose: Purpose | null =
     typeof purposeRaw === "string" && PURPOSE_VALUES.includes(purposeRaw as Purpose)
@@ -153,6 +161,7 @@ export async function createPersonQuick(formData: FormData) {
       photo_url: photoUrl,
       // Briefing-v3-Schema (Legacy-Spalten weg seit 0025).
       how_we_met: howWeMet,
+      primary_language: primaryLanguage,
       met_date: metDate,
       met_location: metLocation,
       met_location_geo: metLocationGeo,
@@ -280,11 +289,14 @@ export async function createPersonQuick(formData: FormData) {
     for (const rawName of tagNames) {
       const name = rawName.trim().toLowerCase();
       if (!name) continue;
+      // Lookup by name AND cluster (cross-fill fix — a name can live
+      // independently per cluster).
       const { data: existingTag } = await supabase
         .from("tags")
         .select("id")
         .eq("user_id", user.id)
         .eq("name", name)
+        .eq("cluster", tagCluster)
         .maybeSingle();
       let tagId = existingTag?.id ?? null;
       if (!tagId) {

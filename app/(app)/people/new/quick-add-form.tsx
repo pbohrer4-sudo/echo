@@ -11,6 +11,7 @@ import { useRef, useState } from "react";
 import { APP_CONFIG } from "@/lib/config";
 import {
   DEPTH_LABELS,
+  LANGUAGES,
   PURPOSE_LABELS,
   type Depth,
   type LocationGeo,
@@ -49,6 +50,7 @@ const inputClass =
 
 interface FormState {
   name: string;
+  primary_language: string;
   how_we_met: string;
   purpose: Purpose | "";
   depth: Depth | "auto";
@@ -72,6 +74,7 @@ interface FormState {
 
 const empty: FormState = {
   name: "",
+  primary_language: "",
   how_we_met: "",
   purpose: "",
   depth: "auto",
@@ -96,13 +99,18 @@ const empty: FormState = {
 export function QuickAddForm({
   error,
   existingCircles = [],
+  defaultLanguage = "",
 }: {
   error?: string;
   existingCircles?: CircleRow[];
+  defaultLanguage?: string;
 }) {
   const formRef = useRef<HTMLFormElement | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [state, setState] = useState<FormState>(empty);
+  const [state, setState] = useState<FormState>({
+    ...empty,
+    primary_language: defaultLanguage,
+  });
   const [cluster, setCluster] = useState<DraftClusterState>(
     emptyDraftClusterState(),
   );
@@ -180,6 +188,30 @@ export function QuickAddForm({
             onChange={(e) => patch("name", e.target.value)}
             className={inputClass}
           />
+        </Field>
+
+        {/* — Pflichtfeld: Hauptsprache (Vorauswahl via Settings) — */}
+        <Field
+          label="Hauptsprache"
+          required
+          hint="Kommunikationssprache. Standard in Einstellungen setzbar."
+        >
+          <select
+            name="primary_language"
+            required
+            value={state.primary_language}
+            onChange={(e) => patch("primary_language", e.target.value)}
+            className={inputClass}
+          >
+            <option value="" disabled>
+              Bitte wählen
+            </option>
+            {LANGUAGES.map((l) => (
+              <option key={l} value={l}>
+                {l}
+              </option>
+            ))}
+          </select>
         </Field>
 
         {/* — Purpose — */}

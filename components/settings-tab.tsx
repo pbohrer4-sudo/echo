@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { updateSettings, restartOnboarding } from "@/app/(app)/settings/actions";
 import { APP_CONFIG } from "@/lib/config";
+import { LANGUAGES } from "@/lib/types";
 
 interface ProfileRow {
   display_name: string | null;
@@ -11,6 +12,7 @@ interface ProfileRow {
   claude_key_byo: string | null;
   elevenlabs_key_byo: string | null;
   message_style: string | null;
+  default_contact_language: string | null;
 }
 
 const inputClass =
@@ -42,7 +44,7 @@ export async function SettingsTab({
   const { data } = await supabase
     .from("profiles")
     .select(
-      "display_name, voice_id, debrief_time, language, claude_key_byo, elevenlabs_key_byo, message_style",
+      "display_name, voice_id, debrief_time, language, claude_key_byo, elevenlabs_key_byo, message_style, default_contact_language",
     )
     .eq("id", user!.id)
     .maybeSingle();
@@ -55,6 +57,7 @@ export async function SettingsTab({
     claude_key_byo: null,
     elevenlabs_key_byo: null,
     message_style: null,
+    default_contact_language: null,
   }) as ProfileRow;
 
   const debriefTime = profile.debrief_time?.slice(0, 5) ?? "21:30";
@@ -98,6 +101,23 @@ export async function SettingsTab({
             >
               <option value="de">Deutsch</option>
               <option value="en">English</option>
+            </select>
+          </Field>
+          <Field
+            label="Standard-Sprache neuer Kontakte"
+            hint="Wird beim Anlegen einer Person vorausgewählt. Leer lassen, wenn du jedes Mal selbst wählen willst."
+          >
+            <select
+              name="default_contact_language"
+              defaultValue={profile.default_contact_language ?? ""}
+              className={`${inputClass} appearance-none`}
+            >
+              <option value="">Keine Vorauswahl</option>
+              {LANGUAGES.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
             </select>
           </Field>
         </Section>

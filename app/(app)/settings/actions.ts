@@ -10,6 +10,7 @@ interface ProfileUpdate {
   debrief_time: string | null;
   language: string | null;
   message_style: string;
+  default_contact_language: string | null;
   claude_key_byo?: string | null;
   elevenlabs_key_byo?: string | null;
 }
@@ -34,6 +35,9 @@ export async function updateSettings(formData: FormData) {
   const messageStyleRaw = trimOrNull(formData.get("message_style"));
   const message_style =
     messageStyleRaw === "professionell" ? "professionell" : "locker";
+  const default_contact_language = trimOrNull(
+    formData.get("default_contact_language"),
+  );
   const claudeRaw = formData.get("claude_key_byo");
   const elevenRaw = formData.get("elevenlabs_key_byo");
   const clearClaude = formData.get("clear_claude_key") === "1";
@@ -45,6 +49,7 @@ export async function updateSettings(formData: FormData) {
     debrief_time,
     language,
     message_style,
+    default_contact_language,
   };
 
   if (clearClaude) {
