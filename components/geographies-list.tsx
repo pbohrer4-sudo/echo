@@ -48,59 +48,72 @@ export function GeographiesList({ geographies, addSlot }: Props) {
           Noch keine Orte hinterlegt.
         </p>
       )}
-      <div className="space-y-3">
-        {GROUP_ORDER.filter((t) => grouped.has(t)).map((type) => (
-          <div key={type} className="space-y-1.5">
-            <span className="t-label">
-              {type === "custom"
-                ? "Weitere"
-                : GEO_TYPE_LABELS[type]}
-            </span>
-            <ul className="space-y-1">
-              {grouped.get(type)!.map((g) => (
-                <GeoRow key={g.id} geo={g} />
-              ))}
-            </ul>
-          </div>
-        ))}
-        {inactive.length > 0 && (
-          <details className="space-y-1.5">
-            <summary className="t-label cursor-pointer text-ink-4 transition hover:text-ink-2">
-              Frühere Orte ({inactive.length})
-            </summary>
-            <ul className="mt-2 space-y-1">
-              {inactive.map((g) => (
-                <GeoRow key={g.id} geo={g} muted />
-              ))}
-            </ul>
-          </details>
-        )}
-      </div>
+      {/* Boxed rows — gleiche Optik wie Stammdaten / Origin. */}
+      {active.length > 0 && (
+        <dl className="overflow-hidden rounded border border-rule bg-paper">
+          {GROUP_ORDER.filter((t) => grouped.has(t)).flatMap((type) =>
+            grouped.get(type)!.map((g) => (
+              <GeoRow
+                key={g.id}
+                label={type === "custom" ? "Weitere" : GEO_TYPE_LABELS[type]}
+                geo={g}
+              />
+            )),
+          )}
+        </dl>
+      )}
+      {inactive.length > 0 && (
+        <details className="space-y-1.5">
+          <summary className="t-label cursor-pointer text-ink-4 transition hover:text-ink-2">
+            Frühere Orte ({inactive.length})
+          </summary>
+          <dl className="mt-2 overflow-hidden rounded border border-rule bg-paper">
+            {inactive.map((g) => (
+              <GeoRow
+                key={g.id}
+                label={
+                  g.geo_type === "custom"
+                    ? "Weitere"
+                    : GEO_TYPE_LABELS[g.geo_type]
+                }
+                geo={g}
+                muted
+              />
+            ))}
+          </dl>
+        </details>
+      )}
     </section>
   );
 }
 
-function GeoRow({ geo, muted = false }: { geo: PersonGeography; muted?: boolean }) {
+function GeoRow({
+  label,
+  geo,
+  muted = false,
+}: {
+  label: string;
+  geo: PersonGeography;
+  muted?: boolean;
+}) {
   // Kompakter Display-Name — erste Komma-Component reicht meistens,
   // aber wenn die strukturierte Adresse separat existiert, sie
   // bevorzugen.
   const compact = geo.city ?? geo.display_name.split(",")[0];
   const detail = geo.display_name !== compact ? geo.display_name : null;
   return (
-    <li
-      className={`flex flex-col text-sm ${muted ? "text-ink-4" : "text-ink-1"}`}
-    >
-      <span className="flex items-baseline gap-2">
-        <span>{geo.custom_label || compact}</span>
-        {geo.custom_label && (
-          <span className="font-mono text-[10px] uppercase tracking-wider text-ink-4">
-            {geo.country_code ?? ""}
-          </span>
+    <div className="flex items-center gap-3 border-b border-rule-soft px-4 py-2.5 last:border-0">
+      <dt className="t-label">{label}</dt>
+      <dd
+        className={`ml-auto flex min-w-0 flex-col items-end text-right text-sm ${
+          muted ? "text-ink-4" : "text-ink-1"
+        }`}
+      >
+        <span className="truncate">{geo.custom_label || compact}</span>
+        {detail && (
+          <span className="truncate text-[11px] text-ink-4">{detail}</span>
         )}
-      </span>
-      {detail && (
-        <span className="text-[11px] text-ink-4">{detail}</span>
-      )}
-    </li>
+      </dd>
+    </div>
   );
 }
