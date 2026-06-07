@@ -228,10 +228,11 @@ export async function createPersonQuick(formData: FormData) {
       source: "manual",
     });
   }
-  // Locations → person_geographies (residence/origin/met_location).
-  // Strukturierte Daten wenn geo gesetzt, sonst nur display_name.
+  // Locations → person_geographies (residence/origin only).
+  // "Wo getroffen" (met_location) is NOT added to Orte — it lives in the
+  // Origin section as the scalar met_location (Patrick 2026-06-07).
   type GeoInsert = {
-    geo_type: "residence" | "origin" | "met_location";
+    geo_type: "residence" | "origin";
     display_name: string;
     latitude: number | null;
     longitude: number | null;
@@ -254,15 +255,6 @@ export async function createPersonQuick(formData: FormData) {
       latitude: homeLocationGeo?.lat ?? null,
       longitude: homeLocationGeo?.lng ?? null,
       place_id: homeLocationGeo?.place_id ?? null,
-    });
-  }
-  if (metLocation) {
-    geoInserts.push({
-      geo_type: "met_location",
-      display_name: metLocationGeo?.display_name ?? metLocation,
-      latitude: metLocationGeo?.lat ?? null,
-      longitude: metLocationGeo?.lng ?? null,
-      place_id: metLocationGeo?.place_id ?? null,
     });
   }
   if (geoInserts.length > 0) {

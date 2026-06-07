@@ -350,7 +350,11 @@ export default async function PersonDetailPage({
         {!person.is_self && <SuggestionStack personId={person.id} />}
 
         {!person.is_self && (
-          <ProfileScalars person={person} fieldDefs={customFieldDefs} />
+          <ProfileScalars
+            person={person}
+            fieldDefs={customFieldDefs}
+            candidatePeople={candidateRelationshipPeople}
+          />
         )}
 
         {!person.is_self && <ClusterBlock personId={person.id} />}
@@ -376,7 +380,9 @@ export default async function PersonDetailPage({
 
         {!person.is_self && (
           <GeographiesList
-            geographies={geographies}
+            geographies={geographies.filter(
+              (g) => g.geo_type !== "met_location",
+            )}
             addSlot={<AddGeographyButton personId={person.id} />}
           />
         )}

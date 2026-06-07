@@ -399,9 +399,12 @@ export interface Person {
   met_location: string | null;
   met_location_geo: LocationGeo | null;
   // Origin consolidation (2026-06-07): wer vermittelt hat + mit wem
-  // zusammen man die Person getroffen hat. Freitext.
+  // zusammen man die Person getroffen hat. Person-Referenzen — Text =
+  // denormalisierter Anzeigename, *_person_id = Link zur CRM-Person.
   introduced_by: string | null;
+  introduced_by_person_id: string | null;
   met_with: string | null;
+  met_with_person_id: string | null;
   // Synergies (2026-06-07): replaces the "potential" tag cluster — a
   // multi-entry, sentence-length, searchable list (NOT tags).
   synergies: string[];

@@ -18,6 +18,8 @@ import {
   type CustomFieldDef,
   type CustomFieldValues,
 } from "@/lib/custom-fields";
+import { PersonLookup, type PersonRef } from "@/components/person-lookup";
+import Link from "next/link";
 import { updatePersonScalars } from "./scalar-actions";
 
 const inputClass =
@@ -28,9 +30,11 @@ const areaClass =
 export function ProfileScalars({
   person,
   fieldDefs,
+  candidatePeople,
 }: {
   person: Person;
   fieldDefs: CustomFieldDef[];
+  candidatePeople: { id: string; name: string }[];
 }) {
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -49,8 +53,16 @@ export function ProfileScalars({
   const [howWeMet, setHowWeMet] = useState(person.how_we_met ?? "");
   const [metLocation, setMetLocation] = useState(person.met_location ?? "");
   const [metDate, setMetDate] = useState(person.met_date ?? "");
-  const [introducedBy, setIntroducedBy] = useState(person.introduced_by ?? "");
-  const [metWith, setMetWith] = useState(person.met_with ?? "");
+  const [introducedByRef, setIntroducedByRef] = useState<PersonRef | null>(
+    person.introduced_by
+      ? { id: person.introduced_by_person_id ?? "", name: person.introduced_by }
+      : null,
+  );
+  const [metWithRef, setMetWithRef] = useState<PersonRef | null>(
+    person.met_with
+      ? { id: person.met_with_person_id ?? "", name: person.met_with }
+      : null,
+  );
   const [synergies, setSynergies] = useState<string[]>(person.synergies ?? []);
   const [giftIdea, setGiftIdea] = useState(person.gift_idea ?? "");
   const [notes, setNotes] = useState(person.notes ?? "");
@@ -73,8 +85,10 @@ export function ProfileScalars({
     fd.set("how_we_met", howWeMet);
     fd.set("met_location", metLocation);
     fd.set("met_date", metDate);
-    fd.set("introduced_by", introducedBy);
-    fd.set("met_with", metWith);
+    fd.set("introduced_by", introducedByRef?.name ?? "");
+    fd.set("introduced_by_person_id", introducedByRef?.id ?? "");
+    fd.set("met_with", metWithRef?.name ?? "");
+    fd.set("met_with_person_id", metWithRef?.id ?? "");
     fd.set("synergies", JSON.stringify(synergies.filter((s) => s.trim())));
     fd.set("gift_idea", giftIdea);
     fd.set("notes", notes);
@@ -204,14 +218,38 @@ export function ProfileScalars({
         </Row>
         <Row label="Vermittelt durch">
           {editing ? (
-            <input value={introducedBy} onChange={(e) => setIntroducedBy(e.target.value)} className={inputClass} />
+            <PersonLookup
+              value={introducedByRef}
+              candidates={candidatePeople}
+              excludeId={person.id}
+              onChange={setIntroducedByRef}
+            />
+          ) : person.introduced_by_person_id ? (
+            <Link
+              href={`/people/${person.introduced_by_person_id}`}
+              className="text-action hover:underline"
+            >
+              {person.introduced_by}
+            </Link>
           ) : (
             person.introduced_by || "—"
           )}
         </Row>
         <Row label="Getroffen mit">
           {editing ? (
-            <input value={metWith} onChange={(e) => setMetWith(e.target.value)} className={inputClass} />
+            <PersonLookup
+              value={metWithRef}
+              candidates={candidatePeople}
+              excludeId={person.id}
+              onChange={setMetWithRef}
+            />
+          ) : person.met_with_person_id ? (
+            <Link
+              href={`/people/${person.met_with_person_id}`}
+              className="text-action hover:underline"
+            >
+              {person.met_with}
+            </Link>
           ) : (
             person.met_with || "—"
           )}

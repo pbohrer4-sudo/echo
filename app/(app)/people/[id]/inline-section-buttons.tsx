@@ -954,7 +954,9 @@ function AddGeographyForm({
           onChange={(e) => setGeoType(e.target.value as GeoType)}
           className={inputClass}
         >
-          {GEO_TYPES.map((t) => (
+          {/* met_location ("Wo getroffen") lives in the Origin section,
+              not in Orte — exclude it here. */}
+          {GEO_TYPES.filter((t) => t !== "met_location").map((t) => (
             <option key={t} value={t}>
               {GEO_TYPE_LABELS[t]}
             </option>
