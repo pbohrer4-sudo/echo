@@ -245,6 +245,9 @@ export function PeopleTable({
   const [passionFilter, setPassionFilter] = useState<string>(
     initialFilter?.passion ?? "all",
   );
+  const [synergyFilter, setSynergyFilter] = useState<string>(
+    initialFilter?.synergy ?? "all",
+  );
   const [circleFilter, setCircleFilter] = useState<string>(
     resolvedCircleId ?? "all",
   );
@@ -275,6 +278,7 @@ export function PeopleTable({
     if (clusterFilter !== "all") spec.cluster = clusterFilter;
     if (tagFilter !== "all") spec.tag = tagFilter;
     if (passionFilter !== "all") spec.passion = passionFilter;
+    if (synergyFilter !== "all") spec.synergy = synergyFilter;
     if (circleFilter !== "all") spec.circle = circleFilter;
     if (locationFilter !== "all") spec.location = locationFilter;
     if (channelFilter !== "all") spec.channel = channelFilter;
@@ -291,6 +295,7 @@ export function PeopleTable({
     clusterFilter,
     tagFilter,
     passionFilter,
+    synergyFilter,
     circleFilter,
     locationFilter,
     channelFilter,
@@ -320,6 +325,7 @@ export function PeopleTable({
     (clusterFilter !== "all" ? 1 : 0) +
     (tagFilter !== "all" ? 1 : 0) +
     (passionFilter !== "all" ? 1 : 0) +
+    (synergyFilter !== "all" ? 1 : 0) +
     (circleFilter !== "all" ? 1 : 0) +
     (locationFilter !== "all" ? 1 : 0) +
     (channelFilter !== "all" ? 1 : 0) +
@@ -342,6 +348,10 @@ export function PeopleTable({
       }
       if (passionFilter !== "all" && !r.passions.includes(passionFilter))
         return false;
+      if (synergyFilter !== "all") {
+        const tags = (p.synergy_tags ?? []).map((t) => t.toLowerCase());
+        if (!tags.includes(synergyFilter)) return false;
+      }
       if (circleFilter !== "all" && !r.circleIds.includes(circleFilter))
         return false;
 
@@ -400,6 +410,8 @@ export function PeopleTable({
         ...allTagNames,
         ...r.passions,
         ...circleNames,
+        ...(p.synergies ?? []),
+        ...(p.synergy_tags ?? []),
       ]
         .filter(Boolean)
         .join(" ")
@@ -415,6 +427,7 @@ export function PeopleTable({
     clusterFilter,
     tagFilter,
     passionFilter,
+    synergyFilter,
     circleFilter,
     locationFilter,
     channelFilter,
@@ -450,6 +463,7 @@ export function PeopleTable({
     setClusterFilter("all");
     setTagFilter("all");
     setPassionFilter("all");
+    setSynergyFilter("all");
     setCircleFilter("all");
     setLocationFilter("all");
     setChannelFilter("all");

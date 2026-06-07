@@ -34,6 +34,7 @@ import { ShareVCard } from "@/components/share-vcard";
 import { DraftGenerator } from "@/components/draft-generator";
 import { SuggestionStack } from "./suggestion-stack";
 import { ClusterBlock } from "./cluster-block";
+import { SynergyTagsButton } from "./synergy-tags-button";
 import { LifeEventsBlock } from "./life-events-block";
 import { GamificationDashboard } from "./gamification-dashboard";
 import { APP_CONFIG } from "@/lib/config";
@@ -380,7 +381,23 @@ export default async function PersonDetailPage({
             <div className="section-head">
               <span className="t-label">Synergien</span>
               <span className="rule" />
+              <SynergyTagsButton personId={person.id} />
             </div>
+            {/* AI-Schlagworte: klickbar → filtert die People-Liste. */}
+            {(person.synergy_tags?.length ?? 0) > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {person.synergy_tags.map((t) => (
+                  <Link
+                    key={t}
+                    href={`/people?synergy=${encodeURIComponent(t.toLowerCase())}`}
+                    className="tag transition hover:border-action hover:text-action"
+                  >
+                    <span className="dot" />
+                    {t}
+                  </Link>
+                ))}
+              </div>
+            )}
             <ul className="space-y-1.5">
               {person.synergies.map((s, i) => (
                 <li

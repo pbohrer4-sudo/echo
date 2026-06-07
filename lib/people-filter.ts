@@ -16,6 +16,7 @@ export interface PeopleFilterSpec {
   cluster?: TagCluster;        // mindestens ein Tag in diesem Cluster
   tag?: string;                // exakter Tag-Name (case-insensitive)
   passion?: string;            // lower-case-Match
+  synergy?: string;            // synergy_tag, lower-case-Match
   circle?: string;             // circle_id ODER name-substring
   location?: string;           // city-substring, lower-cased
   channel?: ChannelFilter;
@@ -84,6 +85,8 @@ export function parseFilterFromParams(
   if (tag && tag.trim()) out.tag = tag.trim().toLowerCase();
   const passion = get("passion");
   if (passion && passion.trim()) out.passion = passion.trim().toLowerCase();
+  const synergy = get("synergy");
+  if (synergy && synergy.trim()) out.synergy = synergy.trim().toLowerCase();
   const circle = get("circle");
   if (circle && circle.trim()) out.circle = circle.trim();
   const location = get("location");
@@ -106,6 +109,7 @@ export function serializeFilterToParams(spec: PeopleFilterSpec): URLSearchParams
   if (spec.cluster) p.set("cluster", spec.cluster);
   if (spec.tag) p.set("tag", spec.tag);
   if (spec.passion) p.set("passion", spec.passion);
+  if (spec.synergy) p.set("synergy", spec.synergy);
   if (spec.circle) p.set("circle", spec.circle);
   if (spec.location) p.set("location", spec.location);
   if (spec.channel) p.set("channel", spec.channel);

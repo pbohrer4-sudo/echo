@@ -408,6 +408,9 @@ export interface Person {
   // Synergies (2026-06-07): replaces the "potential" tag cluster — a
   // multi-entry, sentence-length, searchable list (NOT tags).
   synergies: string[];
+  // AI-extracted short keywords from `synergies` for filtering/search
+  // (Option 1). Populated on-demand via the "Verschlagworten" button.
+  synergy_tags: string[];
   // Per-person language (2026-06-07): primary = communication language
   // (prominent), secondary = optional.
   primary_language: string | null;
