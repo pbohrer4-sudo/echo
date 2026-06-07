@@ -27,6 +27,11 @@ import {
   type TagCluster,
   type TagWithNote,
 } from "@/lib/types";
+import {
+  parseFieldValues,
+  type CustomFieldDef,
+  type CustomFieldValues,
+} from "@/lib/custom-fields";
 import { LocationAutocomplete } from "@/components/location-autocomplete";
 import {
   DraftClusterEditor,
@@ -62,6 +67,7 @@ const DEPTH_HINTS: Record<Depth, string> = {
 const MODE_HINTS: Record<Mode, string> = {
   active: "Regelmäßiger Kontakt",
   nurture: "Bewusst pflegen",
+  cold: "Kalte Beziehung — wenig Wärme, distanziert",
   dormant: "Stiller — länger nicht gemeldet",
   reconnect: "Sollte ich wieder anpacken",
   archive: "Aus dem aktiven Blick",
@@ -74,6 +80,7 @@ interface Props {
   personCircles: CircleRow[];
   allCircles: CircleRow[];
   contacts: PersonContact[];
+  fieldDefs: CustomFieldDef[];
   error?: string;
 }
 
@@ -103,6 +110,7 @@ export function EditPersonForm({
   personCircles,
   allCircles,
   contacts,
+  fieldDefs,
   error,
 }: Props) {
   const [name, setName] = useState(person.name);
@@ -122,6 +130,14 @@ export function EditPersonForm({
   const [cadenceDays, setCadenceDays] = useState<string>(
     person.cadence_days != null ? String(person.cadence_days) : "",
   );
+  // Custom-field values keyed by def id. Stored as strings in form state;
+  // coerced to the def's type server-side on save.
+  const [customValues, setCustomValues] = useState<CustomFieldValues>(() =>
+    parseFieldValues(person.custom_field_values),
+  );
+  function setCustom(id: string, value: string | boolean) {
+    setCustomValues((prev) => ({ ...prev, [id]: value }));
+  }
 
   const initialCluster = useMemo(
     () => buildInitialCluster(tags, passions, personCircles),
@@ -571,6 +587,78 @@ export function EditPersonForm({
             value={JSON.stringify(addressList)}
           />
         </section>
+
+        {fieldDefs.length > 0 && (
+          <section className="space-y-3">
+            <input
+              type="hidden"
+              name="custom_field_values"
+              value={JSON.stringify(customValues)}
+            />
+            <p className="t-label">Eigene Felder</p>
+            <div className="space-y-3">
+              {fieldDefs.map((def) => {
+                const v = customValues[def.id];
+                if (def.type === "checkbox") {
+                  return (
+                    <label
+                      key={def.id}
+                      className="flex items-center gap-2 text-sm text-ink-1"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={v === true}
+                        onChange={(e) => setCustom(def.id, e.target.checked)}
+                        className="h-4 w-4 rounded border-rule"
+                      />
+                      {def.label}
+                    </label>
+                  );
+                }
+                return (
+                  <Field key={def.id} label={def.label}>
+                    {def.type === "textarea" ? (
+                      <textarea
+                        rows={3}
+                        value={typeof v === "string" ? v : ""}
+                        onChange={(e) => setCustom(def.id, e.target.value)}
+                        className="w-full rounded border border-rule bg-paper px-3 py-2 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20"
+                      />
+                    ) : def.type === "dropdown" ? (
+                      <select
+                        value={typeof v === "string" ? v : ""}
+                        onChange={(e) => setCustom(def.id, e.target.value)}
+                        className={inputClass}
+                      >
+                        <option value="">—</option>
+                        {(def.options ?? []).map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type={
+                          def.type === "number"
+                            ? "number"
+                            : def.type === "date"
+                              ? "date"
+                              : "text"
+                        }
+                        value={
+                          v === null || v === undefined ? "" : String(v)
+                        }
+                        onChange={(e) => setCustom(def.id, e.target.value)}
+                        className={inputClass}
+                      />
+                    )}
+                  </Field>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         <Field label="Notizen">
           <textarea

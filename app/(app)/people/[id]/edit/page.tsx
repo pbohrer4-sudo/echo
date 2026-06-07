@@ -7,6 +7,7 @@ import {
   listCirclesForPerson,
 } from "@/lib/circles";
 import { listContactsForPerson } from "@/lib/person-contacts";
+import { getFieldDefs } from "@/lib/custom-fields.server";
 import { EditPersonForm } from "./edit-form";
 
 // Edit-Page mit allen scalar + Cluster-Feldern. Multi-Row-Sachen
@@ -24,7 +25,7 @@ export default async function EditPersonPage({
   const { id } = await params;
   const { error } = await searchParams;
 
-  const [person, tags, passions, personCircles, allCircles, contacts] =
+  const [person, tags, passions, personCircles, allCircles, contacts, fieldDefs] =
     await Promise.all([
       getPersonById(id),
       listTagsWithNotesForPerson(id),
@@ -32,6 +33,7 @@ export default async function EditPersonPage({
       listCirclesForPerson(id),
       listAllCircles(),
       listContactsForPerson(id),
+      getFieldDefs(),
     ]);
   if (!person) notFound();
 
@@ -57,6 +59,7 @@ export default async function EditPersonPage({
           personCircles={personCircles}
           allCircles={allCircles}
           contacts={contacts}
+          fieldDefs={fieldDefs}
           error={error ? decodeURIComponent(error) : undefined}
         />
       </div>

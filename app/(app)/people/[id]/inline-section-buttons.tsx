@@ -698,7 +698,7 @@ function AddGiftForm({
 
 export function AddEventButton({ personId }: { personId: string }) {
   return (
-    <InlineAddShell label="Event">
+    <InlineAddShell label="Notiz">
       {(close) => <AddEventForm personId={personId} onDone={close} />}
     </InlineAddShell>
   );
@@ -713,7 +713,9 @@ function AddEventForm({
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [type, setType] = useState("meeting");
+  // Default to "note" — the button now reads "+ Notiz", so the most
+  // common action is jotting a note. Other types stay one click away.
+  const [type, setType] = useState("note");
   const [summary, setSummary] = useState("");
   // Default: heute. Der User trägt das Datum oft nachträglich ein,
   // aber „heute" ist häufiger als „letzte Woche".

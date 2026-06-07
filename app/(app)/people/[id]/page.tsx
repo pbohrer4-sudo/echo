@@ -12,6 +12,8 @@ import {
 import { listContactsForPerson } from "@/lib/person-contacts";
 import { listGeographiesForPerson } from "@/lib/person-geographies";
 import { listRelationshipsForPerson } from "@/lib/person-relationships";
+import { getFieldDefs } from "@/lib/custom-fields.server";
+import { parseFieldValues, displayValue } from "@/lib/custom-fields";
 import { GeographiesList } from "@/components/geographies-list";
 import {
   AddDateButton,
@@ -140,6 +142,16 @@ export default async function PersonDetailPage({
   const candidateRelationshipPeople = allPeople
     .filter((p) => p.id !== id)
     .map((p) => ({ id: p.id, name: p.name }));
+
+  // Custom fields (P1). Defs are per-user; values per-person. Only render
+  // the section when at least one def exists AND this person has a value
+  // for it (keeps the detail page tidy for sparse data).
+  const customFieldDefs = await getFieldDefs();
+  const customValues = parseFieldValues(person.custom_field_values);
+  const customFieldsToShow = customFieldDefs.filter((d) => {
+    const v = customValues[d.id];
+    return v !== null && v !== undefined && v !== "" && v !== false;
+  });
 
   // Sub-flags so the JSX stays readable. For non-self people, every
   // section renders as before. For self, sections are scoped to the
@@ -480,6 +492,23 @@ export default async function PersonDetailPage({
               <PersonTodos todos={todos} />
             </section>
           </div>
+        )}
+
+        {showProfileBody && customFieldsToShow.length > 0 && (
+          <section>
+            <div className="section-head">
+              <span className="t-label">Eigene Felder</span>
+              <span className="rule" />
+            </div>
+            <dl className="kv">
+              {customFieldsToShow.map((def) => (
+                <div key={def.id} className="contents">
+                  <dt>{def.label}</dt>
+                  <dd>{displayValue(def, customValues[def.id])}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
         )}
 
         {showProfileBody && (

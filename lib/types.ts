@@ -1,6 +1,8 @@
 // Shared domain types — kept manual for now. When the schema stabilises,
 // switch to `npx supabase gen types typescript` for codegen.
 
+import type { CustomFieldValues } from "@/lib/custom-fields";
+
 export type Scope = "work" | "personal" | "both";
 
 export type InteractionType = "meeting" | "call" | "email" | "note" | "voice";
@@ -410,6 +412,9 @@ export interface Person {
   current_location_geo: LocationGeo | null;
   home_location: string | null;
   home_location_geo: LocationGeo | null;
+  // Custom fields (P1, hybrid jsonb MVP). Values keyed by field-def id;
+  // defs live on profiles.custom_field_defs. See lib/custom-fields.ts.
+  custom_field_values: CustomFieldValues;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -838,7 +843,13 @@ export type Purpose =
   | "business_latent"
   | "aspirational";
 
-export type Mode = "active" | "nurture" | "dormant" | "reconnect" | "archive";
+export type Mode =
+  | "active"
+  | "nurture"
+  | "cold"
+  | "dormant"
+  | "reconnect"
+  | "archive";
 
 export type InteractionDirection = "inbound" | "outbound" | "mutual";
 
@@ -863,6 +874,7 @@ export const PURPOSE_LABELS: Record<Purpose, string> = {
 export const MODE_LABELS: Record<Mode, string> = {
   active: "Active",
   nurture: "Nurture",
+  cold: "Cold",
   dormant: "Dormant",
   reconnect: "Reconnect",
   archive: "Archived",

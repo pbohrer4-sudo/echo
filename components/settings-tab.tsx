@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { updateSettings, restartOnboarding } from "@/app/(app)/settings/actions";
 import { APP_CONFIG } from "@/lib/config";
@@ -240,6 +241,18 @@ export async function SettingsTab({
           </button>
         </div>
       </form>
+
+      <Section
+        label="Eigene Felder"
+        hint="Lege eigene Felder an (Text, Zahl, Datum, Auswahl, Ja/Nein), die bei jeder Person auftauchen."
+      >
+        <Link
+          href="/settings/custom-fields"
+          className="inline-block rounded border border-rule bg-paper px-4 py-2 text-sm text-ink-2 transition hover:border-action hover:text-action"
+        >
+          Eigene Felder verwalten
+        </Link>
+      </Section>
 
       <Section
         label="Onboarding"

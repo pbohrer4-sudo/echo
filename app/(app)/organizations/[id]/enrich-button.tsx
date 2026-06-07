@@ -81,32 +81,35 @@ export function OrgEnrichButton({ orgId, name, domain }: Props) {
     }
   }
 
+  // Compact button that lives in the detail-page header action row, left
+  // of "Bearbeiten". Feedback (summary / error) renders in an absolutely-
+  // positioned line below the button so it never disturbs the header
+  // flex layout. On success applyEnrichmentAction revalidates the page,
+  // so the "Auto-Enrich {date}" badge also refreshes.
   return (
-    <div className="rounded border border-rule bg-paper-2 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="t-label">Auto-Enrich</p>
-          <p className="text-xs text-ink-3">
-            Claude füllt Branche, Website, Größe, HQ, Beschreibung und Tags
-            auf Basis seines Trainings aus. Nur leere Felder werden überschrieben.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={run}
-          disabled={running || !name.trim()}
-          className="rounded border border-action bg-action px-3 py-1.5 text-xs font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)] disabled:opacity-50"
+    <div className="relative inline-flex">
+      <button
+        type="button"
+        onClick={run}
+        disabled={running || !name.trim()}
+        title="Branche, Website, Größe, HQ, Beschreibung und Tags automatisch ergänzen (nur leere Felder)."
+        className="whitespace-nowrap rounded border border-rule px-3 py-1.5 text-xs text-ink-2 transition hover:border-action hover:text-action disabled:opacity-50"
+      >
+        {running ? "Recherchiere…" : "Auto-Enrich"}
+      </button>
+      {(summary || error) && (
+        <p
+          className={`absolute left-0 top-full z-10 mt-1 max-w-xs whitespace-normal rounded border bg-paper px-2 py-1 text-[11px] shadow-sm ${
+            error
+              ? "border-bad/40 text-bad"
+              : "border-rule text-ink-3"
+          }`}
+          style={!error ? { color: "var(--action)" } : undefined}
         >
-          {running ? "Recherchiere…" : "Auto-Enrich"}
-        </button>
-      </div>
-      {summary && (
-        <p className="mt-2 text-xs" style={{ color: "var(--action)" }}>
-          {summary}
-          {confidence && ` · Confidence: ${confidence}`}
+          {error ?? summary}
+          {!error && confidence && ` · ${confidence}`}
         </p>
       )}
-      {error && <p className="mt-2 text-xs text-bad">{error}</p>}
     </div>
   );
 }

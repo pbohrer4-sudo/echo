@@ -10,6 +10,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { resolveOrCreateOrganization } from "@/lib/organizations";
 import { parseLocationGeo } from "@/lib/location-geo-parse";
+import { getFieldDefs } from "@/lib/custom-fields.server";
+import { coerceValue, type CustomFieldValues } from "@/lib/custom-fields";
 import type {
   AddressEntry,
   ContactChannel,
@@ -53,6 +55,36 @@ function trimOrNull(v: FormDataEntryValue | null): string | null {
   if (typeof v !== "string") return null;
   const t = v.trim();
   return t ? t : null;
+}
+
+// Validates submitted custom-field values against the user's own field
+// definitions. Drops unknown keys (deleted defs) and coerces each value
+// to the def's declared type.
+async function parseCustomFieldValues(
+  raw: FormDataEntryValue | null,
+): Promise<CustomFieldValues> {
+  if (typeof raw !== "string" || !raw.trim()) return {};
+  let parsed: Record<string, unknown>;
+  try {
+    const j = JSON.parse(raw);
+    if (!j || typeof j !== "object" || Array.isArray(j)) return {};
+    parsed = j as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+  const defs = await getFieldDefs();
+  const out: CustomFieldValues = {};
+  for (const def of defs) {
+    const v = parsed[def.id];
+    if (def.type === "checkbox") {
+      out[def.id] = v === true || v === "true" || v === "on" || v === "1";
+      continue;
+    }
+    const asStr =
+      v === null || v === undefined ? null : String(v);
+    out[def.id] = coerceValue(def, asStr);
+  }
+  return out;
 }
 
 function dateOrNull(v: FormDataEntryValue | null): string | null {
@@ -134,6 +166,13 @@ export async function updatePerson(personId: string, formData: FormData) {
   const desiredDates = parseDateList(formData.get("dates_state"));
   const desiredAddresses = parseAddressList(formData.get("addresses_state"));
 
+  // Custom fields — validate the submitted values against the user's own
+  // field definitions. Unknown keys (deleted defs) are dropped; each
+  // value is coerced to its def's type.
+  const customFieldValues = await parseCustomFieldValues(
+    formData.get("custom_field_values"),
+  );
+
   // Axes
   const purposeRaw = formData.get("purpose");
   const purpose: Purpose | null =
@@ -192,6 +231,7 @@ export async function updatePerson(personId: string, formData: FormData) {
     cadence_days: cadenceDays,
     important_dates: importantDates,
     addresses,
+    custom_field_values: customFieldValues,
     updated_at: new Date().toISOString(),
   };
 

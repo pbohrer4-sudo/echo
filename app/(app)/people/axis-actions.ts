@@ -33,6 +33,7 @@ const PURPOSE_VALUES: Purpose[] = [
 const MODE_VALUES: Mode[] = [
   "active",
   "nurture",
+  "cold",
   "dormant",
   "reconnect",
   "archive",

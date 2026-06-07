@@ -81,6 +81,11 @@ export default async function OrganizationDetailPage({
           </div>
 
           <div className="flex items-center gap-2">
+            <OrgEnrichButton
+              orgId={org.id}
+              name={org.name}
+              domain={org.domain}
+            />
             <Link
               href={`/organizations/${org.id}/edit`}
               className="rounded border border-rule px-3 py-1.5 text-xs text-ink-2 transition hover:border-ink-3 hover:text-ink-1"
@@ -90,12 +95,6 @@ export default async function OrganizationDetailPage({
             <DeleteOrganizationButton id={org.id} name={org.name} />
           </div>
         </div>
-
-        <OrgEnrichButton
-          orgId={org.id}
-          name={org.name}
-          domain={org.domain}
-        />
 
         <section>
           <div className="section-head">

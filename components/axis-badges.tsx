@@ -248,6 +248,7 @@ function PurposeBadge({
 const MODE_HINTS: Record<Mode, string> = {
   active: "Regelmäßiger Kontakt",
   nurture: "Bewusst pflegen",
+  cold: "Kalte Beziehung — wenig Wärme, distanziert",
   dormant: "Stiller — länger nicht gemeldet",
   reconnect: "Sollte ich wieder anpacken",
   archive: "Aus dem aktiven Blick",
