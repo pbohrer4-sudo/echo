@@ -97,6 +97,7 @@ export interface SocialEntry {
 
 export const DATE_LABELS = [
   "Geburtstag",
+  "1. Treffen",
   "Hochzeitstag",
   "Jahrestag",
   "andere",

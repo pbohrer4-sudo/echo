@@ -262,7 +262,7 @@ export function DatesRepeater({
               checked={d.remind}
               onChange={(e) => update(i, { remind: e.target.checked })}
             />
-            Jährlich erinnern
+            Erinnern
           </label>
           <button
             type="button"

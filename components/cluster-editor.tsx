@@ -52,12 +52,10 @@ interface Props {
   allCircles: CircleRow[];
 }
 
-const CLUSTER_ORDER: TagCluster[] = [
-  "reminders",
-  "interests",
-  "potential",
-  "origin",
-];
+// Signals (reminders cluster) is rendered as its own row UNDER Circles
+// (Patrick 2026-06-07 — it felt too similar to "Wichtige Daten" inside
+// the Tags grid). The Tags grid now only holds the non-time clusters.
+const CLUSTER_ORDER: TagCluster[] = ["interests", "potential", "origin"];
 
 export function ClusterEditor({
   personId,
@@ -67,6 +65,12 @@ export function ClusterEditor({
   personCircles,
   allCircles,
 }: Props) {
+  // The 7-tag limit counts ALL tags including Signals/reminders, so it's
+  // computed here and shared with both the Tags grid and the standalone
+  // Signals row.
+  const atLimit = tags.length >= 7;
+  const reminderTags = tags.filter((t) => t.cluster === "reminders");
+
   return (
     <div className="space-y-4">
       <TagsBlock personId={personId} personName={personName} tags={tags} />
@@ -76,6 +80,16 @@ export function ClusterEditor({
         personCircles={personCircles}
         allCircles={allCircles}
       />
+      {/* Signals — eigene Zeile direkt unter Circles. */}
+      <section className="space-y-3">
+        <TagClusterRow
+          cluster="reminders"
+          tags={reminderTags}
+          personId={personId}
+          personName={personName}
+          disabled={atLimit}
+        />
+      </section>
     </div>
   );
 }

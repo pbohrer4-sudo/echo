@@ -15,6 +15,7 @@ import { GEO_TYPES, RELATIONSHIP_TYPES } from "@/lib/types";
 import { createGeography } from "@/lib/person-geographies";
 import { createRelationship } from "@/lib/person-relationships";
 import { parseLocationGeo } from "@/lib/location-geo-parse";
+import { rememberCustomDateLabel } from "@/lib/custom-date-labels";
 
 interface Result {
   ok: boolean;
@@ -68,6 +69,10 @@ export async function addImportantDateAction(
     .eq("id", personId)
     .eq("user_id", user.id);
   if (error) return { ok: false, error: error.message };
+
+  // Auto-remember a custom occasion so it appears in the dropdown next
+  // time. No-op for built-in defaults / "andere".
+  await rememberCustomDateLabel(supabase, user.id, label);
 
   revalidatePath(`/people/${personId}`);
   return { ok: true };

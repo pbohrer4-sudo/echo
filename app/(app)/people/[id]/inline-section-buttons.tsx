@@ -94,10 +94,23 @@ function ErrorRow({ message }: { message: string | null }) {
 
 // ───────── + Datum ─────────
 
-export function AddDateButton({ personId }: { personId: string }) {
+export function AddDateButton({
+  personId,
+  customLabels = [],
+}: {
+  personId: string;
+  // Reusable custom occasions remembered from prior entries (per-user).
+  customLabels?: string[];
+}) {
   return (
     <InlineAddShell label="Datum">
-      {(close) => <AddDateForm personId={personId} onDone={close} />}
+      {(close) => (
+        <AddDateForm
+          personId={personId}
+          customLabels={customLabels}
+          onDone={close}
+        />
+      )}
     </InlineAddShell>
   );
 }
@@ -116,21 +129,45 @@ const LEAD_OPTIONS: { value: number; label: string }[] = [
 
 function AddDateForm({
   personId,
+  customLabels,
   onDone,
 }: {
   personId: string;
+  customLabels: string[];
   onDone: () => void;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [label, setLabel] = useState<string>(DATE_LABELS[0]);
+  // Built-in occasions + the user's remembered custom ones, de-duped,
+  // with "andere" kept last as the free-text escape hatch.
+  const occasionOptions = (() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const o of [...DATE_LABELS, ...customLabels]) {
+      const key = o.toLowerCase();
+      if (key === "andere") continue;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(o);
+    }
+    out.push("andere");
+    return out;
+  })();
   const [customLabel, setCustomLabel] = useState("");
   const [date, setDate] = useState("");
   const [remind, setRemind] = useState(true);
   const [leadDays, setLeadDays] = useState<number>(7);
+  // Free-entry lead time: when true, the dropdown switches to a number
+  // input so the user can pick any number of days before the date.
+  const [leadCustom, setLeadCustom] = useState(false);
+  const [leadCustomDays, setLeadCustomDays] = useState<string>("");
 
   const isCustom = label === "andere";
   const effectiveLabel = isCustom ? customLabel.trim() || "andere" : label;
+  const effectiveLead = leadCustom
+    ? Math.max(0, parseInt(leadCustomDays || "0", 10) || 0)
+    : leadDays;
 
   function submit() {
     const fd = new FormData();
@@ -139,7 +176,7 @@ function AddDateForm({
     fd.set("date", date);
     if (remind) {
       fd.set("remind", "on");
-      fd.set("remind_lead_days", String(leadDays));
+      fd.set("remind_lead_days", String(effectiveLead));
     }
     startTransition(async () => {
       const res = await addImportantDateAction(fd);
@@ -158,7 +195,7 @@ function AddDateForm({
             onChange={(e) => setLabel(e.target.value)}
             className={inputClass}
           >
-            {DATE_LABELS.map((d) => (
+            {occasionOptions.map((d) => (
               <option key={d} value={d}>
                 {d}
               </option>
@@ -193,22 +230,53 @@ function AddDateForm({
           checked={remind}
           onChange={(e) => setRemind(e.target.checked)}
         />
-        Jährlich erinnern
+        Erinnern
       </label>
       {remind && (
         <label className="space-y-1 block">
-          <Label>Vorlauf</Label>
-          <select
-            value={leadDays}
-            onChange={(e) => setLeadDays(parseInt(e.target.value, 10))}
-            className={inputClass}
-          >
-            {LEAD_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+          <Label>Erinnerung am:</Label>
+          {leadCustom ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={0}
+                value={leadCustomDays}
+                onChange={(e) => setLeadCustomDays(e.target.value)}
+                placeholder="z.B. 10"
+                className={inputClass}
+                autoFocus
+              />
+              <span className="whitespace-nowrap text-xs text-ink-3">
+                Tage vorher
+              </span>
+              <button
+                type="button"
+                onClick={() => setLeadCustom(false)}
+                className="whitespace-nowrap text-xs text-ink-3 underline hover:text-ink-1"
+              >
+                Liste
+              </button>
+            </div>
+          ) : (
+            <select
+              value={leadDays}
+              onChange={(e) => {
+                if (e.target.value === "custom") {
+                  setLeadCustom(true);
+                  return;
+                }
+                setLeadDays(parseInt(e.target.value, 10));
+              }}
+              className={inputClass}
+            >
+              {LEAD_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+              <option value="custom">Andere… (frei eingeben)</option>
+            </select>
+          )}
         </label>
       )}
       <ErrorRow message={error} />

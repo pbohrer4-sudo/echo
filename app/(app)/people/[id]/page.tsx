@@ -14,6 +14,7 @@ import { listGeographiesForPerson } from "@/lib/person-geographies";
 import { listRelationshipsForPerson } from "@/lib/person-relationships";
 import { getFieldDefs } from "@/lib/custom-fields.server";
 import { parseFieldValues, displayValue } from "@/lib/custom-fields";
+import { getCustomDateLabels } from "@/lib/custom-date-labels";
 import { GeographiesList } from "@/components/geographies-list";
 import {
   AddDateButton,
@@ -148,6 +149,7 @@ export default async function PersonDetailPage({
   // for it (keeps the detail page tidy for sparse data).
   const customFieldDefs = await getFieldDefs();
   const customValues = parseFieldValues(person.custom_field_values);
+  const customDateLabels = await getCustomDateLabels();
   const customFieldsToShow = customFieldDefs.filter((d) => {
     const v = customValues[d.id];
     return v !== null && v !== undefined && v !== "" && v !== false;
@@ -405,7 +407,12 @@ export default async function PersonDetailPage({
               <div className="section-head">
                 <span className="t-label">Wichtige Daten</span>
                 <span className="rule" />
-                {!person.is_self && <AddDateButton personId={person.id} />}
+                {!person.is_self && (
+                  <AddDateButton
+                    personId={person.id}
+                    customLabels={customDateLabels}
+                  />
+                )}
               </div>
               <DateList
                 dates={person.important_dates ?? []}
