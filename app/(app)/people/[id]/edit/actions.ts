@@ -168,7 +168,9 @@ export async function updatePerson(personId: string, formData: FormData) {
   const howWeMet = trimOrNull(formData.get("how_we_met"));
   const giftIdea = trimOrNull(formData.get("gift_idea"));
   const introducedBy = trimOrNull(formData.get("introduced_by"));
+  const introducedByPersonId = trimOrNull(formData.get("introduced_by_person_id"));
   const metWith = trimOrNull(formData.get("met_with"));
+  const metWithPersonId = trimOrNull(formData.get("met_with_person_id"));
   const primaryLanguage = trimOrNull(formData.get("primary_language"));
   const secondaryLanguage = trimOrNull(formData.get("secondary_language"));
   const synergies = parseSynergies(formData.get("synergies"));
@@ -239,7 +241,9 @@ export async function updatePerson(personId: string, formData: FormData) {
     how_we_met: howWeMet,
     gift_idea: giftIdea,
     introduced_by: introducedBy,
+    introduced_by_person_id: introducedByPersonId,
     met_with: metWith,
+    met_with_person_id: metWithPersonId,
     primary_language: primaryLanguage,
     secondary_language: secondaryLanguage,
     synergies,

@@ -34,6 +34,7 @@ import {
   type CustomFieldValues,
 } from "@/lib/custom-fields";
 import { LocationAutocomplete } from "@/components/location-autocomplete";
+import { PersonLookup, type PersonRef } from "@/components/person-lookup";
 import {
   DraftClusterEditor,
   type DraftClusterState,
@@ -82,6 +83,7 @@ interface Props {
   allCircles: CircleRow[];
   contacts: PersonContact[];
   fieldDefs: CustomFieldDef[];
+  candidatePeople: { id: string; name: string }[];
   error?: string;
 }
 
@@ -112,6 +114,7 @@ export function EditPersonForm({
   allCircles,
   contacts,
   fieldDefs,
+  candidatePeople,
   error,
 }: Props) {
   const [name, setName] = useState(person.name);
@@ -123,8 +126,16 @@ export function EditPersonForm({
   const [howWeMet, setHowWeMet] = useState(person.how_we_met ?? "");
   const [giftIdea, setGiftIdea] = useState(person.gift_idea ?? "");
   const [metDate, setMetDate] = useState(person.met_date ?? "");
-  const [introducedBy, setIntroducedBy] = useState(person.introduced_by ?? "");
-  const [metWith, setMetWith] = useState(person.met_with ?? "");
+  const [introducedByRef, setIntroducedByRef] = useState<PersonRef | null>(
+    person.introduced_by
+      ? { id: person.introduced_by_person_id ?? "", name: person.introduced_by }
+      : null,
+  );
+  const [metWithRef, setMetWithRef] = useState<PersonRef | null>(
+    person.met_with
+      ? { id: person.met_with_person_id ?? "", name: person.met_with }
+      : null,
+  );
   const [synergies, setSynergies] = useState<string[]>(person.synergies ?? []);
   const [primaryLanguage, setPrimaryLanguage] = useState(
     person.primary_language ?? "",
@@ -517,23 +528,25 @@ export function EditPersonForm({
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Vermittelt durch">
-              <input
-                type="text"
-                name="introduced_by"
-                value={introducedBy}
-                onChange={(e) => setIntroducedBy(e.target.value)}
-                placeholder="Name der Person, die vermittelt hat"
-                className={inputClass}
+              <input type="hidden" name="introduced_by" value={introducedByRef?.name ?? ""} />
+              <input type="hidden" name="introduced_by_person_id" value={introducedByRef?.id ?? ""} />
+              <PersonLookup
+                value={introducedByRef}
+                candidates={candidatePeople}
+                excludeId={person.id}
+                onChange={setIntroducedByRef}
+                placeholder="Person suchen oder neu anlegen"
               />
             </Field>
             <Field label="Zusammen getroffen mit">
-              <input
-                type="text"
-                name="met_with"
-                value={metWith}
-                onChange={(e) => setMetWith(e.target.value)}
-                placeholder="Wer war noch dabei?"
-                className={inputClass}
+              <input type="hidden" name="met_with" value={metWithRef?.name ?? ""} />
+              <input type="hidden" name="met_with_person_id" value={metWithRef?.id ?? ""} />
+              <PersonLookup
+                value={metWithRef}
+                candidates={candidatePeople}
+                excludeId={person.id}
+                onChange={setMetWithRef}
+                placeholder="Person suchen oder neu anlegen"
               />
             </Field>
           </div>

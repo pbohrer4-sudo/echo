@@ -13,6 +13,7 @@ import { listContactsForPerson } from "@/lib/person-contacts";
 import { listGeographiesForPerson } from "@/lib/person-geographies";
 import { listRelationshipsForPerson } from "@/lib/person-relationships";
 import { getFieldDefs } from "@/lib/custom-fields.server";
+import { parseFieldValues, displayValue } from "@/lib/custom-fields";
 import { getCustomDateLabels } from "@/lib/custom-date-labels";
 import { GeographiesList } from "@/components/geographies-list";
 import {
@@ -33,7 +34,6 @@ import { ShareVCard } from "@/components/share-vcard";
 import { DraftGenerator } from "@/components/draft-generator";
 import { SuggestionStack } from "./suggestion-stack";
 import { ClusterBlock } from "./cluster-block";
-import { ProfileScalars } from "./profile-scalars";
 import { LifeEventsBlock } from "./life-events-block";
 import { GamificationDashboard } from "./gamification-dashboard";
 import { APP_CONFIG } from "@/lib/config";
@@ -144,10 +144,16 @@ export default async function PersonDetailPage({
     .filter((p) => p.id !== id)
     .map((p) => ({ id: p.id, name: p.name }));
 
-  // Custom fields (P1): defs are per-user; values per-person. Rendered
-  // (always, incl. empty) inside ProfileScalars' editable overview.
+  // Custom fields (P1). Defs are per-user; values per-person. Only render
+  // the section when at least one def exists AND this person has a value
+  // for it (keeps the detail page tidy for sparse data).
   const customFieldDefs = await getFieldDefs();
+  const customValues = parseFieldValues(person.custom_field_values);
   const customDateLabels = await getCustomDateLabels();
+  const customFieldsToShow = customFieldDefs.filter((d) => {
+    const v = customValues[d.id];
+    return v !== null && v !== undefined && v !== "" && v !== false;
+  });
 
   // Sub-flags so the JSX stays readable. For non-self people, every
   // section renders as before. For self, sections are scoped to the
@@ -269,7 +275,7 @@ export default async function PersonDetailPage({
                 href={`/people/${person.id}/edit`}
                 className="rounded border border-rule px-3 py-1.5 text-xs text-ink-2 transition hover:border-ink-3 hover:text-ink-1"
               >
-                Weitere Felder
+                Bearbeiten
               </Link>
               {!person.is_self && (
                 <DeleteButton id={person.id} name={person.name} />
@@ -349,14 +355,6 @@ export default async function PersonDetailPage({
 
         {!person.is_self && <SuggestionStack personId={person.id} />}
 
-        {!person.is_self && (
-          <ProfileScalars
-            person={person}
-            fieldDefs={customFieldDefs}
-            candidatePeople={candidateRelationshipPeople}
-          />
-        )}
-
         {!person.is_self && <ClusterBlock personId={person.id} />}
 
         {!person.is_self && (
@@ -386,6 +384,120 @@ export default async function PersonDetailPage({
             addSlot={<AddGeographyButton personId={person.id} />}
           />
         )}
+
+        {!person.is_self &&
+          (person.primary_language || person.secondary_language) && (
+            <section>
+              <div className="section-head">
+                <span className="t-label">Sprache</span>
+                <span className="rule" />
+              </div>
+              <dl className="kv">
+                {person.primary_language && (
+                  <div className="contents">
+                    <dt>Haupt</dt>
+                    <dd>{person.primary_language}</dd>
+                  </div>
+                )}
+                {person.secondary_language && (
+                  <div className="contents">
+                    <dt>Zweit</dt>
+                    <dd>{person.secondary_language}</dd>
+                  </div>
+                )}
+              </dl>
+            </section>
+          )}
+
+        {!person.is_self && (person.synergies?.length ?? 0) > 0 && (
+          <section>
+            <div className="section-head">
+              <span className="t-label">Synergien</span>
+              <span className="rule" />
+            </div>
+            <ul className="space-y-1.5">
+              {person.synergies.map((s, i) => (
+                <li
+                  key={i}
+                  className="flex gap-2 text-sm leading-relaxed text-ink-1"
+                >
+                  <span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-action" />
+                  <span>{s}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {!person.is_self &&
+          (person.how_we_met ||
+            person.met_location ||
+            person.met_date ||
+            person.introduced_by ||
+            person.met_with) && (
+            <section>
+              <div className="section-head">
+                <span className="t-label">Origin</span>
+                <span className="rule" />
+              </div>
+              <dl className="kv">
+                {person.how_we_met && (
+                  <div className="contents">
+                    <dt>Wie</dt>
+                    <dd className="whitespace-pre-wrap">{person.how_we_met}</dd>
+                  </div>
+                )}
+                {person.met_location && (
+                  <div className="contents">
+                    <dt>Wo</dt>
+                    <dd>{person.met_location}</dd>
+                  </div>
+                )}
+                <div className="contents">
+                  <dt>Wann</dt>
+                  <dd>
+                    {person.met_date
+                      ? new Date(person.met_date).toLocaleDateString("de-DE")
+                      : `— (angelegt ${new Date(person.created_at).toLocaleDateString("de-DE")})`}
+                  </dd>
+                </div>
+                {person.introduced_by && (
+                  <div className="contents">
+                    <dt>Vermittelt</dt>
+                    <dd>
+                      {person.introduced_by_person_id ? (
+                        <Link
+                          href={`/people/${person.introduced_by_person_id}`}
+                          className="text-action hover:underline"
+                        >
+                          {person.introduced_by}
+                        </Link>
+                      ) : (
+                        person.introduced_by
+                      )}
+                    </dd>
+                  </div>
+                )}
+                {person.met_with && (
+                  <div className="contents">
+                    <dt>Mit</dt>
+                    <dd>
+                      {person.met_with_person_id ? (
+                        <Link
+                          href={`/people/${person.met_with_person_id}`}
+                          className="text-action hover:underline"
+                        >
+                          {person.met_with}
+                        </Link>
+                      ) : (
+                        person.met_with
+                      )}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            </section>
+          )}
 
         {!person.is_self && <LifeEventsBlock personId={person.id} />}
 
@@ -511,6 +623,23 @@ export default async function PersonDetailPage({
               <PersonTodos todos={todos} />
             </section>
           </div>
+        )}
+
+        {showProfileBody && customFieldsToShow.length > 0 && (
+          <section>
+            <div className="section-head">
+              <span className="t-label">Eigene Felder</span>
+              <span className="rule" />
+            </div>
+            <dl className="kv">
+              {customFieldsToShow.map((def) => (
+                <div key={def.id} className="contents">
+                  <dt>{def.label}</dt>
+                  <dd>{displayValue(def, customValues[def.id])}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
         )}
 
         {showProfileBody && (

@@ -8,6 +8,7 @@ import {
 } from "@/lib/circles";
 import { listContactsForPerson } from "@/lib/person-contacts";
 import { getFieldDefs } from "@/lib/custom-fields.server";
+import { listPeople } from "@/lib/people";
 import { EditPersonForm } from "./edit-form";
 
 // Edit-Page mit allen scalar + Cluster-Feldern. Multi-Row-Sachen
@@ -25,17 +26,30 @@ export default async function EditPersonPage({
   const { id } = await params;
   const { error } = await searchParams;
 
-  const [person, tags, passions, personCircles, allCircles, contacts, fieldDefs] =
-    await Promise.all([
-      getPersonById(id),
-      listTagsWithNotesForPerson(id),
-      listPassionsForPerson(id),
-      listCirclesForPerson(id),
-      listAllCircles(),
-      listContactsForPerson(id),
-      getFieldDefs(),
-    ]);
+  const [
+    person,
+    tags,
+    passions,
+    personCircles,
+    allCircles,
+    contacts,
+    fieldDefs,
+    allPeople,
+  ] = await Promise.all([
+    getPersonById(id),
+    listTagsWithNotesForPerson(id),
+    listPassionsForPerson(id),
+    listCirclesForPerson(id),
+    listAllCircles(),
+    listContactsForPerson(id),
+    getFieldDefs(),
+    listPeople(),
+  ]);
   if (!person) notFound();
+
+  const candidatePeople = allPeople
+    .filter((p) => p.id !== id)
+    .map((p) => ({ id: p.id, name: p.name }));
 
   return (
     <div className="px-8 py-10">
@@ -60,6 +74,7 @@ export default async function EditPersonPage({
           allCircles={allCircles}
           contacts={contacts}
           fieldDefs={fieldDefs}
+          candidatePeople={candidatePeople}
           error={error ? decodeURIComponent(error) : undefined}
         />
       </div>
