@@ -32,39 +32,44 @@ export async function getOrCreateTag(input: {
   const trimmed = input.name.trim();
   if (!trimmed) return null;
   const normalized = trimmed.toLowerCase();
+  const cluster = input.cluster ?? "interests";
 
-  // Erst Lookup — wenn existiert, einfach zurückgeben.
+  // Lookup by name AND cluster: tag identity is (user_id, lower(name),
+  // cluster) since the cross-fill fix (migration 0039). A name can live
+  // independently in different clusters, so we must scope the lookup by
+  // cluster — otherwise a name-only .maybeSingle() can match multiple
+  // rows (→ error) or return the wrong-cluster tag.
   const { data: existing } = await supabase
     .from("tags")
     .select("*")
     .eq("user_id", user.id)
     .eq("name", normalized)
+    .eq("cluster", cluster)
     .maybeSingle();
 
   if (existing) return existing as TagRow;
 
-  // Insert. Race-Condition-safe durch unique-constraint — falls zwei
-  // Parallel-Calls den gleichen Tag anlegen wollen, gewinnt einer und
-  // wir holen den anderen per Re-Select.
+  // Insert. Race-Condition-safe via the (user_id, lower(name), cluster)
+  // unique index — on conflict we re-select the same (name, cluster).
   const { data: inserted, error } = await supabase
     .from("tags")
     .insert({
       user_id: user.id,
       name: normalized,
-      cluster: input.cluster ?? "interests",
+      cluster,
       created_by: input.createdBy ?? "user",
     })
     .select("*")
     .single();
 
   if (error) {
-    // 23505 = unique_violation → jemand anders war schneller. Re-Select.
     if (error.code === "23505") {
       const { data: retry } = await supabase
         .from("tags")
         .select("*")
         .eq("user_id", user.id)
         .eq("name", normalized)
+        .eq("cluster", cluster)
         .maybeSingle();
       return (retry as TagRow) ?? null;
     }
