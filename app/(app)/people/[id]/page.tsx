@@ -368,67 +368,7 @@ export default async function PersonDetailPage({
           />
         )}
 
-        {!person.is_self && (
-          <DraftGenerator
-            personId={person.id}
-            personName={person.name}
-            contacts={contacts}
-          />
-        )}
-
-        {!person.is_self && (
-          <GeographiesList
-            geographies={geographies.filter(
-              (g) => g.geo_type !== "met_location",
-            )}
-            addSlot={<AddGeographyButton personId={person.id} />}
-          />
-        )}
-
-        {!person.is_self &&
-          (person.primary_language || person.secondary_language) && (
-            <section>
-              <div className="section-head">
-                <span className="t-label">Sprache</span>
-                <span className="rule" />
-              </div>
-              <dl className="kv">
-                {person.primary_language && (
-                  <div className="contents">
-                    <dt>Haupt</dt>
-                    <dd>{person.primary_language}</dd>
-                  </div>
-                )}
-                {person.secondary_language && (
-                  <div className="contents">
-                    <dt>Zweit</dt>
-                    <dd>{person.secondary_language}</dd>
-                  </div>
-                )}
-              </dl>
-            </section>
-          )}
-
-        {!person.is_self && (person.synergies?.length ?? 0) > 0 && (
-          <section>
-            <div className="section-head">
-              <span className="t-label">Synergien</span>
-              <span className="rule" />
-            </div>
-            <ul className="space-y-1.5">
-              {person.synergies.map((s, i) => (
-                <li
-                  key={i}
-                  className="flex gap-2 text-sm leading-relaxed text-ink-1"
-                >
-                  <span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-action" />
-                  <span>{s}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
+        {/* Origin direkt unter den Stammdaten (Patrick 2026-06-07). */}
         {!person.is_self &&
           (person.how_we_met ||
             person.met_location ||
@@ -498,6 +438,68 @@ export default async function PersonDetailPage({
               </dl>
             </section>
           )}
+
+        {!person.is_self && (
+          <DraftGenerator
+            personId={person.id}
+            personName={person.name}
+            contacts={contacts}
+          />
+        )}
+
+        {!person.is_self && (
+          <GeographiesList
+            geographies={geographies.filter(
+              (g) => g.geo_type !== "met_location",
+            )}
+            addSlot={<AddGeographyButton personId={person.id} />}
+          />
+        )}
+
+        {!person.is_self &&
+          (person.primary_language || person.secondary_language) && (
+            <section>
+              <div className="section-head">
+                <span className="t-label">Sprache</span>
+                <span className="rule" />
+              </div>
+              <dl className="kv">
+                {person.primary_language && (
+                  <div className="contents">
+                    <dt>Haupt</dt>
+                    <dd>{person.primary_language}</dd>
+                  </div>
+                )}
+                {person.secondary_language && (
+                  <div className="contents">
+                    <dt>Zweit</dt>
+                    <dd>{person.secondary_language}</dd>
+                  </div>
+                )}
+              </dl>
+            </section>
+          )}
+
+        {!person.is_self && (person.synergies?.length ?? 0) > 0 && (
+          <section>
+            <div className="section-head">
+              <span className="t-label">Synergien</span>
+              <span className="rule" />
+            </div>
+            <ul className="space-y-1.5">
+              {person.synergies.map((s, i) => (
+                <li
+                  key={i}
+                  className="flex gap-2 text-sm leading-relaxed text-ink-1"
+                >
+                  <span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-action" />
+                  <span>{s}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
 
         {!person.is_self && <LifeEventsBlock personId={person.id} />}
 
