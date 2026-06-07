@@ -80,13 +80,13 @@ export async function getOrCreateTag(input: {
 }
 
 /**
- * Verknüpft Tag mit Person. Trigger erzwingt 7-Tag-Limit pro Person.
- * Bei Limit-Verletzung wird false zurückgegeben, kein Throw.
+ * Verknüpft Tag mit Person. Das frühere 7-Tag-Limit (Trigger) wurde in
+ * Migration 0043 entfernt — kein Limit mehr.
  */
 export async function addTagToPerson(
   personId: string,
   tagId: string,
-): Promise<{ ok: boolean; reason?: "limit" | "duplicate" | "error" }> {
+): Promise<{ ok: boolean; reason?: "duplicate" | "error" }> {
   const supabase = await createClient();
   const { error } = await supabase
     .from("person_tags")
@@ -94,10 +94,6 @@ export async function addTagToPerson(
 
   if (!error) return { ok: true };
 
-  // P0001 = Postgres raise exception (vom Limit-Trigger)
-  if (error.message?.includes("maximum of 7 tags")) {
-    return { ok: false, reason: "limit" };
-  }
   if (error.code === "23505") {
     // Schon dranne — kein echter Fehler.
     return { ok: true };

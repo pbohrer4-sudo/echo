@@ -45,9 +45,6 @@ export async function addPersonTag(
 
   const res = await addTagToPersonRaw(personId, tag.id);
   if (!res.ok) {
-    if (res.reason === "limit") {
-      return { ok: false, error: "Max 7 Tags pro Person erreicht" };
-    }
     return { ok: false, error: "Tag konnte nicht zugewiesen werden" };
   }
   revalidatePath(`/people/${personId}`);

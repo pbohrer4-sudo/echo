@@ -225,7 +225,7 @@ export async function loadPeopleContext(
     met_location: p.met_location,
     introduced_by: p.introduced_by,
     met_with: p.met_with,
-    synergies: Array.isArray(p.synergies) ? p.synergies : [],
+    synergies: (Array.isArray(p.synergies) ? p.synergies : []).slice(0, 6),
     primary_language: p.primary_language,
     secondary_language: p.secondary_language,
     current_location: p.current_location,

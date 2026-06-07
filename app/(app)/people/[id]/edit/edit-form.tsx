@@ -559,14 +559,17 @@ export function EditPersonForm({
             <span className="rule" />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Hauptsprache">
+            <Field label="Hauptsprache" required>
               <select
                 name="primary_language"
+                required
                 value={primaryLanguage}
                 onChange={(e) => setPrimaryLanguage(e.target.value)}
                 className={inputClass}
               >
-                <option value="">Bitte wählen</option>
+                <option value="" disabled>
+                  Bitte wählen
+                </option>
                 {LANGUAGES.map((l) => (
                   <option key={l} value={l}>
                     {l}

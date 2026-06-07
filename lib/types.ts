@@ -898,6 +898,19 @@ export type Mode =
   | "reconnect"
   | "archive";
 
+// Single source of truth for valid Mode values. Import this everywhere
+// instead of re-declaring local arrays — the duplicated arrays drifted
+// when "cold" was added (silent reset to "active" on save). Keep in sync
+// with the Mode union + the people_mode_check DB constraint.
+export const MODE_VALUES: Mode[] = [
+  "active",
+  "nurture",
+  "cold",
+  "dormant",
+  "reconnect",
+  "archive",
+];
+
 export type InteractionDirection = "inbound" | "outbound" | "mutual";
 
 // UI-Helper — Labels (deutsch) für die drei Achsen.

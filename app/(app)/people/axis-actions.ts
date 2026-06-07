@@ -12,6 +12,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { MODE_VALUES } from "@/lib/types";
 import type { Depth, Mode, Purpose } from "@/lib/types";
 
 const DEPTH_VALUES: Depth[] = [
@@ -28,15 +29,6 @@ const PURPOSE_VALUES: Purpose[] = [
   "business_active",
   "business_latent",
   "aspirational",
-];
-
-const MODE_VALUES: Mode[] = [
-  "active",
-  "nurture",
-  "cold",
-  "dormant",
-  "reconnect",
-  "archive",
 ];
 
 /**

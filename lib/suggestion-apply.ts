@@ -14,6 +14,7 @@
 // echte Payload-Form sehen.
 
 import { createClient } from "@/lib/supabase/server";
+import { MODE_VALUES } from "@/lib/types";
 import type {
   Depth,
   Mode,
@@ -34,13 +35,6 @@ const DEPTH_VALUES: Depth[] = [
   "active_50",
   "network_150",
   "periphery_500",
-];
-const MODE_VALUES: Mode[] = [
-  "active",
-  "nurture",
-  "dormant",
-  "reconnect",
-  "archive",
 ];
 const PURPOSE_VALUES: Purpose[] = [
   "personal",

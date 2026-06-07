@@ -21,7 +21,7 @@ import type {
   Purpose,
   TagCluster,
 } from "@/lib/types";
-import { CONTACT_CHANNELS } from "@/lib/types";
+import { CONTACT_CHANNELS, MODE_VALUES } from "@/lib/types";
 
 const PURPOSE_VALUES: Purpose[] = [
   "personal",
@@ -36,13 +36,6 @@ const DEPTH_VALUES: Depth[] = [
   "active_50",
   "network_150",
   "periphery_500",
-];
-const MODE_VALUES: Mode[] = [
-  "active",
-  "nurture",
-  "dormant",
-  "reconnect",
-  "archive",
 ];
 const VALID_CLUSTERS: TagCluster[] = [
   "reminders",
@@ -146,6 +139,27 @@ function parseClusterState(raw: FormDataEntryValue | null): ParsedCluster {
   return empty;
 }
 
+// Returns a set (as Map<id, true>) of the given ids that are people
+// owned by `userId` and not soft-deleted. Used to reject cross-tenant
+// person-ref ids before storing them.
+async function ownedPersonIds(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  ids: (string | null)[],
+): Promise<Map<string, true>> {
+  const wanted = ids.filter((x): x is string => !!x);
+  const out = new Map<string, true>();
+  if (wanted.length === 0) return out;
+  const { data } = await supabase
+    .from("people")
+    .select("id")
+    .in("id", wanted)
+    .eq("user_id", userId)
+    .is("deleted_at", null);
+  for (const row of (data ?? []) as { id: string }[]) out.set(row.id, true);
+  return out;
+}
+
 export async function updatePerson(personId: string, formData: FormData) {
   const supabase = await createClient();
   const {
@@ -168,10 +182,32 @@ export async function updatePerson(personId: string, formData: FormData) {
   const howWeMet = trimOrNull(formData.get("how_we_met"));
   const giftIdea = trimOrNull(formData.get("gift_idea"));
   const introducedBy = trimOrNull(formData.get("introduced_by"));
-  const introducedByPersonId = trimOrNull(formData.get("introduced_by_person_id"));
   const metWith = trimOrNull(formData.get("met_with"));
-  const metWithPersonId = trimOrNull(formData.get("met_with_person_id"));
+  // Person-ref ids must belong to the caller — don't store a pointer
+  // into another tenant's id-space (FK existence alone doesn't enforce
+  // ownership). Null out anything not owned.
+  const ownedIds = await ownedPersonIds(supabase, user.id, [
+    trimOrNull(formData.get("introduced_by_person_id")),
+    trimOrNull(formData.get("met_with_person_id")),
+  ]);
+  const introducedByPersonId = ownedIds.get(
+    trimOrNull(formData.get("introduced_by_person_id")) ?? "",
+  )
+    ? trimOrNull(formData.get("introduced_by_person_id"))
+    : null;
+  const metWithPersonId = ownedIds.get(
+    trimOrNull(formData.get("met_with_person_id")) ?? "",
+  )
+    ? trimOrNull(formData.get("met_with_person_id"))
+    : null;
   const primaryLanguage = trimOrNull(formData.get("primary_language"));
+  // Language is mandatory (matches the create flow) — don't let an edit
+  // silently clear it.
+  if (!primaryLanguage) {
+    redirect(
+      `/people/${personId}/edit?error=${encodeURIComponent("Hauptsprache fehlt")}`,
+    );
+  }
   const secondaryLanguage = trimOrNull(formData.get("secondary_language"));
   const synergies = parseSynergies(formData.get("synergies"));
   const metDate = dateOrNull(formData.get("met_date"));

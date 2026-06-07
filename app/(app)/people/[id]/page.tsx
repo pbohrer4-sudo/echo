@@ -388,6 +388,7 @@ export default async function PersonDetailPage({
                 × → schnell entfernen. */}
             {(person.synergy_tags?.length ?? 0) > 0 && (
               <SynergyTagChips
+                key={person.synergy_tags.join("|")}
                 personId={person.id}
                 tags={person.synergy_tags}
               />

@@ -4,6 +4,7 @@
 // auch in lib/tools.ts (Voice-Tool query_people produziert dasselbe
 // Shape). Eine einzige Source-of-Truth für die Filter-Logik.
 
+import { MODE_VALUES } from "@/lib/types";
 import type { Depth, Mode, Purpose, TagCluster } from "@/lib/types";
 
 export type ChannelFilter = "has_phone" | "has_email" | "has_linkedin";
@@ -26,13 +27,7 @@ export interface PeopleFilterSpec {
   gifts?: "yes" | "no";
 }
 
-const VALID_MODES = new Set<Mode>([
-  "active",
-  "nurture",
-  "dormant",
-  "reconnect",
-  "archive",
-]);
+const VALID_MODES = new Set<Mode>(MODE_VALUES);
 const VALID_PURPOSES = new Set<Purpose>([
   "personal",
   "family",

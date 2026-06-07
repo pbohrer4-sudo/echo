@@ -72,8 +72,11 @@ export function PersonLookup({
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
-          // Typing clears any prior selection until re-picked.
-          if (value) onChange(e.target.value ? { id: "", name: e.target.value } : null);
+          // Typing lifts the free-text name to the parent (id cleared
+          // until a candidate is picked). Must fire even when nothing
+          // was previously selected — otherwise a typed-but-not-selected
+          // name is silently dropped on save.
+          onChange(e.target.value ? { id: "", name: e.target.value } : null);
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
