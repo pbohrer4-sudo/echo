@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import {
   DEPTH_LABELS,
+  LANGUAGES,
   MODE_LABELS,
   PURPOSE_LABELS,
   type AddressEntry,
@@ -124,6 +125,13 @@ export function EditPersonForm({
   const [metDate, setMetDate] = useState(person.met_date ?? "");
   const [introducedBy, setIntroducedBy] = useState(person.introduced_by ?? "");
   const [metWith, setMetWith] = useState(person.met_with ?? "");
+  const [synergies, setSynergies] = useState<string[]>(person.synergies ?? []);
+  const [primaryLanguage, setPrimaryLanguage] = useState(
+    person.primary_language ?? "",
+  );
+  const [secondaryLanguage, setSecondaryLanguage] = useState(
+    person.secondary_language ?? "",
+  );
   const [purpose, setPurpose] = useState<Purpose | "">(person.purpose ?? "");
   const [depth, setDepth] = useState<Depth | "auto">(
     person.depth ?? "auto",
@@ -528,6 +536,96 @@ export function EditPersonForm({
                 className={inputClass}
               />
             </Field>
+          </div>
+        </section>
+
+        {/* — Sprache — */}
+        <section className="space-y-3">
+          <div className="section-head">
+            <span className="t-label">Sprache</span>
+            <span className="rule" />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Hauptsprache">
+              <select
+                name="primary_language"
+                value={primaryLanguage}
+                onChange={(e) => setPrimaryLanguage(e.target.value)}
+                className={inputClass}
+              >
+                <option value="">Bitte wählen</option>
+                {LANGUAGES.map((l) => (
+                  <option key={l} value={l}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Zweitsprache (optional)">
+              <select
+                name="secondary_language"
+                value={secondaryLanguage}
+                onChange={(e) => setSecondaryLanguage(e.target.value)}
+                className={inputClass}
+              >
+                <option value="">—</option>
+                {LANGUAGES.map((l) => (
+                  <option key={l} value={l}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        </section>
+
+        {/* — Synergien: Freitext-Punkte (keine Tags, kein Limit). — */}
+        <section className="space-y-3">
+          <input
+            type="hidden"
+            name="synergies"
+            value={JSON.stringify(synergies)}
+          />
+          <div className="section-head">
+            <span className="t-label">Synergien</span>
+            <span className="rule" />
+          </div>
+          <p className="text-xs text-ink-4">
+            Konkrete Potenziale — ganze Sätze erlaubt, kein Limit. Jeder
+            Eintrag ist durchsuchbar.
+          </p>
+          <div className="space-y-2">
+            {synergies.map((s, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <textarea
+                  value={s}
+                  onChange={(e) => {
+                    const next = [...synergies];
+                    next[i] = e.target.value;
+                    setSynergies(next);
+                  }}
+                  rows={2}
+                  className="flex-1 rounded border border-rule bg-paper px-3 py-1.5 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSynergies(synergies.filter((_, j) => j !== i))
+                  }
+                  aria-label={`Synergie ${i + 1} entfernen`}
+                  className="mt-1 grid h-6 w-6 place-items-center rounded text-ink-3 transition hover:bg-bad/10 hover:text-bad"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => setSynergies([...synergies, ""])}
+              className="inline-flex h-8 items-center rounded border border-dashed border-rule px-3 text-sm text-ink-3 transition hover:border-action hover:text-action"
+            >
+              + Synergie hinzufügen
+            </button>
           </div>
         </section>
 

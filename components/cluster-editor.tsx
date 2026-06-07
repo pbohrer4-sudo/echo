@@ -52,12 +52,10 @@ interface Props {
   allCircles: CircleRow[];
 }
 
-// Signals (reminders cluster) is rendered as its own row UNDER Circles
-// (Patrick 2026-06-07). The 'origin' cluster was removed entirely — its
-// info now lives in the dedicated "Origin" section (how_we_met / met_date
-// / met_location / introduced_by / met_with). The Tags grid now only
-// holds interests + potential.
-const CLUSTER_ORDER: TagCluster[] = ["interests", "potential"];
+// Signals (reminders) is its own row under Circles. 'origin' → Origin
+// section. 'potential' → "Synergien" text-list section (no longer a tag
+// cluster). The Tags grid now holds only "interests".
+const CLUSTER_ORDER: TagCluster[] = ["interests"];
 
 export function ClusterEditor({
   personId,
@@ -67,10 +65,6 @@ export function ClusterEditor({
   personCircles,
   allCircles,
 }: Props) {
-  // The 7-tag limit counts ALL tags including Signals/reminders, so it's
-  // computed here and shared with both the Tags grid and the standalone
-  // Signals row.
-  const atLimit = tags.length >= 7;
   const reminderTags = tags.filter((t) => t.cluster === "reminders");
 
   return (
@@ -89,7 +83,7 @@ export function ClusterEditor({
           tags={reminderTags}
           personId={personId}
           personName={personName}
-          disabled={atLimit}
+          disabled={false}
         />
       </section>
     </div>
@@ -113,17 +107,12 @@ function TagsBlock({
     grouped.get(t.cluster)?.push(t);
   }
 
-  const totalCount = tags.length;
-  const atLimit = totalCount >= 7;
-
   return (
     <section className="space-y-3">
       <div className="section-head">
-        <span className="t-label">Tags ({totalCount}/7)</span>
+        <span className="t-label">Tags</span>
         <span className="rule" />
       </div>
-      {/* 2×2-Grid: Signals + Interests links, Potential + Origin
-          rechts. Spart Höhe, jede Spalte kann eigene Pills wrap'en. */}
       <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
         {CLUSTER_ORDER.map((cluster) => (
           <TagClusterRow
@@ -132,15 +121,10 @@ function TagsBlock({
             tags={grouped.get(cluster) ?? []}
             personId={personId}
             personName={personName}
-            disabled={atLimit}
+            disabled={false}
           />
         ))}
       </div>
-      {atLimit && (
-        <p className="text-[10px] uppercase tracking-wider text-ink-4">
-          7-Tag-Limit erreicht — erst einen entfernen
-        </p>
-      )}
     </section>
   );
 }

@@ -24,6 +24,11 @@ interface BasePerson {
   how_we_met: string | null;
   met_date: string | null;
   met_location: string | null;
+  introduced_by: string | null;
+  met_with: string | null;
+  synergies: string[] | null;
+  primary_language: string | null;
+  secondary_language: string | null;
   current_location: string | null;
   home_location: string | null;
   linkedin_url: string | null;
@@ -97,7 +102,7 @@ export async function loadPeopleContext(
   const { data: peopleData, error } = await supabase
     .from("people")
     .select(
-      "id, name, company, role, organization_id, gift_idea, notes, how_we_met, met_date, met_location, current_location, home_location, linkedin_url, depth, purpose, mode, cadence_days, last_contact_at, next_nudge_at, addresses, socials, important_dates",
+      "id, name, company, role, organization_id, gift_idea, notes, how_we_met, met_date, met_location, introduced_by, met_with, synergies, primary_language, secondary_language, current_location, home_location, linkedin_url, depth, purpose, mode, cadence_days, last_contact_at, next_nudge_at, addresses, socials, important_dates",
     )
     .is("deleted_at", null)
     .eq("is_self", false)
@@ -218,6 +223,11 @@ export async function loadPeopleContext(
     how_we_met: p.how_we_met,
     met_date: p.met_date,
     met_location: p.met_location,
+    introduced_by: p.introduced_by,
+    met_with: p.met_with,
+    synergies: Array.isArray(p.synergies) ? p.synergies : [],
+    primary_language: p.primary_language,
+    secondary_language: p.secondary_language,
     current_location: p.current_location,
     home_location: p.home_location,
     linkedin_url: p.linkedin_url,

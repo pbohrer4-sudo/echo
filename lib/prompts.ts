@@ -15,6 +15,11 @@ export interface PersonContext {
   how_we_met: string | null;
   met_date: string | null;
   met_location: string | null;
+  introduced_by: string | null;
+  met_with: string | null;
+  synergies: string[];
+  primary_language: string | null;
+  secondary_language: string | null;
   current_location: string | null;
   home_location: string | null;
   linkedin_url: string | null;
@@ -234,6 +239,18 @@ function renderPeopleSection(people: PersonContext[]): string {
       }
       if (p.how_we_met)
         details.push(`    Kennengelernt: ${truncate(p.how_we_met, 160)}`);
+      // Origin extras + language + synergies so the LLM can answer
+      // "wer hat X vermittelt?", "welche Sprache spricht X?", "welche
+      // Synergien gibt es mit X?".
+      if (p.introduced_by)
+        details.push(`    Vermittelt durch: ${p.introduced_by}`);
+      if (p.met_with) details.push(`    Getroffen mit: ${p.met_with}`);
+      if (p.primary_language) {
+        const second = p.secondary_language ? ` (+ ${p.secondary_language})` : "";
+        details.push(`    Sprache: ${p.primary_language}${second}`);
+      }
+      if (p.synergies.length > 0)
+        details.push(`    Synergien: ${p.synergies.join(" · ")}`);
       if (p.notes) details.push(`    Notes: ${truncate(p.notes, 280)}`);
       return [head, ...details].join("\n");
     })

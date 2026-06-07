@@ -113,7 +113,7 @@ const COLUMNS: ColumnDef[] = [
   { key: "gifts", label: "Gifts", default: false, gridCol: "minmax(140px,1fr)" },
   { key: "reminders", label: "Signale", default: false, gridCol: "minmax(200px,1.4fr)" },
   { key: "interests", label: "Interests", default: false, gridCol: "minmax(200px,1.4fr)" },
-  { key: "potential", label: "Potential", default: false, gridCol: "minmax(200px,1.4fr)" },
+  { key: "potential", label: "Synergies", default: false, gridCol: "minmax(200px,1.4fr)" },
   { key: "origin", label: "Origin", default: false, gridCol: "minmax(180px,1.2fr)" },
   { key: "passions", label: "Passions", default: false, gridCol: "minmax(180px,1.2fr)" },
   { key: "circles", label: "Circles", default: false, gridCol: "minmax(180px,1.2fr)" },
@@ -973,12 +973,15 @@ function Cell({
         />
       );
     case "potential":
+      // Repurposed as "Synergies" (2026-06-07): now reads the synergies
+      // text list, not the old potential tag cluster.
       return (
-        <TagClusterCell
-          tags={row.tagsByCluster.potential ?? []}
-          cluster="potential"
-          notes={row.tagNotes}
-        />
+        <span
+          className="block truncate text-xs text-ink-2"
+          title={(person.synergies ?? []).join(" · ") || undefined}
+        >
+          {(person.synergies ?? []).join(" · ") || "—"}
+        </span>
       );
     case "origin":
       return (

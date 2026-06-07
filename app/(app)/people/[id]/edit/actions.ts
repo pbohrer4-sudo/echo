@@ -93,6 +93,22 @@ function dateOrNull(v: FormDataEntryValue | null): string | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : null;
 }
 
+// Synergies: JSON array of strings from the hidden input. Trims, drops
+// empties. No limit (Patrick: "no tag limitations").
+function parseSynergies(v: FormDataEntryValue | null): string[] {
+  if (typeof v !== "string" || !v.trim()) return [];
+  try {
+    const arr = JSON.parse(v);
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .filter((x): x is string => typeof x === "string")
+      .map((x) => x.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 interface ParsedCluster {
   tags: Record<TagCluster, string[]>;
   passions: string[];
@@ -153,6 +169,9 @@ export async function updatePerson(personId: string, formData: FormData) {
   const giftIdea = trimOrNull(formData.get("gift_idea"));
   const introducedBy = trimOrNull(formData.get("introduced_by"));
   const metWith = trimOrNull(formData.get("met_with"));
+  const primaryLanguage = trimOrNull(formData.get("primary_language"));
+  const secondaryLanguage = trimOrNull(formData.get("secondary_language"));
+  const synergies = parseSynergies(formData.get("synergies"));
   const metDate = dateOrNull(formData.get("met_date"));
   const metLocation = trimOrNull(formData.get("met_location"));
   const metLocationGeo = parseLocationGeo(formData.get("met_location_geo"));
@@ -221,6 +240,9 @@ export async function updatePerson(personId: string, formData: FormData) {
     gift_idea: giftIdea,
     introduced_by: introducedBy,
     met_with: metWith,
+    primary_language: primaryLanguage,
+    secondary_language: secondaryLanguage,
+    synergies,
     met_date: metDate,
     met_location: metLocation,
     met_location_geo: metLocationGeo,
@@ -321,12 +343,15 @@ async function reconcileCluster(
       if (!name) continue;
       const key = `${name}|${cluster}`;
       if (currentTagByKey.has(key)) continue;
-      // getOrCreateTag inline.
+      // getOrCreateTag inline — lookup by name AND cluster so the same
+      // name can live independently in different clusters (cross-fill
+      // fix; matches the (user_id, lower(name), cluster) unique index).
       const { data: existingTag } = await supabase
         .from("tags")
         .select("id")
         .eq("user_id", userId)
         .eq("name", name)
+        .eq("cluster", cluster)
         .maybeSingle();
       let tagId = existingTag?.id ?? null;
       if (!tagId) {
@@ -341,10 +366,6 @@ async function reconcileCluster(
           .select("id")
           .single();
         tagId = inserted?.id ?? null;
-      } else {
-        // Wenn Tag existiert aber im falschen Cluster, ggf updaten —
-        // hier konservativ: lass den Cluster wie er ist (User kann ihn
-        // auf Detail-Seite über Suggestion-System ändern).
       }
       if (tagId) {
         await supabase

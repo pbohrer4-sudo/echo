@@ -40,12 +40,11 @@ export function emptyDraftClusterState(): DraftClusterState {
   };
 }
 
-// 'origin' removed (2026-06-07) — now its own "Origin" section.
-// 'reminders' (Signals) stays here in the draft editor for now.
+// 'origin' → Origin section, 'potential' → Synergien section (2026-06-07).
+// 'reminders' (Signals) stays here in the draft editor.
 const CLUSTER_ORDER: TagCluster[] = [
   "reminders",
   "interests",
-  "potential",
 ];
 
 interface Props {
@@ -55,18 +54,11 @@ interface Props {
 }
 
 export function DraftClusterEditor({ state, onChange, existingCircles }: Props) {
-  const totalTags =
-    state.tags.reminders.length +
-    state.tags.interests.length +
-    state.tags.potential.length +
-    state.tags.origin.length;
-  const tagLimit = totalTags >= 7;
   const passionLimit = state.passions.length >= 5;
 
   function addTag(cluster: TagCluster, name: string) {
     const trimmed = name.trim();
     if (!trimmed) return;
-    if (tagLimit) return;
     if (state.tags[cluster].some((t) => t.toLowerCase() === trimmed.toLowerCase()))
       return;
     onChange({
@@ -115,7 +107,7 @@ export function DraftClusterEditor({ state, onChange, existingCircles }: Props) 
       {/* Tags grouped by Cluster */}
       <section className="space-y-3">
         <div className="section-head">
-          <span className="t-label">Tags ({totalTags}/7)</span>
+          <span className="t-label">Tags</span>
           <span className="rule" />
         </div>
         <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
@@ -126,15 +118,10 @@ export function DraftClusterEditor({ state, onChange, existingCircles }: Props) 
               tags={state.tags[cluster]}
               onAdd={(n) => addTag(cluster, n)}
               onRemove={(n) => removeTag(cluster, n)}
-              disabled={tagLimit}
+              disabled={false}
             />
           ))}
         </div>
-        {tagLimit && (
-          <p className="text-[10px] uppercase tracking-wider text-ink-4">
-            7-Tag-Limit erreicht — erst einen entfernen
-          </p>
-        )}
       </section>
 
       {/* Passions */}

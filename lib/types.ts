@@ -402,6 +402,13 @@ export interface Person {
   // zusammen man die Person getroffen hat. Freitext.
   introduced_by: string | null;
   met_with: string | null;
+  // Synergies (2026-06-07): replaces the "potential" tag cluster — a
+  // multi-entry, sentence-length, searchable list (NOT tags).
+  synergies: string[];
+  // Per-person language (2026-06-07): primary = communication language
+  // (prominent), secondary = optional.
+  primary_language: string | null;
+  secondary_language: string | null;
   // 3-Achsen (Briefing 4.1-4.3).
   depth: Depth | null;
   depth_source: DepthSource;
@@ -504,6 +511,7 @@ export const RELATIONSHIP_TYPES = [
   "parent",
   "child",
   "sibling",
+  "assistant",
   "custom",
 ] as const;
 export type RelationshipType = (typeof RELATIONSHIP_TYPES)[number];
@@ -520,6 +528,8 @@ export interface PersonRelationship {
 }
 
 export const GEO_TYPES = [
+  "wohnsitz_1",
+  "wohnsitz_2",
   "residence",
   "origin",
   "professional_hub",
@@ -592,10 +602,13 @@ export const RELATIONSHIP_TYPE_LABELS: Record<RelationshipType, string> = {
   parent: "Elternteil",
   child: "Kind",
   sibling: "Geschwister",
+  assistant: "Assistant",
   custom: "Andere",
 };
 
 export const GEO_TYPE_LABELS: Record<GeoType, string> = {
+  wohnsitz_1: "1. Wohnsitz",
+  wohnsitz_2: "2. Wohnsitz",
   residence: "Wohnsitz",
   origin: "Herkunft",
   professional_hub: "Berufshub",
@@ -603,6 +616,29 @@ export const GEO_TYPE_LABELS: Record<GeoType, string> = {
   met_location: "Wo getroffen",
   custom: "Anderer Ort",
 };
+
+// Languages for the per-person language dropdown — western mainstream.
+// "andere" lets the user type anything not listed. Plain text column,
+// so edits here need no migration.
+export const LANGUAGES = [
+  "Deutsch",
+  "English",
+  "Français",
+  "Italiano",
+  "Español",
+  "Português",
+  "Nederlands",
+  "Polski",
+  "Svenska",
+  "Dansk",
+  "Norsk",
+  "Suomi",
+  "Türkçe",
+  "Ελληνικά",
+  "Русский",
+  "andere",
+] as const;
+export type Language = (typeof LANGUAGES)[number] | string;
 
 export interface Interaction {
   id: string;
