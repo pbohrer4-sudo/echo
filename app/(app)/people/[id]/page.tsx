@@ -99,6 +99,23 @@ function initials(name: string): string {
     .toUpperCase();
 }
 
+// One boxed Origin row — label left, value right — matching the
+// Stammdaten box format.
+function OriginRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3 border-b border-rule-soft px-4 py-2.5 last:border-0">
+      <dt className="t-label">{label}</dt>
+      <dd className="ml-auto truncate text-sm text-ink-1">{children}</dd>
+    </div>
+  );
+}
+
 export default async function PersonDetailPage({
   params,
   searchParams,
@@ -375,65 +392,55 @@ export default async function PersonDetailPage({
             person.met_date ||
             person.introduced_by ||
             person.met_with) && (
-            <section>
+            <section className="space-y-3">
               <div className="section-head">
                 <span className="t-label">Origin</span>
                 <span className="rule" />
               </div>
-              <dl className="kv">
+              {/* Boxed rows, gleiche Optik wie Stammdaten. */}
+              <dl className="overflow-hidden rounded border border-rule bg-paper">
                 {person.how_we_met && (
-                  <div className="contents">
-                    <dt>Wie</dt>
-                    <dd className="whitespace-pre-wrap">{person.how_we_met}</dd>
-                  </div>
+                  <OriginRow label="Wie">
+                    <span className="whitespace-pre-wrap">
+                      {person.how_we_met}
+                    </span>
+                  </OriginRow>
                 )}
                 {person.met_location && (
-                  <div className="contents">
-                    <dt>Wo</dt>
-                    <dd>{person.met_location}</dd>
-                  </div>
+                  <OriginRow label="Wo">{person.met_location}</OriginRow>
                 )}
-                <div className="contents">
-                  <dt>Wann</dt>
-                  <dd>
-                    {person.met_date
-                      ? new Date(person.met_date).toLocaleDateString("de-DE")
-                      : `— (angelegt ${new Date(person.created_at).toLocaleDateString("de-DE")})`}
-                  </dd>
-                </div>
+                <OriginRow label="Wann">
+                  {person.met_date
+                    ? new Date(person.met_date).toLocaleDateString("de-DE")
+                    : `— (angelegt ${new Date(person.created_at).toLocaleDateString("de-DE")})`}
+                </OriginRow>
                 {person.introduced_by && (
-                  <div className="contents">
-                    <dt>Vermittelt</dt>
-                    <dd>
-                      {person.introduced_by_person_id ? (
-                        <Link
-                          href={`/people/${person.introduced_by_person_id}`}
-                          className="text-action hover:underline"
-                        >
-                          {person.introduced_by}
-                        </Link>
-                      ) : (
-                        person.introduced_by
-                      )}
-                    </dd>
-                  </div>
+                  <OriginRow label="Vermittelt">
+                    {person.introduced_by_person_id ? (
+                      <Link
+                        href={`/people/${person.introduced_by_person_id}`}
+                        className="text-action hover:underline"
+                      >
+                        {person.introduced_by}
+                      </Link>
+                    ) : (
+                      person.introduced_by
+                    )}
+                  </OriginRow>
                 )}
                 {person.met_with && (
-                  <div className="contents">
-                    <dt>Mit</dt>
-                    <dd>
-                      {person.met_with_person_id ? (
-                        <Link
-                          href={`/people/${person.met_with_person_id}`}
-                          className="text-action hover:underline"
-                        >
-                          {person.met_with}
-                        </Link>
-                      ) : (
-                        person.met_with
-                      )}
-                    </dd>
-                  </div>
+                  <OriginRow label="Mit">
+                    {person.met_with_person_id ? (
+                      <Link
+                        href={`/people/${person.met_with_person_id}`}
+                        className="text-action hover:underline"
+                      >
+                        {person.met_with}
+                      </Link>
+                    ) : (
+                      person.met_with
+                    )}
+                  </OriginRow>
                 )}
               </dl>
             </section>
