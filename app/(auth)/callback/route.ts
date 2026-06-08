@@ -19,11 +19,28 @@ export async function GET(request: Request) {
   const next = safeNext(url.searchParams.get("next"));
 
   if (code) {
-    const supabase = await createClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) {
+    try {
+      const supabase = await createClient();
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) {
+        // Expired / already-used link, or a code from another browser
+        // (PKCE verifier cookie missing) — send back to a graceful entry
+        // point instead of 500-ing.
+        const dest = next === "/reset-password" ? "/forgot-password" : "/login";
+        return NextResponse.redirect(
+          new URL(`${dest}?error=${encodeURIComponent(error.message)}`, url),
+        );
+      }
+    } catch (err) {
+      // exchangeCodeForSession can THROW (e.g. missing PKCE code verifier)
+      // rather than returning { error }. Log the real cause and degrade
+      // gracefully so the user never hits an Internal Server Error.
+      console.error("[callback] exchangeCodeForSession threw:", err);
+      const message =
+        err instanceof Error ? err.message : "Link ungültig oder abgelaufen";
+      const dest = next === "/reset-password" ? "/forgot-password" : "/login";
       return NextResponse.redirect(
-        new URL(`/login?error=${encodeURIComponent(error.message)}`, url),
+        new URL(`${dest}?error=${encodeURIComponent(message)}`, url),
       );
     }
   }
