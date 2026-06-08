@@ -8,11 +8,16 @@
 
 import { createClient } from "@/lib/supabase/server";
 
+// Self-profile journey: the new user fills in their OWN profile field by
+// field, each step with an explanation. (Replaced the old welcome/profile/
+// byok/first_person flow 2026-06-08 — BYO keys + first contact live in
+// settings / the normal app now.)
 export const ONBOARDING_STEPS = [
   "welcome",
   "profile",
-  "byok",
-  "first_person",
+  "interests",
+  "passions",
+  "locations",
   "done",
 ] as const;
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { LANGUAGES } from "@/lib/types";
 import { StepIndicator } from "../step-indicator";
 import { completeProfile } from "../actions";
 
@@ -76,6 +77,38 @@ export default async function ProfileStep() {
             className="h-11 w-full rounded border border-rule bg-paper px-3 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20"
           />
         </label>
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block space-y-1.5">
+            <span className="t-label">Deine Hauptsprache</span>
+            <select
+              name="primary_language"
+              defaultValue="Deutsch"
+              className="h-11 w-full rounded border border-rule bg-paper px-3 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20"
+            >
+              {LANGUAGES.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block space-y-1.5">
+            <span className="t-label">Zweitsprache (optional)</span>
+            <select
+              name="secondary_language"
+              defaultValue=""
+              className="h-11 w-full rounded border border-rule bg-paper px-3 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20"
+            >
+              <option value="">—</option>
+              {LANGUAGES.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         <div className="flex justify-end">
           <button

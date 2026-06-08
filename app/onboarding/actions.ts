@@ -13,6 +13,8 @@ import {
   type OnboardingStep,
 } from "@/lib/onboarding";
 import { getOrCreateSelfPerson } from "@/lib/people";
+import { getOrCreateTag, addTagToPerson } from "@/lib/tags";
+import { addPassion } from "@/lib/passions";
 
 function nextRoute(step: OnboardingStep): string {
   if (step === "done") return "/heute";
@@ -67,6 +69,10 @@ export async function completeProfile(formData: FormData): Promise<void> {
   const timezone = String(formData.get("timezone") ?? "").trim();
   const language = String(formData.get("language") ?? "de").trim();
   const debriefTime = String(formData.get("debrief_time") ?? "").trim();
+  const primaryLanguage = String(formData.get("primary_language") ?? "").trim();
+  const secondaryLanguage = String(
+    formData.get("secondary_language") ?? "",
+  ).trim();
 
   const update: Record<string, string> = {
     updated_at: new Date().toISOString(),
@@ -76,66 +82,116 @@ export async function completeProfile(formData: FormData): Promise<void> {
   if (debriefTime && /^\d{2}:\d{2}$/.test(debriefTime)) {
     update.debrief_time = `${debriefTime}:00`;
   }
-
   await supabase.from("profiles").update(update).eq("id", user.id);
+
+  // Mirror the communication language onto the self-person.
+  const self = await getOrCreateSelfPerson();
+  if (self) {
+    await supabase
+      .from("people")
+      .update({
+        primary_language: primaryLanguage || null,
+        secondary_language: secondaryLanguage || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", self.id);
+  }
   await advance("profile");
 }
 
-// ─────────────────────────── BYOK ─────────────────────────────────
+// ─────────────────────────── Interests ────────────────────────────
 
-export async function completeByok(formData: FormData): Promise<void> {
+function parseList(raw: FormDataEntryValue | null): string[] {
+  if (typeof raw !== "string" || !raw.trim()) return [];
+  try {
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .filter((x): x is string => typeof x === "string")
+      .map((x) => x.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+export async function completeInterests(formData: FormData): Promise<void> {
+  const {
+    data: { user },
+  } = await (await createClient()).auth.getUser();
+  if (!user) redirect("/login");
+
+  const interests = parseList(formData.get("interests"));
+  const self = await getOrCreateSelfPerson();
+  if (self && interests.length > 0) {
+    for (const name of interests) {
+      const tag = await getOrCreateTag({
+        name,
+        cluster: "interests",
+        createdBy: "user",
+      });
+      if (tag) await addTagToPerson(self.id, tag.id);
+    }
+  }
+  await advance("interests", interests.length === 0);
+}
+
+export async function skipInterests(): Promise<void> {
+  await advance("interests", true);
+}
+
+// ─────────────────────────── Passions ─────────────────────────────
+
+export async function completePassions(formData: FormData): Promise<void> {
+  const {
+    data: { user },
+  } = await (await createClient()).auth.getUser();
+  if (!user) redirect("/login");
+
+  const passions = parseList(formData.get("passions")).slice(0, 5);
+  const self = await getOrCreateSelfPerson();
+  if (self && passions.length > 0) {
+    for (const name of passions) {
+      await addPassion(self.id, name);
+    }
+  }
+  await advance("passions", passions.length === 0);
+}
+
+export async function skipPassions(): Promise<void> {
+  await advance("passions", true);
+}
+
+// ─────────────────────────── Orte ─────────────────────────────────
+
+export async function completeLocations(formData: FormData): Promise<void> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const claudeKey = String(formData.get("claude_key") ?? "").trim();
-  const elevenKey = String(formData.get("elevenlabs_key") ?? "").trim();
+  const currentLocation =
+    String(formData.get("current_location") ?? "").trim() || null;
+  const homeLocation =
+    String(formData.get("home_location") ?? "").trim() || null;
 
-  const update: Record<string, string | null> = {
-    updated_at: new Date().toISOString(),
-  };
-  if (claudeKey) update.claude_key_byo = claudeKey;
-  if (elevenKey) update.elevenlabs_key_byo = elevenKey;
-
-  if (claudeKey || elevenKey) {
-    await supabase.from("profiles").update(update).eq("id", user.id);
+  const self = await getOrCreateSelfPerson();
+  if (self) {
+    await supabase
+      .from("people")
+      .update({
+        current_location: currentLocation,
+        home_location: homeLocation,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", self.id);
   }
-  await advance("byok", !claudeKey && !elevenKey);
+  await advance("locations", !currentLocation && !homeLocation);
 }
 
-export async function skipByok(): Promise<void> {
-  await advance("byok", true);
-}
-
-// ─────────────────────── Erste Person ─────────────────────────────
-
-export async function completeFirstPerson(formData: FormData): Promise<void> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const name = String(formData.get("name") ?? "").trim();
-  if (name) {
-    const company = String(formData.get("company") ?? "").trim() || null;
-    const role = String(formData.get("role") ?? "").trim() || null;
-    await supabase.from("people").insert({
-      user_id: user.id,
-      name,
-      company,
-      role,
-      is_self: false,
-      mode: "active",
-    });
-  }
-  await advance("first_person", !name);
-}
-
-export async function skipFirstPerson(): Promise<void> {
-  await advance("first_person", true);
+export async function skipLocations(): Promise<void> {
+  await advance("locations", true);
 }
 
 // ─────────────────────────── Done ─────────────────────────────────
