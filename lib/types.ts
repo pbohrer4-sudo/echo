@@ -945,6 +945,8 @@ export const PASSION_HINT =
   "Identitätsstiftende Leidenschaften — was diese Person ausmacht jenseits von Beruf. Max 5 pro Person.";
 export const CIRCLE_HINT =
   "Communities + Organisationen die Personen verbinden — Events, Netzwerke, Programme. Hilft Warm-Intros zu finden.";
+export const SIGNAL_HINT =
+  "Wichtige Daten + Erinnerungen — Geburtstage, Jahrestage, Termine. Lege Erinnerungen mit Vorlaufzeit an, damit du rechtzeitig erinnert wirst.";
 
 // Neue Felder für Person. Bewusst SEPARAT vom bestehenden Person-
 // Interface — der bestehende Type wird in Phase C erweitert, wenn die

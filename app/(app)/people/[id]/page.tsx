@@ -33,6 +33,8 @@ import { ShareVCard } from "@/components/share-vcard";
 import { DraftGenerator } from "@/components/draft-generator";
 import { SuggestionStack } from "./suggestion-stack";
 import { ClusterBlock } from "./cluster-block";
+import { InfoTooltip } from "@/components/info-tooltip";
+import { SIGNAL_HINT } from "@/lib/types";
 import { SynergyTagsButton } from "./synergy-tags-button";
 import { SynergyTagChips } from "./synergy-tag-chips";
 import { LifeEventsBlock } from "./life-events-block";
@@ -412,7 +414,10 @@ export default async function PersonDetailPage({
         {showProfileBody && (
           <section>
             <div className="section-head">
-              <span className="t-label">Signals</span>
+              <span className="t-label inline-flex items-center gap-1.5">
+                Signals
+                <InfoTooltip text={SIGNAL_HINT} />
+              </span>
               <span className="rule" />
               {!person.is_self && (
                 <AddDateButton
