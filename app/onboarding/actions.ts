@@ -148,7 +148,7 @@ export async function completePassions(formData: FormData): Promise<void> {
   } = await (await createClient()).auth.getUser();
   if (!user) redirect("/login");
 
-  const passions = parseList(formData.get("passions")).slice(0, 5);
+  const passions = parseList(formData.get("passions"));
   const self = await getOrCreateSelfPerson();
   if (self && passions.length > 0) {
     for (const name of passions) {

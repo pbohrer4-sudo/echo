@@ -6,7 +6,7 @@ import Link from "next/link";
 //
 // Drei Subsections auf der Person-Detail-Page:
 //   1. Tags (gruppiert nach 4 Cluster: Reminders, Interests, Potential, Origin)
-//   2. Passions (eigene Tabelle, max 5)
+//   2. Passions (eigene Tabelle, kein hartes Limit)
 //   3. Circles (eigene Tabelle, Communities/Organisationen)
 //
 // Jedes Pill kann eine Person-spezifische Note tragen (0028). Pills
@@ -283,7 +283,6 @@ function PassionsBlock({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const atLimit = passions.length >= 5;
   const applied = new Set(passions.map((p) => p.name.toLowerCase()));
   const passionOptions = suggestions.filter(
     (s) => !applied.has(s.toLowerCase()),
@@ -323,7 +322,7 @@ function PassionsBlock({
     <section className="space-y-3">
       <div className="section-head">
         <span className="t-label inline-flex items-center gap-1.5">
-          Passions ({passions.length}/5)
+          Passions{passions.length > 0 ? ` (${passions.length})` : ""}
           <InfoTooltip text={PASSION_HINT} />
         </span>
         <span className="rule" />
@@ -333,7 +332,7 @@ function PassionsBlock({
         <div className="flex flex-wrap items-center gap-1.5">
           {passions.length === 0 && !adding && (
             <span className="text-[11px] italic text-ink-4">
-              Identitätsstiftende Interessen — max 5
+              Identitätsstiftende Interessen — wofür diese Person brennt
             </span>
           )}
           {passions.map((p) => (
@@ -366,7 +365,7 @@ function PassionsBlock({
               suggestions={passionOptions}
             />
           )}
-          {!adding && !atLimit && (
+          {!adding && (
             <button
               type="button"
               onClick={() => setAdding(true)}
@@ -376,11 +375,6 @@ function PassionsBlock({
             </button>
           )}
         </div>
-        {atLimit && !adding && (
-          <p className="text-[10px] uppercase tracking-wider text-ink-4">
-            5-Passion-Limit erreicht
-          </p>
-        )}
         {error && <p className="text-[10px] text-bad">{error}</p>}
       </div>
     </section>

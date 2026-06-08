@@ -830,7 +830,7 @@ export const TAG_CLUSTER_HINTS: Record<TagCluster, string> = {
     "Wo + wie ihr euch begegnet seid — Events, Vermittler, Quellen. Stützt die Reconnect-Story.",
 };
 
-// — Passions (Briefing v3 #19, max 5 pro Person, eigene Tabelle) ———
+// — Passions (Briefing v3 #19, kein hartes Limit (0045), eigene Tabelle) ———
 
 export interface PassionRow {
   id: string;
@@ -942,7 +942,7 @@ export const MODE_LABELS: Record<Mode, string> = {
 
 // Section-Header-Beschreibungen für Passions + Circles (V3 Info-Icons).
 export const PASSION_HINT =
-  "Identitätsstiftende Leidenschaften — was diese Person ausmacht jenseits von Beruf. Max 5 pro Person.";
+  "Identitätsstiftende Leidenschaften — wirklich nur Dinge, für die diese Person brennt. Halte die Liste fokussiert, aber wenn es mehr sind, dürfen es auch mehr sein.";
 export const CIRCLE_HINT =
   "Communities + Organisationen die Personen verbinden — Events, Netzwerke, Programme. Hilft Warm-Intros zu finden.";
 export const SIGNAL_HINT =

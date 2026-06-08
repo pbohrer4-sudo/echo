@@ -66,9 +66,6 @@ export async function addPersonPassion(
 ): Promise<{ ok: boolean; error?: string }> {
   const res = await addPassionRaw(personId, name);
   if (!res.ok) {
-    if (res.reason === "limit") {
-      return { ok: false, error: "Max 5 Passions pro Person erreicht" };
-    }
     return { ok: false, error: "Passion konnte nicht angelegt werden" };
   }
   revalidatePath(`/people/${personId}`);

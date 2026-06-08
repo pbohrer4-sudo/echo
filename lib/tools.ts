@@ -42,7 +42,7 @@ export const EXTRACTION_TOOLS: Anthropic.Tool[] = [
           type: "array",
           items: { type: "string" },
           description:
-            "Identitäts-stiftende Hobbys / Sport / Kunst / Leidenschaften die die Person ausmachen. Beispiele: 'Tennis', 'Boxen', 'Klavier', 'Klettern', 'Elektronische Musik', 'Kochen', 'Yoga'. Max 5 pro Person. Voice-Beispiel: 'Felix spielt Tennis und boxt' → passions=['Tennis','Boxen']. NIEMALS in tags packen.",
+            "Identitäts-stiftende Hobbys / Sport / Kunst / Leidenschaften die die Person ausmachen. Beispiele: 'Tennis', 'Boxen', 'Klavier', 'Klettern', 'Elektronische Musik', 'Kochen', 'Yoga'. Fokussiert auf das, wofür die Person wirklich brennt — kein hartes Limit. Voice-Beispiel: 'Felix spielt Tennis und boxt' → passions=['Tennis','Boxen']. NIEMALS in tags packen.",
         },
         notes: {
           type: "string",
@@ -234,7 +234,7 @@ export const EXTRACTION_TOOLS: Anthropic.Tool[] = [
           type: "array",
           items: { type: "string" },
           description:
-            "Identitäts-stiftende Hobbys / Sport / Kunst hinzufügen (z.B. 'Tennis', 'Klavier', 'Klettern'). Voice-Beispiel: 'Felix spielt jetzt auch Tennis' → add_passions=['Tennis']. Max 5 pro Person — Server begrenzt automatisch.",
+            "Identitäts-stiftende Hobbys / Sport / Kunst hinzufügen (z.B. 'Tennis', 'Klavier', 'Klettern'). Voice-Beispiel: 'Felix spielt jetzt auch Tennis' → add_passions=['Tennis']. Fokussiert halten auf echte Leidenschaften — kein hartes Limit.",
         },
         add_phones: {
           type: "array",

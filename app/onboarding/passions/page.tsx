@@ -20,7 +20,8 @@ export default async function PassionsStep() {
         </h1>
         <p className="text-sm text-ink-3">
           Identitätsstiftende Leidenschaften — was dich ausmacht, jenseits von
-          Beruf. Maximal fünf, ganz bewusst: das Wesentliche.
+          Beruf. Halte es fokussiert auf das, wofür du wirklich brennst — aber
+          wenn es mehr sind, dürfen es auch mehr sein.
         </p>
       </div>
 
@@ -28,7 +29,6 @@ export default async function PassionsStep() {
         <OnboardingChips
           name="passions"
           placeholder="z.B. Bergsteigen, Jazz, Kochen …"
-          max={5}
           color="passion"
         />
         <div className="flex items-center justify-between">

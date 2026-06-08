@@ -52,8 +52,6 @@ interface Props {
 }
 
 export function DraftClusterEditor({ state, onChange, existingCircles }: Props) {
-  const passionLimit = state.passions.length >= 5;
-
   function addTag(cluster: TagCluster, name: string) {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -80,7 +78,7 @@ export function DraftClusterEditor({ state, onChange, existingCircles }: Props) 
 
   function addPassion(name: string) {
     const trimmed = name.trim();
-    if (!trimmed || passionLimit) return;
+    if (!trimmed) return;
     if (state.passions.some((p) => p.toLowerCase() === trimmed.toLowerCase()))
       return;
     onChange({ ...state, passions: [...state.passions, trimmed] });
@@ -126,7 +124,7 @@ export function DraftClusterEditor({ state, onChange, existingCircles }: Props) 
       <section className="space-y-3">
         <div className="section-head">
           <span className="t-label inline-flex items-center gap-1.5">
-            Passions ({state.passions.length}/5)
+            Passions{state.passions.length > 0 ? ` (${state.passions.length})` : ""}
             <InfoTooltip text={PASSION_HINT} />
           </span>
           <span className="rule" />
@@ -137,15 +135,10 @@ export function DraftClusterEditor({ state, onChange, existingCircles }: Props) 
           fg={PASSION_COLOR.fg}
           onAdd={addPassion}
           onRemove={removePassion}
-          disabled={passionLimit}
+          disabled={false}
           placeholder="+ Passion (z.B. Klassik)"
-          emptyLabel="Identitätsstiftende Interessen — max 5"
+          emptyLabel="Identitätsstiftende Interessen — wofür die Person brennt"
         />
-        {passionLimit && (
-          <p className="text-[10px] uppercase tracking-wider text-ink-4">
-            5-Passion-Limit erreicht
-          </p>
-        )}
       </section>
 
       {/* Circles */}

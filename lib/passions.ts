@@ -1,5 +1,6 @@
 // Passions-Helper (Briefing v3 #19). Identitätsstiftende Interessen
-// pro Person. Max 5 — DB-Trigger enforced das.
+// pro Person. Kein hartes Limit mehr (0045) — fokussiert halten, aber
+// wenn es mehr sind, dürfen es mehr sein.
 
 import { createClient } from "@/lib/supabase/server";
 import type { PassionRow } from "@/lib/types";
@@ -52,7 +53,7 @@ export async function listAllPassionNames(): Promise<string[]> {
 export async function addPassion(
   personId: string,
   name: string,
-): Promise<{ ok: boolean; reason?: "limit" | "duplicate" | "error" }> {
+): Promise<{ ok: boolean; reason?: "duplicate" | "error" }> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -67,9 +68,6 @@ export async function addPassion(
     .insert({ user_id: user.id, person_id: personId, name: trimmed });
 
   if (!error) return { ok: true };
-  if (error.message?.includes("maximum of 5 passions")) {
-    return { ok: false, reason: "limit" };
-  }
   if (error.code === "23505") {
     // Unique-Constraint auf (person_id, lower(name)) — schon dran.
     return { ok: true };
