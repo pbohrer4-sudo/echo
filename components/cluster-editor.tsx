@@ -14,7 +14,7 @@ import Link from "next/link";
 // ein dauerhaftes „i", Hover gibt die Note als Tooltip, Klick öffnet
 // den Editor. Plus klassisches Entfernen via × bleibt.
 
-import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   CIRCLE_HINT,
   CIRCLE_COLOR,
@@ -165,8 +165,8 @@ function TagClusterRow({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  function commitAdd() {
-    const name = input.trim();
+  function commitAdd(explicit?: string) {
+    const name = (explicit ?? input).trim();
     if (!name) {
       setAdding(false);
       return;
@@ -286,8 +286,8 @@ function PassionsBlock({
     (s) => !applied.has(s.toLowerCase()),
   );
 
-  function commitAdd() {
-    const name = input.trim();
+  function commitAdd(explicit?: string) {
+    const name = (explicit ?? input).trim();
     if (!name) {
       setAdding(false);
       return;
@@ -912,7 +912,9 @@ function InlineAddInput({
 }: {
   value: string;
   onChange: (v: string) => void;
-  onCommit: () => void;
+  // Optional explicit value so a picked suggestion commits exactly that
+  // string (parent state may not have flushed yet).
+  onCommit: (value?: string) => void;
   onCancel: () => void;
   placeholder: string;
   bg: string;
@@ -920,23 +922,35 @@ function InlineAddInput({
   pending: boolean;
   widerInput?: boolean;
   // Same-category autocomplete options (e.g. previously-used passion
-  // names). Rendered via a native <datalist> — the browser filters as
-  // the user types. Scoped per input so categories never cross.
+  // names). Custom dropdown (not native <datalist> — useId ids contain
+  // colons that break the list= linkage). Scoped per input so categories
+  // never cross.
   suggestions?: string[];
 }) {
-  const listId = useId();
+  const [open, setOpen] = useState(true);
+  const q = value.trim().toLowerCase();
+  const matches = (suggestions ?? [])
+    .filter((s) => {
+      if (!q) return true;
+      const l = s.toLowerCase();
+      // Prefix matches first ("first letters"), but also allow contains.
+      return l.includes(q);
+    })
+    .slice(0, 8);
+
   return (
-    <>
+    <span className="relative inline-block">
       <input
         type="text"
         autoFocus
         value={value}
-        list={suggestions && suggestions.length > 0 ? listId : undefined}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
         onBlur={() => {
-          // Kleine Verzögerung damit ein Klick auf eine Suggestion-Row
-          // den Blur nicht abbricht. 150ms ist klein genug für UX,
-          // groß genug für mousedown→click.
+          // Delay so a mousedown on a suggestion fires before blur-commit.
           setTimeout(onCommit, 150);
         }}
         onKeyDown={(e) => {
@@ -955,13 +969,27 @@ function InlineAddInput({
         } disabled:opacity-50`}
         style={{ background: bg, color: fg }}
       />
-      {suggestions && suggestions.length > 0 && (
-        <datalist id={listId}>
-          {suggestions.map((s) => (
-            <option key={s} value={s} />
+      {open && matches.length > 0 && (
+        <ul className="absolute left-0 top-full z-20 mt-1 max-h-48 w-48 overflow-auto rounded border border-rule bg-paper py-1 shadow-md">
+          {matches.map((s) => (
+            <li key={s}>
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  // mousedown beats the input blur so the pick registers.
+                  // Pass the value explicitly — parent input state may
+                  // not have flushed.
+                  e.preventDefault();
+                  onCommit(s);
+                }}
+                className="block w-full px-3 py-1.5 text-left text-xs text-ink-1 transition hover:bg-paper-2"
+              >
+                {s}
+              </button>
+            </li>
           ))}
-        </datalist>
+        </ul>
       )}
-    </>
+    </span>
   );
 }
