@@ -9,6 +9,7 @@ import {
   deleteLifeEvent as deleteLifeEventRaw,
   updateLifeEvent,
 } from "@/lib/life-events";
+import { createClient } from "@/lib/supabase/server";
 import type { LifeEventType } from "@/lib/types";
 
 export async function createLifeEventForPerson(formData: FormData): Promise<{
@@ -65,8 +66,39 @@ export async function createLifeEventForPerson(formData: FormData): Promise<{
 
   if (!event) return { ok: false, error: "Konnte nicht angelegt werden" };
 
+  // Optional reminder tied to the life event. Best-effort — a failed
+  // reminder must not undo the life-event creation.
+  const remind = String(formData.get("remind") ?? "") === "on";
+  const remindAtRaw = String(formData.get("remind_at") ?? "").trim();
+  if (remind && remindAtRaw) {
+    const remindAtIso = /^\d{4}-\d{2}-\d{2}$/.test(remindAtRaw)
+      ? new Date(`${remindAtRaw}T09:00:00`).toISOString()
+      : remindAtRaw;
+    try {
+      const supabase = await createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from("reminders").insert({
+          user_id: user.id,
+          person_id: personId,
+          text: `Life Event: ${title}`,
+          remind_at: remindAtIso,
+          recurrence: "once",
+          type: "custom",
+          status: "pending",
+          source: "manual",
+        });
+      }
+    } catch {
+      // ignore — life event is already saved
+    }
+  }
+
   revalidatePath(`/people/${personId}`);
   revalidatePath("/lifeline");
+  revalidatePath("/inbox");
   return { ok: true, id: event.id };
 }
 

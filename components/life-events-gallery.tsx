@@ -208,6 +208,9 @@ function EventModal({
       : new Date();
     return `${source.getFullYear()}-${String(source.getMonth() + 1).padStart(2, "0")}-${String(source.getDate()).padStart(2, "0")}`;
   });
+  // Optional reminder tied to the event (only offered when creating).
+  const [remind, setRemind] = useState(false);
+  const [remindAt, setRemindAt] = useState("");
   const [locationName, setLocationName] = useState(
     initialEvent?.location_name ?? "",
   );
@@ -299,6 +302,10 @@ function EventModal({
       fd.append("file_path", uploadedFile.path);
       fd.append("file_size_bytes", String(uploadedFile.size));
       fd.append("mime_type", uploadedFile.mime);
+    }
+    if (remind && remindAt) {
+      fd.append("remind", "on");
+      fd.append("remind_at", remindAt);
     }
 
     startTransition(async () => {
@@ -460,6 +467,34 @@ function EventModal({
               className="w-full rounded border border-rule bg-paper px-3 py-2 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20"
             />
           </label>
+
+          {!initialEvent && (
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-xs text-ink-2">
+                <input
+                  type="checkbox"
+                  checked={remind}
+                  onChange={(e) => {
+                    setRemind(e.target.checked);
+                    // Default the reminder date to the event date.
+                    if (e.target.checked && !remindAt) setRemindAt(occurredAt);
+                  }}
+                />
+                An dieses Life Event erinnern (optional)
+              </label>
+              {remind && (
+                <label className="block space-y-1.5">
+                  <span className="t-label">Erinnerung am</span>
+                  <input
+                    type="date"
+                    value={remindAt}
+                    onChange={(e) => setRemindAt(e.target.value)}
+                    className="h-9 w-full rounded border border-rule bg-paper px-3 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20"
+                  />
+                </label>
+              )}
+            </div>
+          )}
 
           {error && (
             <p className="rounded border border-bad/40 bg-bad/5 px-3 py-2 text-xs text-bad">
