@@ -547,7 +547,65 @@ export default async function PersonDetailPage({
             </section>
           )}
 
-        {!person.is_self && <LifeEventsBlock personId={person.id} />}
+        {/* Eine Box: Life Events → Notes → Erinnerungen → Aufgaben →
+            Gifts, in genau dieser Reihenfolge (Patrick 2026-06-08). */}
+        {showProfileBody && (
+          <div className="space-y-6 rounded border border-rule bg-paper p-4">
+            {/* 1. Life Events */}
+            {!person.is_self && <LifeEventsBlock personId={person.id} />}
+
+            {/* 2. Notes — Timeline aus Interaktionen + Notizen */}
+            <section>
+              <div className="section-head">
+                <span className="t-label">Notes</span>
+                <span className="rule" />
+                {!person.is_self && <AddEventButton personId={person.id} />}
+              </div>
+              <PersonTimeline interactions={interactions} notes={notes} />
+            </section>
+
+            {/* 3. Erinnerungen */}
+            <section>
+              <div className="section-head">
+                <span className="t-label">Erinnerungen</span>
+                <span className="rule" />
+                {!person.is_self && <AddReminderButton personId={person.id} />}
+              </div>
+              <PersonReminders reminders={reminders} />
+            </section>
+
+            {/* 4. Aufgaben */}
+            <section>
+              <div className="section-head">
+                <span className="t-label">Aufgaben</span>
+                <span className="rule" />
+                {!person.is_self && <AddTodoButton personId={person.id} />}
+              </div>
+              <PersonTodos todos={todos} />
+            </section>
+
+            {/* 5. Gifts */}
+            {!person.is_self && (
+              <section>
+                <div className="section-head">
+                  <span className="t-label">Gifts</span>
+                  <span className="rule" />
+                </div>
+                {person.gift_idea ? (
+                  <GiftsList personId={person.id} current={person.gift_idea} />
+                ) : (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <p className="text-xs italic text-ink-4">
+                      Noch keine Geschenkidee — was würdest du dieser Person zum
+                      nächsten Anlass schenken?
+                    </p>
+                    <GiftsList personId={person.id} current={null} />
+                  </div>
+                )}
+              </section>
+            )}
+          </div>
+        )}
 
         {/* Adressen sind jetzt Teil der Stammdaten-Section (oberhalb).
             Multi-Address-Pflege läuft über /people/[id]/edit. Self-
@@ -600,26 +658,6 @@ export default async function PersonDetailPage({
           </section>
         )}
 
-        {showProfileBody && !person.is_self && (
-          <section>
-            <div className="section-head">
-              <span className="t-label">Gifts</span>
-              <span className="rule" />
-            </div>
-            {person.gift_idea ? (
-              <GiftsList personId={person.id} current={person.gift_idea} />
-            ) : (
-              <div className="flex flex-wrap items-center gap-3">
-                <p className="text-xs italic text-ink-4">
-                  Noch keine Geschenkidee — was würdest du dieser Person zum
-                  nächsten Anlass schenken?
-                </p>
-                <GiftsList personId={person.id} current={null} />
-              </div>
-            )}
-          </section>
-        )}
-
         {showProfileBody && person.cadence_days && (
           <section>
             <div className="section-head">
@@ -630,28 +668,6 @@ export default async function PersonDetailPage({
               alle {person.cadence_days} Tage
             </p>
           </section>
-        )}
-
-        {showProfileBody && (
-          <div className="grid gap-10 md:grid-cols-2">
-            <section>
-              <div className="section-head">
-                <span className="t-label">Erinnerungen</span>
-                <span className="rule" />
-                {!person.is_self && <AddReminderButton personId={person.id} />}
-              </div>
-              <PersonReminders reminders={reminders} />
-            </section>
-
-            <section>
-              <div className="section-head">
-                <span className="t-label">Aufgaben</span>
-                <span className="rule" />
-                {!person.is_self && <AddTodoButton personId={person.id} />}
-              </div>
-              <PersonTodos todos={todos} />
-            </section>
-          </div>
         )}
 
         {showProfileBody && customFieldsToShow.length > 0 && (
@@ -668,17 +684,6 @@ export default async function PersonDetailPage({
                 </div>
               ))}
             </dl>
-          </section>
-        )}
-
-        {showProfileBody && (
-          <section>
-            <div className="section-head">
-              <span className="t-label">Notes</span>
-              <span className="rule" />
-              {!person.is_self && <AddEventButton personId={person.id} />}
-            </div>
-            <PersonTimeline interactions={interactions} notes={notes} />
           </section>
         )}
 
