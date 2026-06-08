@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
   CONTACT_CHANNELS,
+  type AddressEntry,
   type ContactChannel,
 } from "@/lib/types";
 
@@ -94,6 +95,78 @@ export async function updateContactAction(
     .eq("id", contactId)
     .eq("user_id", user.id);
   if (error) return { ok: false, error: error.message };
+  revalidatePath(`/people/${personId}`);
+  return { ok: true };
+}
+
+// Inline-Quickadd der Stammdaten-Adresse: nimmt eine einzeilige
+// Eingabe („Straße 1, 93047 Regensburg, Deutschland") und hängt sie
+// als neuen Eintrag an people.addresses (JSONB-Array). Leichtes
+// Parsing auf Kommata — die strukturierte Bearbeitung bleibt im
+// Edit-Formular. Kein addContactAction, weil Adressen kein
+// person_contacts-Channel sind.
+function parseAddressLine(raw: string): AddressEntry {
+  const parts = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const entry: AddressEntry = {
+    label: "andere",
+    street: null,
+    city: null,
+    postal_code: null,
+    country: null,
+  };
+  if (parts.length >= 1) entry.street = parts[0];
+  if (parts.length >= 2) {
+    // Mittelteil als „PLZ Ort" interpretieren wenn er mit Ziffern beginnt.
+    const m = parts[1].match(/^(\d{4,5})\s+(.+)$/);
+    if (m) {
+      entry.postal_code = m[1];
+      entry.city = m[2];
+    } else {
+      entry.city = parts[1];
+    }
+  }
+  if (parts.length >= 3) entry.country = parts[parts.length - 1];
+  return entry;
+}
+
+export async function addAddressAction(
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "unauthenticated" };
+
+  const personId = String(formData.get("person_id") ?? "").trim();
+  const value = String(formData.get("value") ?? "").trim();
+  if (!personId) return { ok: false, error: "person_id fehlt" };
+  if (!value) return { ok: false, error: "Wert fehlt" };
+
+  const { data: row, error: fetchErr } = await supabase
+    .from("people")
+    .select("addresses")
+    .eq("id", personId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (fetchErr || !row) return { ok: false, error: "Person nicht gefunden" };
+
+  const existing = (row.addresses ?? []) as AddressEntry[];
+  const next = [...existing, parseAddressLine(value)];
+
+  const { error } = await supabase
+    .from("people")
+    .update({ addresses: next })
+    .eq("id", personId)
+    .eq("user_id", user.id);
+  if (error) {
+    console.error("[contact-actions] addAddress failed", error);
+    return { ok: false, error: error.message };
+  }
+
   revalidatePath(`/people/${personId}`);
   return { ok: true };
 }

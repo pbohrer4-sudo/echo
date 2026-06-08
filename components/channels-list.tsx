@@ -13,6 +13,7 @@ import {
   type ContactChannel,
   type PersonContact,
 } from "@/lib/types";
+import { StammdatenSlot } from "@/components/stammdaten-slot";
 
 interface Props {
   contacts: PersonContact[];
@@ -295,7 +296,12 @@ export function ChannelsList({
       </div>
       <ul className="overflow-hidden rounded border border-rule bg-paper">
         {fixedSlots.map((s) => (
-          <SlotItem key={s.key} slot={s} editHref={editHref} />
+          <SlotItem
+            key={s.key}
+            slot={s}
+            editHref={editHref}
+            personId={personId}
+          />
         ))}
         {extras.map((c, i) => (
           <li
@@ -330,7 +336,15 @@ export function ChannelsList({
   );
 }
 
-function SlotItem({ slot, editHref }: { slot: SlotRow; editHref: string }) {
+function SlotItem({
+  slot,
+  editHref,
+  personId,
+}: {
+  slot: SlotRow;
+  editHref: string;
+  personId?: string;
+}) {
   const filled = Boolean(slot.value);
   const rowClass =
     "flex items-center gap-3 px-4 py-2.5 transition hover:bg-paper-2 border-b border-rule-soft last:border-0";
@@ -363,9 +377,21 @@ function SlotItem({ slot, editHref }: { slot: SlotRow; editHref: string }) {
     );
   }
 
-  // Leerer Slot — klickbar als Link zur Edit-Seite damit der User
-  // schnell hin kann. Display: gedämpfte Schrift, „—" auf der rechten
-  // Seite, dezenter „bearbeiten"-Hint.
+  // Leerer Slot — direkt im Feld beschreibbar (kein Wechsel zur
+  // Edit-Seite). Klick auf „— hinzufügen" blendet ein Inline-Input
+  // ein, das per Server-Action speichert. Nur möglich wenn wir eine
+  // personId haben; sonst Fallback auf den Link zur Edit-Seite.
+  if (personId) {
+    return (
+      <StammdatenSlot
+        personId={personId}
+        slotKey={slot.key}
+        label={slot.label}
+        icon={<ChannelIcon type={slot.icon} />}
+      />
+    );
+  }
+
   return (
     <li>
       <Link href={editHref} className={`${rowClass} text-ink-4`}>
