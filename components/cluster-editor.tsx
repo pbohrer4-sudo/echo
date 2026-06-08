@@ -120,26 +120,29 @@ function TagsBlock({
         <span className="t-label">Tags</span>
         <span className="rule" />
       </div>
-      <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-        {CLUSTER_ORDER.map((cluster) => {
-          const applied = new Set(
-            (grouped.get(cluster) ?? []).map((t) => t.name.toLowerCase()),
-          );
-          const suggestions = (tagSuggestions[cluster] ?? []).filter(
-            (s) => !applied.has(s.toLowerCase()),
-          );
-          return (
-            <TagClusterRow
-              key={cluster}
-              cluster={cluster}
-              tags={grouped.get(cluster) ?? []}
-              personId={personId}
-              personName={personName}
-              disabled={false}
-              suggestions={suggestions}
-            />
-          );
-        })}
+      {/* Boxed wie Stammdaten — Inhalt in umrandeter Paper-Box. */}
+      <div className="rounded border border-rule bg-paper p-4">
+        <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+          {CLUSTER_ORDER.map((cluster) => {
+            const applied = new Set(
+              (grouped.get(cluster) ?? []).map((t) => t.name.toLowerCase()),
+            );
+            const suggestions = (tagSuggestions[cluster] ?? []).filter(
+              (s) => !applied.has(s.toLowerCase()),
+            );
+            return (
+              <TagClusterRow
+                key={cluster}
+                cluster={cluster}
+                tags={grouped.get(cluster) ?? []}
+                personId={personId}
+                personName={personName}
+                disabled={false}
+                suggestions={suggestions}
+              />
+            );
+          })}
+        </div>
       </div>
     </section>
   );
@@ -325,58 +328,61 @@ function PassionsBlock({
         </span>
         <span className="rule" />
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {passions.length === 0 && !adding && (
-          <span className="text-[11px] italic text-ink-4">
-            Identitätsstiftende Interessen — max 5
-          </span>
+      {/* Boxed wie Stammdaten. */}
+      <div className="space-y-2 rounded border border-rule bg-paper p-4">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {passions.length === 0 && !adding && (
+            <span className="text-[11px] italic text-ink-4">
+              Identitätsstiftende Interessen — max 5
+            </span>
+          )}
+          {passions.map((p) => (
+            <PillWithNote
+              key={p.id}
+              label={p.name}
+              note={p.note}
+              bg={PASSION_COLOR.bg}
+              fg={PASSION_COLOR.fg}
+              onRemove={() => commitRemove(p.id)}
+              onNoteChange={(n) => commitNote(p.id, n)}
+              disabled={pending}
+              href={`/people?passion=${encodeURIComponent(p.name.toLowerCase())}`}
+            />
+          ))}
+          {adding && (
+            <InlineAddInput
+              value={input}
+              onChange={setInput}
+              onCommit={commitAdd}
+              onCancel={() => {
+                setAdding(false);
+                setInput("");
+                setError(null);
+              }}
+              placeholder="+ Passion (z.B. Klassik)"
+              bg={PASSION_COLOR.bg}
+              fg={PASSION_COLOR.fg}
+              pending={pending}
+              suggestions={passionOptions}
+            />
+          )}
+          {!adding && !atLimit && (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="rounded-full border border-dashed border-rule px-2.5 py-1 text-xs text-ink-3 transition hover:border-ink-3 hover:text-ink-1"
+            >
+              + Passion
+            </button>
+          )}
+        </div>
+        {atLimit && !adding && (
+          <p className="text-[10px] uppercase tracking-wider text-ink-4">
+            5-Passion-Limit erreicht
+          </p>
         )}
-        {passions.map((p) => (
-          <PillWithNote
-            key={p.id}
-            label={p.name}
-            note={p.note}
-            bg={PASSION_COLOR.bg}
-            fg={PASSION_COLOR.fg}
-            onRemove={() => commitRemove(p.id)}
-            onNoteChange={(n) => commitNote(p.id, n)}
-            disabled={pending}
-            href={`/people?passion=${encodeURIComponent(p.name.toLowerCase())}`}
-          />
-        ))}
-        {adding && (
-          <InlineAddInput
-            value={input}
-            onChange={setInput}
-            onCommit={commitAdd}
-            onCancel={() => {
-              setAdding(false);
-              setInput("");
-              setError(null);
-            }}
-            placeholder="+ Passion (z.B. Klassik)"
-            bg={PASSION_COLOR.bg}
-            fg={PASSION_COLOR.fg}
-            pending={pending}
-            suggestions={passionOptions}
-          />
-        )}
-        {!adding && !atLimit && (
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="rounded-full border border-dashed border-rule px-2.5 py-1 text-xs text-ink-3 transition hover:border-ink-3 hover:text-ink-1"
-          >
-            + Passion
-          </button>
-        )}
+        {error && <p className="text-[10px] text-bad">{error}</p>}
       </div>
-      {atLimit && !adding && (
-        <p className="text-[10px] uppercase tracking-wider text-ink-4">
-          5-Passion-Limit erreicht
-        </p>
-      )}
-      {error && <p className="text-[10px] text-bad">{error}</p>}
     </section>
   );
 }
@@ -443,76 +449,79 @@ function CirclesBlock({
         </span>
         <span className="rule" />
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {personCircles.length === 0 && !adding && (
-          <span className="text-[11px] italic text-ink-4">
-            Communities / Organisationen
-          </span>
-        )}
-        {personCircles.map((c) => (
-          <PillWithNote
-            key={c.id}
-            label={c.name}
-            note={c.note}
-            bg={CIRCLE_COLOR.bg}
-            fg={CIRCLE_COLOR.fg}
-            onRemove={() => commitRemove(c.id)}
-            onNoteChange={(n) => commitNote(c.id, n)}
-            disabled={pending}
-            href={`/people?circle=${encodeURIComponent(c.name)}`}
-          />
-        ))}
-        {!adding && (
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="rounded-full border border-dashed border-rule px-2.5 py-1 text-xs text-ink-3 transition hover:border-ink-3 hover:text-ink-1"
-          >
-            + Circle
-          </button>
-        )}
-      </div>
-      {adding && (
-        <div className="relative space-y-1.5">
-          <div className="flex items-center gap-1.5">
-            <InlineAddInput
-              value={input}
-              onChange={setInput}
-              onCommit={() => commitAdd()}
-              onCancel={() => {
-                setAdding(false);
-                setInput("");
-                setError(null);
-              }}
-              placeholder="Bestehender Circle oder neuer Name…"
+      {/* Boxed wie Stammdaten. */}
+      <div className="space-y-1.5 rounded border border-rule bg-paper p-4">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {personCircles.length === 0 && !adding && (
+            <span className="text-[11px] italic text-ink-4">
+              Communities / Organisationen
+            </span>
+          )}
+          {personCircles.map((c) => (
+            <PillWithNote
+              key={c.id}
+              label={c.name}
+              note={c.note}
               bg={CIRCLE_COLOR.bg}
               fg={CIRCLE_COLOR.fg}
-              pending={pending}
-              widerInput
+              onRemove={() => commitRemove(c.id)}
+              onNoteChange={(n) => commitNote(c.id, n)}
+              disabled={pending}
+              href={`/people?circle=${encodeURIComponent(c.name)}`}
             />
-          </div>
-          {suggestions.length > 0 && (
-            <ul className="rounded border border-rule bg-paper overflow-hidden">
-              {suggestions.slice(0, 5).map((c) => (
-                <li key={c.id}>
-                  <button
-                    type="button"
-                    onClick={() => commitAdd(c.name)}
-                    disabled={pending}
-                    className="block w-full px-3 py-1.5 text-left text-xs text-ink-1 transition hover:bg-paper-2 disabled:opacity-50"
-                  >
-                    {c.name}
-                    {c.description && (
-                      <span className="ml-2 text-ink-4">· {c.description}</span>
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
+          ))}
+          {!adding && (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="rounded-full border border-dashed border-rule px-2.5 py-1 text-xs text-ink-3 transition hover:border-ink-3 hover:text-ink-1"
+            >
+              + Circle
+            </button>
           )}
         </div>
-      )}
-      {error && <p className="text-[10px] text-bad">{error}</p>}
+        {adding && (
+          <div className="relative space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <InlineAddInput
+                value={input}
+                onChange={setInput}
+                onCommit={() => commitAdd()}
+                onCancel={() => {
+                  setAdding(false);
+                  setInput("");
+                  setError(null);
+                }}
+                placeholder="Bestehender Circle oder neuer Name…"
+                bg={CIRCLE_COLOR.bg}
+                fg={CIRCLE_COLOR.fg}
+                pending={pending}
+                widerInput
+              />
+            </div>
+            {suggestions.length > 0 && (
+              <ul className="rounded border border-rule bg-paper-2 overflow-hidden">
+                {suggestions.slice(0, 5).map((c) => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => commitAdd(c.name)}
+                      disabled={pending}
+                      className="block w-full px-3 py-1.5 text-left text-xs text-ink-1 transition hover:bg-paper disabled:opacity-50"
+                    >
+                      {c.name}
+                      {c.description && (
+                        <span className="ml-2 text-ink-4">· {c.description}</span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        {error && <p className="text-[10px] text-bad">{error}</p>}
+      </div>
     </section>
   );
 }
