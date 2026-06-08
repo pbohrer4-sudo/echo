@@ -7,11 +7,15 @@
 // Datenquelle: person_contacts + person.addresses + person.linkedin_url.
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import {
   CONTACT_CHANNEL_LABELS,
+  GEO_TYPE_LABELS,
   type AddressEntry,
   type ContactChannel,
+  type GeoType,
   type PersonContact,
+  type PersonGeography,
 } from "@/lib/types";
 import { StammdatenSlot } from "@/components/stammdaten-slot";
 
@@ -24,6 +28,34 @@ interface Props {
   linkedinUrl?: string | null;
   currentLocation?: string | null;
   homeLocation?: string | null;
+  // Orte sind Teil der Stammdaten-Box (Patrick 2026-06-08). Aktive
+  // Geo-Einträge rendern als Zeilen in der Box, inaktive als
+  // „Frühere Orte"-Aufklapper darunter. geoAddSlot = die GeoAddRow.
+  geographies?: PersonGeography[];
+  geoAddSlot?: ReactNode;
+}
+
+const GEO_GROUP_ORDER: GeoType[] = [
+  "wohnsitz_1",
+  "wohnsitz_2",
+  "residence",
+  "current_location",
+  "professional_hub",
+  "origin",
+  "met_location",
+  "custom",
+];
+
+function geoLabel(g: PersonGeography): string {
+  if (g.geo_type === "custom") return g.custom_label || "Weitere";
+  return GEO_TYPE_LABELS[g.geo_type];
+}
+
+function geoValue(g: PersonGeography): string {
+  const compact = g.city ?? g.display_name.split(",")[0];
+  return g.custom_label && g.geo_type === "custom"
+    ? g.display_name
+    : compact;
 }
 
 interface ResolvedChannel {
@@ -157,6 +189,8 @@ export function ChannelsList({
   linkedinUrl,
   currentLocation,
   homeLocation,
+  geographies,
+  geoAddSlot,
 }: Props) {
   // Slot-Detection. Mobilfunk = phone mit subtype mobil/iphone;
   // Festnetz = phone mit landline/festnetz; Email = primary email;
@@ -288,6 +322,19 @@ export function ChannelsList({
     contacts.filter((c) => !usedIds.has(c.id) && c.channel !== "phone"),
   );
 
+  // Orte (Geo-Einträge) sind Teil der Stammdaten-Box. Aktive sortiert
+  // nach GEO_GROUP_ORDER als Zeilen in der Box, inaktive separat als
+  // Aufklapper darunter.
+  const geos = geographies ?? [];
+  const activeGeos = geos
+    .filter((g) => g.is_active)
+    .sort(
+      (a, b) =>
+        GEO_GROUP_ORDER.indexOf(a.geo_type) -
+        GEO_GROUP_ORDER.indexOf(b.geo_type),
+    );
+  const inactiveGeos = geos.filter((g) => !g.is_active);
+
   return (
     <section id="stammdaten" className="space-y-3">
       <div className="section-head">
@@ -331,7 +378,43 @@ export function ChannelsList({
             </a>
           </li>
         ))}
+        {/* Orte — aktive Geo-Einträge als Box-Zeilen. */}
+        {activeGeos.map((g) => (
+          <li
+            key={g.id}
+            className="flex items-center gap-3 border-t border-rule-soft px-4 py-2.5"
+          >
+            <ChannelIcon type="address" />
+            <span className="text-sm text-ink-1">{geoLabel(g)}</span>
+            <span className="ml-auto truncate font-mono text-xs text-ink-3">
+              {geoValue(g)}
+            </span>
+          </li>
+        ))}
+        {/* „— Ort hinzufügen"-Zeile (GeoAddRow), erweitert inline. */}
+        {geoAddSlot}
       </ul>
+      {inactiveGeos.length > 0 && (
+        <details className="space-y-1.5">
+          <summary className="t-label cursor-pointer text-ink-4 transition hover:text-ink-2">
+            Frühere Orte ({inactiveGeos.length})
+          </summary>
+          <ul className="mt-2 overflow-hidden rounded border border-rule bg-paper">
+            {inactiveGeos.map((g) => (
+              <li
+                key={g.id}
+                className="flex items-center gap-3 border-b border-rule-soft px-4 py-2.5 last:border-0"
+              >
+                <ChannelIcon type="address" />
+                <span className="text-sm text-ink-4">{geoLabel(g)}</span>
+                <span className="ml-auto truncate font-mono text-xs text-ink-4">
+                  {geoValue(g)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </section>
   );
 }

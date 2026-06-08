@@ -989,6 +989,62 @@ function AddGeographyForm({
   );
 }
 
+// Orte sind jetzt Teil der Stammdaten-Box (Patrick 2026-06-08). Statt
+// eines „+ Ort"-Pills im Section-Header rendert diese Row direkt als
+// letzte Zeile innerhalb der Stammdaten-Box: „— hinzufügen" klappt das
+// bestehende AddGeographyForm inline auf (kein Popover, keine
+// Navigation). Reuse von AddGeographyForm hält die Add-Logik an einer
+// Stelle.
+function GeoPinIcon() {
+  return (
+    <svg
+      width={16}
+      height={16}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className="shrink-0 text-ink-3"
+    >
+      <path d="M12 22s-8-7.5-8-13a8 8 0 1 1 16 0c0 5.5-8 13-8 13z" />
+      <circle cx="12" cy="9" r="3" />
+    </svg>
+  );
+}
+
+export function GeoAddRow({ personId }: { personId: string }) {
+  const [open, setOpen] = useState(false);
+  const rowClass =
+    "flex items-center gap-3 px-4 py-2.5 transition border-b border-rule-soft last:border-0";
+
+  if (!open) {
+    return (
+      <li>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className={`${rowClass} w-full text-left text-ink-4 transition hover:bg-paper-2`}
+        >
+          <GeoPinIcon />
+          <span className="text-sm">Ort</span>
+          <span className="ml-auto truncate font-mono text-xs italic">
+            — hinzufügen
+          </span>
+        </button>
+      </li>
+    );
+  }
+
+  return (
+    <li className="border-b border-rule-soft bg-paper-2 px-4 py-3 last:border-0">
+      <AddGeographyForm personId={personId} onDone={() => setOpen(false)} />
+    </li>
+  );
+}
+
 // ───────── Shared Submit-Row ─────────
 
 function SubmitRow({

@@ -15,11 +15,10 @@ import { listRelationshipsForPerson } from "@/lib/person-relationships";
 import { getFieldDefs } from "@/lib/custom-fields.server";
 import { parseFieldValues, displayValue } from "@/lib/custom-fields";
 import { getCustomDateLabels } from "@/lib/custom-date-labels";
-import { GeographiesList } from "@/components/geographies-list";
 import {
   AddDateButton,
   AddEventButton,
-  AddGeographyButton,
+  GeoAddRow,
   AddRelationshipButton,
   AddReminderButton,
   AddTodoButton,
@@ -437,6 +436,10 @@ export default async function PersonDetailPage({
             linkedinUrl={person.linkedin_url}
             currentLocation={person.current_location}
             homeLocation={person.home_location}
+            geographies={geographies.filter(
+              (g) => g.geo_type !== "met_location",
+            )}
+            geoAddSlot={<GeoAddRow personId={person.id} />}
           />
         )}
 
@@ -509,14 +512,8 @@ export default async function PersonDetailPage({
           />
         )}
 
-        {!person.is_self && (
-          <GeographiesList
-            geographies={geographies.filter(
-              (g) => g.geo_type !== "met_location",
-            )}
-            addSlot={<AddGeographyButton personId={person.id} />}
-          />
-        )}
+        {/* Orte sind jetzt Teil der Stammdaten-Box oben (Patrick
+            2026-06-08) — keine eigene „Orte"-Sektion mehr. */}
 
         {!person.is_self &&
           (person.primary_language || person.secondary_language) && (
