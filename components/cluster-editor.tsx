@@ -120,29 +120,26 @@ function TagsBlock({
         <span className="t-label">Tags</span>
         <span className="rule" />
       </div>
-      {/* Boxed wie Stammdaten — Inhalt in umrandeter Paper-Box. */}
-      <div className="rounded border border-rule bg-paper p-4">
-        <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-          {CLUSTER_ORDER.map((cluster) => {
-            const applied = new Set(
-              (grouped.get(cluster) ?? []).map((t) => t.name.toLowerCase()),
-            );
-            const suggestions = (tagSuggestions[cluster] ?? []).filter(
-              (s) => !applied.has(s.toLowerCase()),
-            );
-            return (
-              <TagClusterRow
-                key={cluster}
-                cluster={cluster}
-                tags={grouped.get(cluster) ?? []}
-                personId={personId}
-                personName={personName}
-                disabled={false}
-                suggestions={suggestions}
-              />
-            );
-          })}
-        </div>
+      <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+        {CLUSTER_ORDER.map((cluster) => {
+          const applied = new Set(
+            (grouped.get(cluster) ?? []).map((t) => t.name.toLowerCase()),
+          );
+          const suggestions = (tagSuggestions[cluster] ?? []).filter(
+            (s) => !applied.has(s.toLowerCase()),
+          );
+          return (
+            <TagClusterRow
+              key={cluster}
+              cluster={cluster}
+              tags={grouped.get(cluster) ?? []}
+              personId={personId}
+              personName={personName}
+              disabled={false}
+              suggestions={suggestions}
+            />
+          );
+        })}
       </div>
     </section>
   );
@@ -327,8 +324,7 @@ function PassionsBlock({
         </span>
         <span className="rule" />
       </div>
-      {/* Boxed wie Stammdaten. */}
-      <div className="space-y-2 rounded border border-rule bg-paper p-4">
+      <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-1.5">
           {passions.length === 0 && !adding && (
             <span className="text-[11px] italic text-ink-4">
@@ -443,8 +439,7 @@ function CirclesBlock({
         </span>
         <span className="rule" />
       </div>
-      {/* Boxed wie Stammdaten. */}
-      <div className="space-y-1.5 rounded border border-rule bg-paper p-4">
+      <div className="space-y-1.5">
         <div className="flex flex-wrap items-center gap-1.5">
           {personCircles.length === 0 && !adding && (
             <span className="text-[11px] italic text-ink-4">

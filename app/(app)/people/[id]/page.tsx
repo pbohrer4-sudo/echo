@@ -43,11 +43,8 @@ import { APP_CONFIG } from "@/lib/config";
 import { DeleteButton } from "./delete-button";
 import { PersonTimeline } from "./timeline";
 import { PersonReminders, PersonTodos } from "./person-tasks";
-import {
-  AddressList,
-  DateList,
-  RelationshipList,
-} from "./contact-fields";
+import { AddressList, RelationshipList } from "./contact-fields";
+import { SignalsList } from "./signals-list";
 // WhatsappSendBox durch DraftGenerator ersetzt (Phase D1) — alter
 // Manual-Composer hatte keine AI-Drafts und keine Use-Case-Templates.
 import {
@@ -375,62 +372,68 @@ export default async function PersonDetailPage({
 
         {!person.is_self && <SuggestionStack personId={person.id} />}
 
-        {!person.is_self && <ClusterBlock personId={person.id} />}
-
-        {/* Synergien — unter Circles, über Signals (Patrick 2026-06-07). */}
-        {!person.is_self && (person.synergies?.length ?? 0) > 0 && (
-          <section>
-            <div className="section-head">
-              <span className="t-label">Synergien</span>
-              <span className="rule" />
-              <SynergyTagsButton personId={person.id} />
-            </div>
-            {/* AI-Schlagworte: klickbar → filtert die People-Liste,
-                × → schnell entfernen. */}
-            {(person.synergy_tags?.length ?? 0) > 0 && (
-              <SynergyTagChips
-                key={person.synergy_tags.join("|")}
-                personId={person.id}
-                tags={person.synergy_tags}
-              />
-            )}
-            <ul className="space-y-1.5">
-              {person.synergies.map((s, i) => (
-                <li
-                  key={i}
-                  className="flex gap-2 text-sm leading-relaxed text-ink-1"
-                >
-                  <span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-action" />
-                  <span>{s}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {/* Signals — dated events + reminders. Migrated up from the old
-            "Wichtige Daten" section (Patrick 2026-06-07): same date/
-            reminder logic, now the primary Signals surface near the top. */}
+        {/* Eine Box von Interests bis Signals — keine Einzelboxen pro
+            Cluster (Patrick 2026-06-08). Enthält Tags/Passions/Circles,
+            Synergien und Signals zusammen. */}
         {showProfileBody && (
-          <section>
-            <div className="section-head">
-              <span className="t-label inline-flex items-center gap-1.5">
-                Signals
-                <InfoTooltip text={SIGNAL_HINT} />
-              </span>
-              <span className="rule" />
-              {!person.is_self && (
-                <AddDateButton
-                  personId={person.id}
-                  customLabels={customDateLabels}
-                />
-              )}
-            </div>
-            <DateList
-              dates={person.important_dates ?? []}
-              personId={person.id}
-            />
-          </section>
+          <div className="space-y-6 rounded border border-rule bg-paper p-4">
+            {!person.is_self && <ClusterBlock personId={person.id} />}
+
+            {/* Synergien — unter Circles, über Signals (Patrick 2026-06-07). */}
+            {!person.is_self && (person.synergies?.length ?? 0) > 0 && (
+              <section>
+                <div className="section-head">
+                  <span className="t-label">Synergien</span>
+                  <span className="rule" />
+                  <SynergyTagsButton personId={person.id} />
+                </div>
+                {/* AI-Schlagworte: klickbar → filtert die People-Liste,
+                    × → schnell entfernen. */}
+                {(person.synergy_tags?.length ?? 0) > 0 && (
+                  <SynergyTagChips
+                    key={person.synergy_tags.join("|")}
+                    personId={person.id}
+                    tags={person.synergy_tags}
+                  />
+                )}
+                <ul className="space-y-1.5">
+                  {person.synergies.map((s, i) => (
+                    <li
+                      key={i}
+                      className="flex gap-2 text-sm leading-relaxed text-ink-1"
+                    >
+                      <span className="mt-1.5 h-1 w-1 flex-none rounded-full bg-action" />
+                      <span>{s}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {/* Signals — dated events + reminders. Inline editierbar:
+                Erinnerung an/aus, Signal ändern, löschen. */}
+            <section>
+              <div className="section-head">
+                <span className="t-label inline-flex items-center gap-1.5">
+                  Signals
+                  <InfoTooltip text={SIGNAL_HINT} />
+                </span>
+                <span className="rule" />
+                {!person.is_self && (
+                  <AddDateButton
+                    personId={person.id}
+                    customLabels={customDateLabels}
+                  />
+                )}
+              </div>
+              <SignalsList
+                dates={person.important_dates ?? []}
+                personId={person.id}
+                editable={!person.is_self}
+                customLabels={customDateLabels}
+              />
+            </section>
+          </div>
         )}
 
         {!person.is_self && (

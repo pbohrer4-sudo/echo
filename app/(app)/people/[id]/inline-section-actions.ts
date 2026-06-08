@@ -78,6 +78,123 @@ export async function addImportantDateAction(
   return { ok: true };
 }
 
+// Helper: lädt important_dates und validiert den Index. important_dates
+// ist ein JSONB-Array ohne stabile IDs — Edits/Deletes laufen über die
+// Position. Bei Single-User-Scale ist das robust genug.
+async function loadDatesAt(
+  personId: string,
+  index: number,
+): Promise<
+  | { ok: true; supabase: Awaited<ReturnType<typeof createClient>>; userId: string; dates: ImportantDate[] }
+  | { ok: false; error: string }
+> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "unauth" };
+  const { data: row, error } = await supabase
+    .from("people")
+    .select("important_dates")
+    .eq("id", personId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (error || !row) return { ok: false, error: "Person nicht gefunden" };
+  const dates = (row.important_dates ?? []) as ImportantDate[];
+  if (index < 0 || index >= dates.length)
+    return { ok: false, error: "Signal nicht gefunden" };
+  return { ok: true, supabase, userId: user.id, dates };
+}
+
+// Signal komplett ändern (Label, Datum, Erinnerung). Index-basiert.
+export async function editImportantDateAction(
+  formData: FormData,
+): Promise<Result> {
+  const personId = String(formData.get("person_id") ?? "").trim();
+  const index = parseInt(String(formData.get("index") ?? "-1"), 10);
+  const label = String(formData.get("label") ?? "").trim();
+  const date = String(formData.get("date") ?? "").trim();
+  const remind = String(formData.get("remind") ?? "") === "on";
+  const leadRaw = String(formData.get("remind_lead_days") ?? "7").trim();
+  const leadDays = remind
+    ? Math.max(0, Math.min(365, parseInt(leadRaw, 10) || 0))
+    : undefined;
+
+  if (!personId || !label || !date) return { ok: false, error: "Feld fehlt" };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date))
+    return { ok: false, error: "Datum ungültig" };
+
+  const loaded = await loadDatesAt(personId, index);
+  if (!loaded.ok) return loaded;
+
+  const next = [...loaded.dates];
+  next[index] = { label, date, remind, remind_lead_days: leadDays };
+
+  const { error } = await loaded.supabase
+    .from("people")
+    .update({ important_dates: next })
+    .eq("id", personId)
+    .eq("user_id", loaded.userId);
+  if (error) return { ok: false, error: error.message };
+
+  await rememberCustomDateLabel(loaded.supabase, loaded.userId, label);
+  revalidatePath(`/people/${personId}`);
+  return { ok: true };
+}
+
+// Erinnerung an einem Signal schnell an-/ausschalten (ohne den Rest zu
+// ändern). lead_days greift nur wenn remind=true.
+export async function toggleImportantDateReminderAction(
+  formData: FormData,
+): Promise<Result> {
+  const personId = String(formData.get("person_id") ?? "").trim();
+  const index = parseInt(String(formData.get("index") ?? "-1"), 10);
+  const remind = String(formData.get("remind") ?? "") === "on";
+  const leadRaw = String(formData.get("remind_lead_days") ?? "7").trim();
+  const leadDays = remind
+    ? Math.max(0, Math.min(365, parseInt(leadRaw, 10) || 0))
+    : undefined;
+  if (!personId) return { ok: false, error: "Feld fehlt" };
+
+  const loaded = await loadDatesAt(personId, index);
+  if (!loaded.ok) return loaded;
+
+  const next = [...loaded.dates];
+  next[index] = { ...next[index], remind, remind_lead_days: leadDays };
+
+  const { error } = await loaded.supabase
+    .from("people")
+    .update({ important_dates: next })
+    .eq("id", personId)
+    .eq("user_id", loaded.userId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/people/${personId}`);
+  return { ok: true };
+}
+
+// Signal löschen (Index-basiert).
+export async function deleteImportantDateAction(
+  formData: FormData,
+): Promise<Result> {
+  const personId = String(formData.get("person_id") ?? "").trim();
+  const index = parseInt(String(formData.get("index") ?? "-1"), 10);
+  if (!personId) return { ok: false, error: "Feld fehlt" };
+
+  const loaded = await loadDatesAt(personId, index);
+  if (!loaded.ok) return loaded;
+
+  const next = loaded.dates.filter((_, i) => i !== index);
+
+  const { error } = await loaded.supabase
+    .from("people")
+    .update({ important_dates: next })
+    .eq("id", personId)
+    .eq("user_id", loaded.userId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/people/${personId}`);
+  return { ok: true };
+}
+
 // ───────── Beziehungen ─────────
 
 // Inline-Person anlegen aus der Beziehungs-Form: nur Name, sonst leer.
