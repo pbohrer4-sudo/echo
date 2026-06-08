@@ -5,7 +5,12 @@ import { NextResponse, type NextRequest } from "next/server";
 // for `/auth/`, but the trailing slash matters: bare `/auth` would also
 // match a hypothetical future `/authentication` or `/auth-debug` route
 // and silently bypass the gate.
-const PUBLIC_EXACT = new Set(["/login", "/callback"]);
+const PUBLIC_EXACT = new Set([
+  "/login",
+  "/callback",
+  "/forgot-password",
+  "/reset-password",
+]);
 const PUBLIC_PREFIXES = ["/auth/"];
 
 export async function updateSession(request: NextRequest) {
