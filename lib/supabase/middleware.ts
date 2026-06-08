@@ -37,11 +37,25 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
+  const path = request.nextUrl.pathname;
+
+  // Auth code-exchange safety net. Supabase sometimes delivers the
+  // `?code=` (e.g. a password-recovery link) to the Site URL root
+  // instead of our configured redirectTo. The root page can't handle a
+  // code → 500. Route any stray code through /callback, which exchanges
+  // it. A bare code at the root is treated as a recovery flow → land on
+  // /reset-password; otherwise return to the originating path.
+  const code = request.nextUrl.searchParams.get("code");
+  if (code && path !== "/callback") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/callback";
+    url.searchParams.set("next", path === "/" ? "/reset-password" : path);
+    return NextResponse.redirect(url);
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const path = request.nextUrl.pathname;
   const isPublic =
     PUBLIC_EXACT.has(path) ||
     PUBLIC_PREFIXES.some((p) => path.startsWith(p));
