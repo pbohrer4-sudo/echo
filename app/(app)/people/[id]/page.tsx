@@ -564,6 +564,19 @@ export default async function PersonDetailPage({
               <PersonTimeline interactions={interactions} notes={notes} />
             </section>
 
+            {/* Notizen — freies Textfeld (separat von der Timeline). */}
+            {person.notes && (
+              <section>
+                <div className="section-head">
+                  <span className="t-label">Notizen</span>
+                  <span className="rule" />
+                </div>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-1">
+                  {person.notes}
+                </p>
+              </section>
+            )}
+
             {/* 3. Erinnerungen */}
             <section>
               <div className="section-head">
@@ -646,17 +659,6 @@ export default async function PersonDetailPage({
             — die zugehörigen Person-Felder sind weg. Cluster-Funktionalität
             kommt mit Phase c (Tag-Cluster v3) zurück. */}
 
-        {showProfileBody && person.notes && (
-          <section>
-            <div className="section-head">
-              <span className="t-label">Notizen</span>
-              <span className="rule" />
-            </div>
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-1">
-              {person.notes}
-            </p>
-          </section>
-        )}
 
         {showProfileBody && person.cadence_days && (
           <section>
