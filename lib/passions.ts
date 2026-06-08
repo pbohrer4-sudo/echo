@@ -20,6 +20,35 @@ export async function listPassionsForPerson(
   return (data ?? []) as PassionRow[];
 }
 
+// Distinct passion names the user has used across all their people —
+// powers same-category autocomplete in the passion input. RLS-scoped.
+export async function listAllPassionNames(): Promise<string[]> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data, error } = await supabase
+    .from("passions")
+    .select("name")
+    .eq("user_id", user.id);
+  if (error) {
+    console.error("[passions] listAllPassionNames failed", error);
+    return [];
+  }
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const row of (data ?? []) as { name: string }[]) {
+    const n = row.name?.trim();
+    if (!n) continue;
+    const key = n.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(n);
+  }
+  return out.sort((a, b) => a.localeCompare(b));
+}
+
 export async function addPassion(
   personId: string,
   name: string,

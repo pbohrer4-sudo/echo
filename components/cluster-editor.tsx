@@ -14,7 +14,7 @@ import Link from "next/link";
 // ein dauerhaftes „i", Hover gibt die Note als Tooltip, Klick öffnet
 // den Editor. Plus klassisches Entfernen via × bleibt.
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import {
   CIRCLE_HINT,
   CIRCLE_COLOR,
@@ -50,6 +50,10 @@ interface Props {
   passions: PassionRow[];
   personCircles: CircleWithNote[];
   allCircles: CircleRow[];
+  // Same-category autocomplete: previously-used tag names per cluster +
+  // previously-used passion names, across all of the user's people.
+  tagSuggestions?: Record<string, string[]>;
+  passionSuggestions?: string[];
 }
 
 // Signals (reminders) is its own row under Circles. 'origin' → Origin
@@ -64,13 +68,24 @@ export function ClusterEditor({
   passions,
   personCircles,
   allCircles,
+  tagSuggestions = {},
+  passionSuggestions = [],
 }: Props) {
   // Signals is no longer a tag cluster — it's the date/reminder section
   // (migrated up from "Wichtige Daten", rendered in the detail page).
   return (
     <div className="space-y-4">
-      <TagsBlock personId={personId} personName={personName} tags={tags} />
-      <PassionsBlock personId={personId} passions={passions} />
+      <TagsBlock
+        personId={personId}
+        personName={personName}
+        tags={tags}
+        tagSuggestions={tagSuggestions}
+      />
+      <PassionsBlock
+        personId={personId}
+        passions={passions}
+        suggestions={passionSuggestions}
+      />
       <CirclesBlock
         personId={personId}
         personCircles={personCircles}
@@ -86,10 +101,12 @@ function TagsBlock({
   personId,
   personName,
   tags,
+  tagSuggestions,
 }: {
   personId: string;
   personName: string;
   tags: TagWithNote[];
+  tagSuggestions: Record<string, string[]>;
 }) {
   const grouped = new Map<TagCluster, TagWithNote[]>();
   for (const c of CLUSTER_ORDER) grouped.set(c, []);
@@ -104,16 +121,25 @@ function TagsBlock({
         <span className="rule" />
       </div>
       <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-        {CLUSTER_ORDER.map((cluster) => (
-          <TagClusterRow
-            key={cluster}
-            cluster={cluster}
-            tags={grouped.get(cluster) ?? []}
-            personId={personId}
-            personName={personName}
-            disabled={false}
-          />
-        ))}
+        {CLUSTER_ORDER.map((cluster) => {
+          const applied = new Set(
+            (grouped.get(cluster) ?? []).map((t) => t.name.toLowerCase()),
+          );
+          const suggestions = (tagSuggestions[cluster] ?? []).filter(
+            (s) => !applied.has(s.toLowerCase()),
+          );
+          return (
+            <TagClusterRow
+              key={cluster}
+              cluster={cluster}
+              tags={grouped.get(cluster) ?? []}
+              personId={personId}
+              personName={personName}
+              disabled={false}
+              suggestions={suggestions}
+            />
+          );
+        })}
       </div>
     </section>
   );
@@ -125,12 +151,14 @@ function TagClusterRow({
   personId,
   personName,
   disabled,
+  suggestions,
 }: {
   cluster: TagCluster;
   tags: TagWithNote[];
   personId: string;
   personName: string;
   disabled: boolean;
+  suggestions?: string[];
 }) {
   const [adding, setAdding] = useState(false);
   const [input, setInput] = useState("");
@@ -216,6 +244,7 @@ function TagClusterRow({
             bg={colors.bg}
             fg={colors.fg}
             pending={pending}
+            suggestions={suggestions}
           />
         )}
         {!adding && !disabled && (
@@ -240,9 +269,11 @@ function TagClusterRow({
 function PassionsBlock({
   personId,
   passions,
+  suggestions = [],
 }: {
   personId: string;
   passions: PassionRow[];
+  suggestions?: string[];
 }) {
   const [adding, setAdding] = useState(false);
   const [input, setInput] = useState("");
@@ -250,6 +281,10 @@ function PassionsBlock({
   const [error, setError] = useState<string | null>(null);
 
   const atLimit = passions.length >= 5;
+  const applied = new Set(passions.map((p) => p.name.toLowerCase()));
+  const passionOptions = suggestions.filter(
+    (s) => !applied.has(s.toLowerCase()),
+  );
 
   function commitAdd() {
     const name = input.trim();
@@ -323,6 +358,7 @@ function PassionsBlock({
             bg={PASSION_COLOR.bg}
             fg={PASSION_COLOR.fg}
             pending={pending}
+            suggestions={passionOptions}
           />
         )}
         {!adding && !atLimit && (
@@ -872,6 +908,7 @@ function InlineAddInput({
   fg,
   pending,
   widerInput,
+  suggestions,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -882,34 +919,49 @@ function InlineAddInput({
   fg: string;
   pending: boolean;
   widerInput?: boolean;
+  // Same-category autocomplete options (e.g. previously-used passion
+  // names). Rendered via a native <datalist> — the browser filters as
+  // the user types. Scoped per input so categories never cross.
+  suggestions?: string[];
 }) {
+  const listId = useId();
   return (
-    <input
-      type="text"
-      autoFocus
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      onBlur={() => {
-        // Kleine Verzögerung damit ein Klick auf eine Suggestion-Row
-        // den Blur nicht abbricht. 150ms ist klein genug für UX,
-        // groß genug für mousedown→click.
-        setTimeout(onCommit, 150);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          onCommit();
-        } else if (e.key === "Escape") {
-          e.preventDefault();
-          onCancel();
-        }
-      }}
-      disabled={pending}
-      placeholder={placeholder}
-      className={`rounded-full border border-rule px-2.5 py-1 text-xs outline-none transition placeholder:opacity-60 focus:border-action ${
-        widerInput ? "w-full" : "w-44"
-      } disabled:opacity-50`}
-      style={{ background: bg, color: fg }}
-    />
+    <>
+      <input
+        type="text"
+        autoFocus
+        value={value}
+        list={suggestions && suggestions.length > 0 ? listId : undefined}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => {
+          // Kleine Verzögerung damit ein Klick auf eine Suggestion-Row
+          // den Blur nicht abbricht. 150ms ist klein genug für UX,
+          // groß genug für mousedown→click.
+          setTimeout(onCommit, 150);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onCommit();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onCancel();
+          }
+        }}
+        disabled={pending}
+        placeholder={placeholder}
+        className={`rounded-full border border-rule px-2.5 py-1 text-xs outline-none transition placeholder:opacity-60 focus:border-action ${
+          widerInput ? "w-full" : "w-44"
+        } disabled:opacity-50`}
+        style={{ background: bg, color: fg }}
+      />
+      {suggestions && suggestions.length > 0 && (
+        <datalist id={listId}>
+          {suggestions.map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
+      )}
+    </>
   );
 }
