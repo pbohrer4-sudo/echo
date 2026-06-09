@@ -114,34 +114,6 @@ export async function POST(request: Request) {
 
   if (uploadErr) {
     console.error("[life-events upload] storage error", uploadErr);
-    // Wenn der User-Client wegen RLS-Policy nicht uploaden darf
-    // (Storage-Policies wurden nie angelegt), fallback auf Admin-Client.
-    if (
-      uploadErr.message.toLowerCase().includes("policy") ||
-      uploadErr.message.toLowerCase().includes("permission")
-    ) {
-      try {
-        const admin = createAdminClient();
-        const { error: adminErr } = await admin.storage
-          .from(LIFE_EVENTS_BUCKET)
-          .upload(path, arrayBuffer, {
-            contentType: file.type,
-            cacheControl: "3600",
-            upsert: false,
-          });
-        if (!adminErr) {
-          return NextResponse.json({
-            path,
-            size: file.size,
-            mime: file.type,
-            name: safeName,
-          });
-        }
-        console.error("[life-events upload] admin fallback failed", adminErr);
-      } catch (err) {
-        console.error("[life-events upload] admin client failed", err);
-      }
-    }
     return NextResponse.json(
       { error: `Upload fehlgeschlagen: ${uploadErr.message}` },
       { status: 500 },

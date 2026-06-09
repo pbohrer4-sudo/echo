@@ -512,16 +512,10 @@ export default async function PersonDetailPage({
             </section>
           )}
 
-        {!person.is_self && (
-          <DraftGenerator
-            personId={person.id}
-            personName={person.name}
-            contacts={contacts}
-          />
-        )}
-
         {/* Orte sind jetzt Teil der Stammdaten-Box oben (Patrick
-            2026-06-08) — keine eigene „Orte"-Sektion mehr. */}
+            2026-06-08) — keine eigene „Orte"-Sektion mehr.
+            KI-Entwurf für WhatsApp ist ganz nach unten gewandert (Patrick
+            2026-06-09) — am wenigsten wichtig. */}
 
         {!person.is_self &&
           (person.primary_language || person.secondary_language) && (
@@ -723,6 +717,15 @@ export default async function PersonDetailPage({
               ))}
             </ul>
           </section>
+        )}
+
+        {/* KI-Entwurf für WhatsApp — ganz nach unten (unwichtigste Sektion). */}
+        {!person.is_self && (
+          <DraftGenerator
+            personId={person.id}
+            personName={person.name}
+            contacts={contacts}
+          />
         )}
       </div>
     </div>
