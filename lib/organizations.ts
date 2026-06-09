@@ -1,9 +1,14 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import type { Organization, Person } from "@/lib/types";
 
 export interface OrgWithCount extends Organization {
   people_count: number;
 }
+
+// Minimal client shape resolveOrCreateOrganization needs — satisfied by
+// both the cookie-bound server client and the service-role admin client.
+type OrgSupabaseClient = SupabaseClient;
 
 // All non-deleted orgs for the user, with people_count rolled up.
 export async function listOrganizations(): Promise<OrgWithCount[]> {
@@ -115,12 +120,16 @@ export async function autocompleteOrganizations(
 export async function resolveOrCreateOrganization(
   companyName: string | null,
   userId: string,
+  // Optional injected client. Cookie-less callers (e.g. the Siri capture
+  // endpoint) pass the service-role admin client; everyone else gets the
+  // RLS-scoped session client by default.
+  client?: OrgSupabaseClient,
 ): Promise<string | null> {
   if (!companyName) return null;
   const trimmed = companyName.trim();
   if (!trimmed) return null;
 
-  const supabase = await createClient();
+  const supabase = client ?? (await createClient());
   const { data: matches, error } = await supabase
     .from("organizations")
     .select("id")

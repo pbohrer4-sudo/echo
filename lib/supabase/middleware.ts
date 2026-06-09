@@ -11,7 +11,10 @@ const PUBLIC_EXACT = new Set([
   "/forgot-password",
   "/reset-password",
 ]);
-const PUBLIC_PREFIXES = ["/auth/"];
+// `/api/siri/` authenticates via a personal API token (Authorization:
+// Bearer echo_…), not a session cookie — so it must skip the cookie gate
+// here or the middleware would 307 it to /login before the route runs.
+const PUBLIC_PREFIXES = ["/auth/", "/api/siri/"];
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });

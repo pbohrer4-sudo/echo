@@ -95,17 +95,24 @@ interface InteractionRow {
 export async function loadPeopleContext(
   supabase: SupabaseClient,
   limit: number,
+  // Cookie callers rely on RLS to scope rows to the user. Service-role
+  // callers (Siri capture) bypass RLS, so they MUST pass userId — without
+  // it the admin client would read every tenant's people. Optional to keep
+  // the cookie callers unchanged.
+  userId?: string,
 ): Promise<PersonContext[]> {
   // 1) Basis-Skalare. Wenn das schiefgeht, gibt's nichts zu rendern.
   // ALLES was auf der Person-Tabelle selbst liegt holen wir hier —
   // der LLM-Kontext soll vollständig sein.
-  const { data: peopleData, error } = await supabase
+  let peopleQuery = supabase
     .from("people")
     .select(
       "id, name, company, role, organization_id, gift_idea, notes, how_we_met, met_date, met_location, introduced_by, met_with, synergies, primary_language, secondary_language, current_location, home_location, linkedin_url, depth, purpose, mode, cadence_days, last_contact_at, next_nudge_at, addresses, socials, important_dates",
     )
     .is("deleted_at", null)
-    .eq("is_self", false)
+    .eq("is_self", false);
+  if (userId) peopleQuery = peopleQuery.eq("user_id", userId);
+  const { data: peopleData, error } = await peopleQuery
     .order("last_contact_at", { ascending: false, nullsFirst: false })
     .limit(limit);
   if (error || !peopleData) return [];
@@ -158,10 +165,9 @@ export async function loadPeopleContext(
     // Name-Lookup für related_person_id → readable name. Wir holen
     // ALLE Personen-Namen (klein) damit Beziehungen zu Personen
     // außerhalb der top-60 trotzdem renderbar sind.
-    supabase
-      .from("people")
-      .select("id, name")
-      .is("deleted_at", null),
+    (userId
+      ? supabase.from("people").select("id, name").is("deleted_at", null).eq("user_id", userId)
+      : supabase.from("people").select("id, name").is("deleted_at", null)),
   ]);
 
   // Separate Query für Interactions weil person_ids ein Array ist —
@@ -313,13 +319,18 @@ interface BaseOrganization {
 export async function loadOrganizationsContext(
   supabase: SupabaseClient,
   limit: number,
+  // See loadPeopleContext: service-role callers must pass userId so the
+  // RLS bypass doesn't leak other tenants' organizations.
+  userId?: string,
 ): Promise<OrganizationContext[]> {
-  const { data, error } = await supabase
+  let orgQuery = supabase
     .from("organizations")
     .select(
       "id, name, domain, website, industry, size, hq, description, notes, tags",
     )
-    .is("deleted_at", null)
+    .is("deleted_at", null);
+  if (userId) orgQuery = orgQuery.eq("user_id", userId);
+  const { data, error } = await orgQuery
     .order("name", { ascending: true })
     .limit(limit);
   if (error || !data) return [];

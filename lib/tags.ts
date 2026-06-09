@@ -6,6 +6,7 @@
 // für nicht-migrierte Code-Pfade), spielt aber funktional keine
 // Rolle mehr.
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import type {
   TagCluster,
@@ -13,6 +14,14 @@ import type {
   TagRow,
   TagWithNote,
 } from "@/lib/types";
+
+// Cookie-less callers (Siri capture) inject the service-role admin client
+// plus an explicit userId, since there's no session to derive auth.uid()
+// from. Default path stays cookie-bound + RLS-scoped.
+interface TagClientOverride {
+  client?: SupabaseClient;
+  userId?: string;
+}
 
 /**
  * Idempotent: holt das Tag wenn's existiert, sonst legt es an.
@@ -22,12 +31,18 @@ export async function getOrCreateTag(input: {
   name: string;
   cluster?: TagCluster;
   createdBy?: TagCreatedBy;
+  override?: TagClientOverride;
 }): Promise<TagRow | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  const supabase = input.override?.client ?? (await createClient());
+  let userId = input.override?.userId;
+  if (!userId) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return null;
+    userId = user.id;
+  }
+  const user = { id: userId };
 
   const trimmed = input.name.trim();
   if (!trimmed) return null;
@@ -86,8 +101,9 @@ export async function getOrCreateTag(input: {
 export async function addTagToPerson(
   personId: string,
   tagId: string,
+  client?: SupabaseClient,
 ): Promise<{ ok: boolean; reason?: "duplicate" | "error" }> {
-  const supabase = await createClient();
+  const supabase = client ?? (await createClient());
   const { error } = await supabase
     .from("person_tags")
     .insert({ person_id: personId, tag_id: tagId });

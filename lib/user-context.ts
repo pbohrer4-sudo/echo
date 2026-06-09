@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface UserContext {
   user_id: string;
@@ -56,6 +57,56 @@ export async function getUserContext(): Promise<UserContext | null> {
   return {
     user_id: user.id,
     email: user.email ?? null,
+    display_name,
+    voice_id: profile?.voice_id ?? null,
+    language: profile?.language ?? "de",
+    claude_key: profile?.claude_key_byo ?? null,
+    elevenlabs_key: profile?.elevenlabs_key_byo ?? null,
+    model_preferences:
+      (profile?.model_preferences as Record<string, string> | null) ?? {},
+    byo_keys,
+  };
+}
+
+// Same shape as getUserContext(), but resolved from an explicit user_id via
+// the service-role client instead of the session cookie. Used by headless
+// callers (Siri capture) where the user is identified by an API token, not
+// a browser session. Never pass a user_id taken from the request body —
+// only one already verified by resolveUserIdFromToken().
+export async function getUserContextById(
+  userId: string,
+): Promise<UserContext | null> {
+  const admin = createAdminClient();
+
+  const { data: profile } = await admin
+    .from("profiles")
+    .select(
+      "display_name, voice_id, language, claude_key_byo, elevenlabs_key_byo, model_preferences, byo_api_keys",
+    )
+    .eq("id", userId)
+    .maybeSingle();
+
+  const { data: authUser } = await admin.auth.admin.getUserById(userId);
+  const user = authUser?.user ?? null;
+
+  const display_name =
+    profile?.display_name ??
+    user?.user_metadata?.display_name ??
+    user?.email?.split("@")[0] ??
+    "Patrick";
+
+  const byo_keys =
+    (profile?.byo_api_keys as Record<string, string> | null) ?? {};
+  if (profile?.claude_key_byo && !byo_keys.anthropic) {
+    byo_keys.anthropic = profile.claude_key_byo;
+  }
+  if (profile?.elevenlabs_key_byo && !byo_keys.elevenlabs) {
+    byo_keys.elevenlabs = profile.elevenlabs_key_byo;
+  }
+
+  return {
+    user_id: userId,
+    email: user?.email ?? null,
     display_name,
     voice_id: profile?.voice_id ?? null,
     language: profile?.language ?? "de",
