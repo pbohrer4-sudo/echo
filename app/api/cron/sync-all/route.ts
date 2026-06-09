@@ -10,9 +10,9 @@ export const maxDuration = 300; // 5 minutes — long enough for a few users
 // Cron-target endpoint. Loops through every connected real-OAuth
 // connection in the system and runs the appropriate sync.
 //
-// Auth: requires header `Authorization: Bearer ${CRON_SECRET}` OR the
-// Vercel-cron-specific `x-vercel-cron: 1` signal (Vercel sets this
-// when invoking scheduled jobs in its own platform).
+// Auth: requires header `Authorization: Bearer ${CRON_SECRET}`.
+// Vercel automatically sends this header when CRON_SECRET is set as
+// an environment variable — no extra config needed for scheduled jobs.
 //
 // Wire it up by adding to vercel.json:
 //   {
@@ -45,7 +45,6 @@ function isAuthorized(request: Request): boolean {
     // otherwise anyone with the URL can drain Google API quota.
     return false;
   }
-  if (request.headers.get("x-vercel-cron") === "1") return true;
   const auth = request.headers.get("authorization") ?? "";
   return auth === `Bearer ${expected}`;
 }

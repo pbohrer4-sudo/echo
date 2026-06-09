@@ -176,10 +176,15 @@ export async function deleteContactAction(
   personId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "unauthenticated" };
   const { error } = await supabase
     .from("person_contacts")
     .delete()
-    .eq("id", contactId);
+    .eq("id", contactId)
+    .eq("user_id", user.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath(`/people/${personId}`);
   return { ok: true };
@@ -190,12 +195,17 @@ export async function setPrimaryContactAction(
   personId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "unauthenticated" };
   // Welcher Channel? Brauchen wir um andere primary derselben
   // (person, channel) auf false zu setzen.
   const { data: target, error: fetchErr } = await supabase
     .from("person_contacts")
     .select("channel")
     .eq("id", contactId)
+    .eq("user_id", user.id)
     .maybeSingle();
   if (fetchErr || !target) return { ok: false, error: "nicht gefunden" };
 
@@ -205,12 +215,14 @@ export async function setPrimaryContactAction(
     .update({ is_primary: false })
     .eq("person_id", personId)
     .eq("channel", target.channel as ContactChannel)
+    .eq("user_id", user.id)
     .neq("id", contactId);
 
   const { error } = await supabase
     .from("person_contacts")
     .update({ is_primary: true })
-    .eq("id", contactId);
+    .eq("id", contactId)
+    .eq("user_id", user.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath(`/people/${personId}`);
   return { ok: true };

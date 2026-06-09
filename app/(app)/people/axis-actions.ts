@@ -44,13 +44,18 @@ export async function updatePersonDepth(
     return { ok: false, error: "invalid depth value" };
   }
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "unauthorized" };
   const { error } = await supabase
     .from("people")
     .update({
       depth,
       depth_source: depth === null ? "auto" : "manual_override",
     })
-    .eq("id", personId);
+    .eq("id", personId)
+    .eq("user_id", user.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath(`/people/${personId}`);
   return { ok: true };
@@ -64,10 +69,15 @@ export async function updatePersonPurpose(
     return { ok: false, error: "invalid purpose value" };
   }
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "unauthorized" };
   const { error } = await supabase
     .from("people")
     .update({ purpose })
-    .eq("id", personId);
+    .eq("id", personId)
+    .eq("user_id", user.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath(`/people/${personId}`);
   return { ok: true };
@@ -88,10 +98,15 @@ export async function updatePersonMode(
     return { ok: false, error: "invalid mode value" };
   }
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "unauthorized" };
   const { error } = await supabase
     .from("people")
     .update({ mode })
-    .eq("id", personId);
+    .eq("id", personId)
+    .eq("user_id", user.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath(`/people/${personId}`);
   return { ok: true };
@@ -106,10 +121,15 @@ export async function resetDepthToAuto(
   personId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "unauthorized" };
   const { error } = await supabase
     .from("people")
     .update({ depth: null, depth_source: "auto" })
-    .eq("id", personId);
+    .eq("id", personId)
+    .eq("user_id", user.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath(`/people/${personId}`);
   return { ok: true };

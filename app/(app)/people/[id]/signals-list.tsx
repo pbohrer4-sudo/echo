@@ -54,27 +54,18 @@ export function SignalsList({
     return <p className="text-xs italic text-ink-4">Keine Daten hinterlegt.</p>;
 
   return (
-    <div className="space-y-3">
-      <ul className="space-y-2">
-        {dates.map((d, i) => (
-          <SignalRow
-            key={`${i}-${d.label}-${d.date}`}
-            date={d}
-            index={i}
-            personId={personId}
-            editable={editable}
-            customLabels={customLabels}
-          />
-        ))}
-      </ul>
-      <a
-        href={`/api/people/${personId}/dates.ics`}
-        download
-        className="inline-flex rounded border border-rule px-3 py-1.5 text-xs text-ink-2 transition hover:border-action hover:text-action"
-      >
-        ↓ als .ics exportieren
-      </a>
-    </div>
+    <ul className="space-y-2">
+      {dates.map((d, i) => (
+        <SignalRow
+          key={`${i}-${d.label}-${d.date}`}
+          date={d}
+          index={i}
+          personId={personId}
+          editable={editable}
+          customLabels={customLabels}
+        />
+      ))}
+    </ul>
   );
 }
 
