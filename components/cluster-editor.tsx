@@ -985,6 +985,10 @@ function InlineAddInput({
         } disabled:opacity-50`}
         style={{ background: bg, color: fg }}
       />
+      {/* TEMP-DEBUG: zeigt wie viele Vorschläge ankommen. Wieder entfernen. */}
+      <span className="ml-1 font-mono text-[9px] text-bad">
+        dbg {(suggestions ?? []).length}/{matches.length}
+      </span>
       {open && matches.length > 0 && (
         <ul className="absolute left-0 top-full z-50 mt-1 max-h-48 w-48 overflow-auto rounded border border-rule bg-paper py-1 shadow-[0_4px_14px_rgba(20,17,13,0.12)]">
           {matches.map((s, idx) => (
