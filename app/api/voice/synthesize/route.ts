@@ -85,7 +85,7 @@ export async function POST(request: Request) {
       latencyMs: Date.now() - startMs,
       status: "error",
     });
-    const message = err instanceof Error ? err.message : "tts failed";
+    const message = err instanceof Error ? err.message : "Sprachausgabe fehlgeschlagen";
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

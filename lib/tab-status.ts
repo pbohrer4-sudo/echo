@@ -29,12 +29,30 @@ export async function getProfileTabStatus(self: Person): Promise<TabStatus> {
   const chances: TabSignal[] = [];
   const problems: TabSignal[] = [];
 
+  // All 5 data fetches are independent — run in parallel.
+  const [
+    { data: cadencePeople },
+    { count: overdueCount },
+    dupes,
+    depth,
+    upcoming,
+  ] = await Promise.all([
+    supabase
+      .from("people")
+      .select("id, name, last_contact_at, cadence_days")
+      .is("deleted_at", null)
+      .eq("is_self", false),
+    supabase
+      .from("reminders")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending")
+      .lte("remind_at", new Date().toISOString()),
+    listPeopleDuplicates(),
+    getProfileDepth(self),
+    listUpcomingBirthdays(supabase, 14),
+  ]);
+
   // ── Drifting + due-soon people: relationship-debt signal.
-  const { data: cadencePeople } = await supabase
-    .from("people")
-    .select("id, name, last_contact_at, cadence_days")
-    .is("deleted_at", null)
-    .eq("is_self", false);
   let drifting = 0;
   let dueSoon = 0;
   let withoutCadence = 0;
@@ -80,11 +98,6 @@ export async function getProfileTabStatus(self: Person): Promise<TabStatus> {
   }
 
   // ── Overdue reminders count.
-  const { count: overdueCount } = await supabase
-    .from("reminders")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "pending")
-    .lte("remind_at", new Date().toISOString());
   if ((overdueCount ?? 0) > 0) {
     problems.push({
       icon: "⏰",
@@ -96,7 +109,6 @@ export async function getProfileTabStatus(self: Person): Promise<TabStatus> {
 
   // ── Duplikate (nur hochsichere zählen, damit das Signal nicht
   //     rauscht).
-  const dupes = await listPeopleDuplicates();
   const highDupes = dupes.filter((d) => d.confidence === "high").length;
   if (highDupes > 0) {
     problems.push({
@@ -108,7 +120,6 @@ export async function getProfileTabStatus(self: Person): Promise<TabStatus> {
   }
 
   // ── Profil-Tiefe als Chance, falls noch Lücken.
-  const depth = await getProfileDepth(self);
   if (depth.filled < depth.total) {
     chances.push({
       icon: "🧩",
@@ -119,7 +130,6 @@ export async function getProfileTabStatus(self: Person): Promise<TabStatus> {
   }
 
   // ── Upcoming birthdays from related people in next 14 days.
-  const upcoming = await listUpcomingBirthdays(supabase, 14);
   if (upcoming.length > 0) {
     chances.push({
       icon: "🎂",

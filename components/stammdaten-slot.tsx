@@ -4,10 +4,9 @@
 // statt auf die Edit-Seite zu navigieren. Klick auf „— hinzufügen"
 // blendet ein Input an Ort und Stelle ein; Enter/Blur speichert,
 // Escape bricht ab. Speichern läuft über addContactAction (Channels)
-// bzw. addAddressAction (Adresse) und danach router.refresh().
+// bzw. addAddressAction (Adresse). revalidatePath läuft server-seitig.
 
 import { useRef, useState, useTransition, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
 import { addAddressAction, addContactAction } from "@/app/(app)/people/[id]/contact-actions";
 
 // slotKey → wie gespeichert wird. „address" ist ein Sonderfall (JSONB
@@ -37,7 +36,6 @@ export function StammdatenSlot({ personId, slotKey, label, icon }: Props) {
   const [value, setValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const isAddress = slotKey === "address";
@@ -70,7 +68,6 @@ export function StammdatenSlot({ personId, slotKey, label, icon }: Props) {
       if (res.ok) {
         setEditing(false);
         setValue("");
-        router.refresh();
       } else {
         setError(res.error ?? "Fehler beim Speichern");
       }

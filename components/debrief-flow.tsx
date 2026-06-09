@@ -131,7 +131,7 @@ export function DebriefFlow({
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      throw new Error(data.error ?? `TTS ${res.status}`);
+      throw new Error(data.error ?? `Sprachausgabe fehlgeschlagen (${res.status})`);
     }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);

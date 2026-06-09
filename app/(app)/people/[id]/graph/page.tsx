@@ -1,8 +1,13 @@
 import Link from "next/link";
+import nextDynamic from "next/dynamic";
 import { notFound } from "next/navigation";
 import { getPersonById } from "@/lib/people";
 import { buildPersonGraph } from "@/lib/graph";
-import { PersonGraphCanvas } from "./person-graph";
+
+const PersonGraphCanvas = nextDynamic(
+  () => import("./person-graph").then((m) => m.PersonGraphCanvas),
+  { ssr: false },
+);
 
 export const dynamic = "force-dynamic";
 

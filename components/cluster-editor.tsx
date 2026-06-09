@@ -926,13 +926,21 @@ function InlineAddInput({
   suggestions?: string[];
 }) {
   const [open, setOpen] = useState(true);
+  const [activeIdx, setActiveIdx] = useState(-1);
   const q = value.trim().toLowerCase();
   const matches = (suggestions ?? [])
     .filter((s) => {
       if (!q) return true;
       const l = s.toLowerCase();
-      // Prefix matches first ("first letters"), but also allow contains.
+      // Prefix-Treffer zuerst, dann enthält-Treffer.
       return l.includes(q);
+    })
+    // Prefix-Matches nach vorne sortieren ("erste Buchstaben").
+    .sort((a, b) => {
+      if (!q) return 0;
+      const ap = a.toLowerCase().startsWith(q) ? 0 : 1;
+      const bp = b.toLowerCase().startsWith(q) ? 0 : 1;
+      return ap - bp;
     })
     .slice(0, 8);
 
@@ -945,6 +953,7 @@ function InlineAddInput({
         onChange={(e) => {
           onChange(e.target.value);
           setOpen(true);
+          setActiveIdx(-1);
         }}
         onFocus={() => setOpen(true)}
         onBlur={() => {
@@ -952,9 +961,18 @@ function InlineAddInput({
           setTimeout(onCommit, 150);
         }}
         onKeyDown={(e) => {
-          if (e.key === "Enter") {
+          if (e.key === "ArrowDown") {
             e.preventDefault();
-            onCommit();
+            setOpen(true);
+            setActiveIdx((i) => Math.min(i + 1, matches.length - 1));
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setActiveIdx((i) => Math.max(i - 1, 0));
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            // Markierten Vorschlag übernehmen, sonst den getippten Wert.
+            if (activeIdx >= 0 && matches[activeIdx]) onCommit(matches[activeIdx]);
+            else onCommit();
           } else if (e.key === "Escape") {
             e.preventDefault();
             onCancel();
@@ -968,11 +986,12 @@ function InlineAddInput({
         style={{ background: bg, color: fg }}
       />
       {open && matches.length > 0 && (
-        <ul className="absolute left-0 top-full z-20 mt-1 max-h-48 w-48 overflow-auto rounded border border-rule bg-paper py-1 shadow-md">
-          {matches.map((s) => (
+        <ul className="absolute left-0 top-full z-50 mt-1 max-h-48 w-48 overflow-auto rounded border border-rule bg-paper py-1 shadow-[0_4px_14px_rgba(20,17,13,0.12)]">
+          {matches.map((s, idx) => (
             <li key={s}>
               <button
                 type="button"
+                onMouseEnter={() => setActiveIdx(idx)}
                 onMouseDown={(e) => {
                   // mousedown beats the input blur so the pick registers.
                   // Pass the value explicitly — parent input state may
@@ -980,7 +999,9 @@ function InlineAddInput({
                   e.preventDefault();
                   onCommit(s);
                 }}
-                className="block w-full px-3 py-1.5 text-left text-xs text-ink-1 transition hover:bg-paper-2"
+                className={`block w-full px-3 py-1.5 text-left text-xs text-ink-1 transition ${
+                  idx === activeIdx ? "bg-paper-2" : "hover:bg-paper-2"
+                }`}
               >
                 {s}
               </button>

@@ -280,6 +280,32 @@ export async function POST(request: Request) {
   }
 
   const calls = Array.isArray(body.toolCalls) ? body.toolCalls : [];
+
+  const MAX_TOOL_CALLS = 20;
+  if (calls.length > MAX_TOOL_CALLS) {
+    return NextResponse.json(
+      { error: `Zu viele Tool-Calls (max ${MAX_TOOL_CALLS})` },
+      { status: 400 },
+    );
+  }
+
+  const ALLOWED_TOOL_NAMES = new Set([
+    "create_person",
+    "update_person",
+    "log_interaction",
+    "create_note",
+    "create_reminder",
+    "create_todo",
+  ]);
+  for (const call of calls) {
+    if (!ALLOWED_TOOL_NAMES.has(call.name)) {
+      return NextResponse.json(
+        { error: `Unbekannter Tool-Call: ${call.name}` },
+        { status: 400 },
+      );
+    }
+  }
+
   const commits: Commits = {
     people: 0,
     interactions: 0,

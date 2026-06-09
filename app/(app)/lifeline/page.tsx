@@ -144,7 +144,6 @@ export default async function LifelinePage() {
                               fill
                               sizes="96px"
                               className="object-cover"
-                              unoptimized
                             />
                           )}
                           {!item.thumbnailUrl &&

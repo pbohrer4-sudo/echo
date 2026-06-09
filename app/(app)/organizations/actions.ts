@@ -91,6 +91,11 @@ export async function updateOrganization(id: string, formData: FormData) {
   }
 
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
   const { enriched, ...rest } = parsed;
   const update: Record<string, unknown> = { ...rest };
   if (enriched) update.enriched_at = new Date().toISOString();
@@ -98,7 +103,8 @@ export async function updateOrganization(id: string, formData: FormData) {
   const { error } = await supabase
     .from("organizations")
     .update(update)
-    .eq("id", id);
+    .eq("id", id)
+    .eq("user_id", user.id);
 
   if (error) {
     redirect(
@@ -112,12 +118,14 @@ export async function updateOrganization(id: string, formData: FormData) {
     .from("organizations")
     .select("name")
     .eq("id", id)
+    .eq("user_id", user.id)
     .maybeSingle();
   if (org?.name) {
     await supabase
       .from("people")
       .update({ company: org.name })
-      .eq("organization_id", id);
+      .eq("organization_id", id)
+      .eq("user_id", user.id);
   }
 
   revalidatePath("/organizations");
@@ -140,10 +148,16 @@ export async function updateOrganizationTags(id: string, tags: string[]) {
   );
 
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("unauthorized");
+
   const { error } = await supabase
     .from("organizations")
     .update({ tags: cleaned })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("user_id", user.id);
   if (error) throw error;
 
   revalidatePath("/organizations");
@@ -152,10 +166,16 @@ export async function updateOrganizationTags(id: string, tags: string[]) {
 
 export async function deleteOrganization(id: string) {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
   const { error } = await supabase
     .from("organizations")
     .update({ deleted_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("user_id", user.id);
 
   if (error) {
     redirect(`/organizations/${id}?error=${encodeURIComponent(error.message)}`);
@@ -165,7 +185,8 @@ export async function deleteOrganization(id: string) {
   await supabase
     .from("people")
     .update({ organization_id: null })
-    .eq("organization_id", id);
+    .eq("organization_id", id)
+    .eq("user_id", user.id);
 
   revalidatePath("/organizations");
   revalidatePath("/people");

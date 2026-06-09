@@ -614,7 +614,6 @@ export function VoiceOrb() {
       ]);
       setPendingToolCalls([]);
       setOrbState("idle");
-      router.refresh();
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Speichern fehlgeschlagen";

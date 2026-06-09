@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 // Reusable pair row used by both the people and organizations dedup
 // pages. Generic over the side-shape so we can render the right
@@ -44,7 +43,6 @@ export function DuplicatePairCard({
   endpoint: string;
   initialPrimaryId: string;
 }) {
-  const router = useRouter();
   // Which side gets kept. User can flip — we want primary = "the one
   // with more history" by default but the user knows their data best.
   const [primaryId, setPrimaryId] = useState(initialPrimaryId);
@@ -76,7 +74,6 @@ export function DuplicatePairCard({
       // Card disappears from the list. RSC refresh re-fetches dedup
       // rows so the next pair surfaces.
       setHidden(true);
-      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Merge fehlgeschlagen");
     } finally {

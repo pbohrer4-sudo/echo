@@ -1,5 +1,3 @@
-"use client";
-
 // Kleines Info-Icon mit Hover-Tooltip — für Section-Header.
 //
 // Bewusst kein größeres Popover-Component (das macht Hover seltsam) —

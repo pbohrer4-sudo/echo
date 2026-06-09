@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import type { WhatsappInboxRow } from "@/lib/whatsapp-inbox";
 
 // Top-of-inbox strip showing unread WhatsApp messages. Each row
@@ -11,7 +10,6 @@ import type { WhatsappInboxRow } from "@/lib/whatsapp-inbox";
 //   • "Antworten" — expand inline composer; sending writes the
 //                   outbound row + auto-marks the inbound as read.
 export function WhatsappInboxStrip({ rows }: { rows: WhatsappInboxRow[] }) {
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [replyOpen, setReplyOpen] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -23,7 +21,6 @@ export function WhatsappInboxStrip({ rows }: { rows: WhatsappInboxRow[] }) {
   function markRead(id: string) {
     startTransition(async () => {
       await fetch(`/api/whatsapp/messages/${id}/read`, { method: "POST" });
-      router.refresh();
     });
   }
 
@@ -64,7 +61,6 @@ export function WhatsappInboxStrip({ rows }: { rows: WhatsappInboxRow[] }) {
         return next;
       });
       setReplyOpen(null);
-      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Senden fehlgeschlagen");
     } finally {

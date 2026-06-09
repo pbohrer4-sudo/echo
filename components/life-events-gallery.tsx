@@ -8,7 +8,6 @@
 
 import Image from "next/image";
 import { useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import {
   LIFE_EVENT_LABELS,
   type LifeEventRow,
@@ -121,7 +120,6 @@ export function LifeEventsGallery({ personId, events }: Props) {
                     fill
                     sizes="(max-width: 640px) 50vw, 33vw"
                     className="object-cover"
-                    unoptimized
                   />
                 )}
                 {!e.thumbnailUrl && e.event_type !== "photo" && (
@@ -193,7 +191,6 @@ function EventModal({
   onClose: () => void;
 }) {
   const isEdit = !!initialEvent;
-  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [eventType, setEventType] = useState<LifeEventType>(
     initialEvent?.event_type ?? "note",
@@ -317,7 +314,6 @@ function EventModal({
         setError(res.error ?? "Fehler");
         return;
       }
-      router.refresh();
       onClose();
     });
   }
@@ -537,7 +533,6 @@ function DetailModal({
   onEdit: () => void;
   onClose: () => void;
 }) {
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [confirming, setConfirming] = useState(false);
 
@@ -545,7 +540,6 @@ function DetailModal({
     startTransition(async () => {
       const res = await deleteLifeEventAction(event.id, personId);
       if (res.ok) {
-        router.refresh();
         onClose();
       }
     });
@@ -584,7 +578,6 @@ function DetailModal({
               fill
               sizes="100vw"
               className="object-contain"
-              unoptimized
             />
           </div>
         )}

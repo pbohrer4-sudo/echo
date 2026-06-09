@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import Image from "next/image";
-import { findSimilarPeople, getPersonById } from "@/lib/people";
+import { findSimilarPeople, getPersonById, listPeopleIdName } from "@/lib/people";
 import {
   listInteractionsForPerson,
   listNotesForPerson,
@@ -24,7 +24,6 @@ import {
   AddTodoButton,
   GiftsList,
 } from "./inline-section-buttons";
-import { listPeople } from "@/lib/people";
 import { getProfileDepth } from "@/lib/profile-depth";
 import { AxisBadges } from "@/components/axis-badges";
 import { ActionBar } from "@/components/action-bar";
@@ -145,7 +144,7 @@ export default async function PersonDetailPage({
   ]);
   const relatedIds = relationships.map((r) => r.related_person_id);
 
-  const [interactions, notes, reminders, todos, peopleMap, similar, allPeople] =
+  const [interactions, notes, reminders, todos, peopleMap, similar, pickerPeople] =
     await Promise.all([
       listInteractionsForPerson(id),
       listNotesForPerson(id),
@@ -155,18 +154,19 @@ export default async function PersonDetailPage({
       findSimilarPeople(id, []),
       // Für die +Beziehung-Inline-Form brauchen wir die Liste der
       // anderen Personen für den Picker. Self ist eh ausgefiltert.
-      listPeople(),
+      // listPeopleIdName wird nur für nicht-Self-Personen gebraucht.
+      !person.is_self ? listPeopleIdName() : Promise.resolve([] as { id: string; name: string }[]),
     ]);
-  const candidateRelationshipPeople = allPeople
-    .filter((p) => p.id !== id)
-    .map((p) => ({ id: p.id, name: p.name }));
+  const candidateRelationshipPeople = pickerPeople.filter((p) => p.id !== id);
 
   // Custom fields (P1). Defs are per-user; values per-person. Only render
   // the section when at least one def exists AND this person has a value
   // for it (keeps the detail page tidy for sparse data).
-  const customFieldDefs = await getFieldDefs();
+  const [customFieldDefs, customDateLabels] = await Promise.all([
+    getFieldDefs(),
+    getCustomDateLabels(),
+  ]);
   const customValues = parseFieldValues(person.custom_field_values);
-  const customDateLabels = await getCustomDateLabels();
   const customFieldsToShow = customFieldDefs.filter((d) => {
     const v = customValues[d.id];
     return v !== null && v !== undefined && v !== "" && v !== false;
@@ -194,7 +194,7 @@ export default async function PersonDetailPage({
   }
 
   return (
-    <div className="px-8 py-10">
+    <div className="px-4 py-6 sm:px-8 sm:py-10">
       <div className="mx-auto max-w-3xl space-y-5">
         <Link
           href={person.is_self ? "/" : "/people"}
@@ -203,7 +203,7 @@ export default async function PersonDetailPage({
           ← {person.is_self ? "Zurück" : "Personen"}
         </Link>
 
-        <div className="flex items-start justify-between gap-6">
+        <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="flex items-start gap-5">
             {person.photo_url ? (
               <Image
@@ -212,7 +212,6 @@ export default async function PersonDetailPage({
                 width={64}
                 height={64}
                 className="h-16 w-16 rounded-full object-cover ring-1 ring-rule"
-                unoptimized
               />
             ) : (
               <span className="avatar lg" aria-hidden>
@@ -285,7 +284,7 @@ export default async function PersonDetailPage({
                   href={`/people/${person.id}/graph`}
                   className="rounded border border-rule px-3 py-1.5 text-xs text-ink-2 transition hover:border-action hover:text-action"
                 >
-                  Graph
+                  Beziehungsgraph
                 </Link>
               )}
               <Link
@@ -415,7 +414,7 @@ export default async function PersonDetailPage({
             <section>
               <div className="section-head">
                 <span className="t-label inline-flex items-center gap-1.5">
-                  Signals
+                  Signale
                   <InfoTooltip text={SIGNAL_HINT} />
                 </span>
                 <span className="rule" />
@@ -460,7 +459,7 @@ export default async function PersonDetailPage({
             person.met_with) && (
             <section className="space-y-3">
               <div className="section-head">
-                <span className="t-label">Origin</span>
+                <span className="t-label">Kennenlernen</span>
                 <span className="rule" />
               </div>
               {/* Boxed rows, gleiche Optik wie Stammdaten. */}
@@ -551,7 +550,7 @@ export default async function PersonDetailPage({
             {/* 2. Notes — Timeline aus Interaktionen + Notizen */}
             <section>
               <div className="section-head">
-                <span className="t-label">Notes</span>
+                <span className="t-label">Notizen</span>
                 <span className="rule" />
                 {!person.is_self && <AddEventButton personId={person.id} />}
               </div>
@@ -595,7 +594,7 @@ export default async function PersonDetailPage({
             {!person.is_self && (
               <section>
                 <div className="section-head">
-                  <span className="t-label">Gifts</span>
+                  <span className="t-label">Geschenkideen</span>
                   <span className="rule" />
                 </div>
                 {person.gift_idea ? (
@@ -657,7 +656,7 @@ export default async function PersonDetailPage({
         {showProfileBody && person.cadence_days && (
           <section>
             <div className="section-head">
-              <span className="t-label">Cadence</span>
+              <span className="t-label">Kontakt-Rhythmus</span>
               <span className="rule" />
             </div>
             <p className="text-sm text-ink-1">

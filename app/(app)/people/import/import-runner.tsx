@@ -121,7 +121,6 @@ export function ImportRunner() {
           result.errors.length > 0 ? `&errors=${result.errors.length}` : ""
         }`,
       );
-      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Import fehlgeschlagen");
     } finally {

@@ -11,6 +11,7 @@
 
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
+import { useFormStatus } from "react-dom";
 import {
   DEPTH_LABELS,
   LANGUAGES,
@@ -376,7 +377,7 @@ export function EditPersonForm({
 
         {/* — Purpose — */}
         <input type="hidden" name="purpose" value={purpose} />
-        <Field label="Purpose" hint="Wo gehört diese Person in dein Leben?">
+        <Field label="Zweck" hint="Wo gehört diese Person in dein Leben?">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {(Object.keys(PURPOSE_LABELS) as Purpose[]).map((p) => (
               <button
@@ -403,7 +404,7 @@ export function EditPersonForm({
         {/* — Depth — */}
         <input type="hidden" name="depth" value={depth} />
         <Field
-          label="Depth"
+          label="Nähe"
           hint="AI entscheidet wenn unklar — berechnet aus Interaktionen."
         >
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -447,7 +448,7 @@ export function EditPersonForm({
 
         {/* — Modus — */}
         <input type="hidden" name="mode" value={mode} />
-        <Field label="Mode" hint="In welchem Zustand ist die Beziehung gerade?">
+        <Field label="Status" hint="In welchem Zustand ist die Beziehung gerade?">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {(Object.keys(MODE_LABELS) as Mode[]).map((m) => (
               <button
@@ -646,7 +647,7 @@ export function EditPersonForm({
         </section>
 
         {/* — Gifts: was man dieser Person zum nächsten Anlass schenken könnte. */}
-        <Field label="Gifts">
+        <Field label="Geschenkidee">
           <input
             type="text"
             name="gift_idea"
@@ -677,7 +678,7 @@ export function EditPersonForm({
         </div>
 
         <Field
-          label="Cadence (Tage)"
+          label="Rhythmus (Tage)"
           hint="Wie oft soll Kontakt sein? Leer = AI rechnet."
         >
           <input
@@ -835,15 +836,24 @@ export function EditPersonForm({
           >
             Abbrechen
           </Link>
-          <button
-            type="submit"
-            className="rounded border border-action bg-action px-4 py-2 text-sm font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)]"
-          >
-            Speichern
-          </button>
+          <SubmitButton label="Speichern" />
         </div>
       </form>
     </div>
+  );
+}
+
+function SubmitButton({ label }: { label: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      aria-disabled={pending}
+      className="rounded border border-action bg-action px-4 py-2 text-sm font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)] disabled:opacity-60"
+    >
+      {pending ? "Speichern…" : label}
+    </button>
   );
 }
 

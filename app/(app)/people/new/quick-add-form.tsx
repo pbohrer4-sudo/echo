@@ -7,6 +7,7 @@
 // Controlled inputs damit die VoiceCapture-Übernahme funktioniert.
 
 import Link from "next/link";
+import { useFormStatus } from "react-dom";
 import { useRef, useState } from "react";
 import { APP_CONFIG } from "@/lib/config";
 import {
@@ -215,7 +216,7 @@ export function QuickAddForm({
         </Field>
 
         {/* — Purpose — */}
-        <Field label="Purpose" hint="Wo gehört diese Person in dein Leben?">
+        <Field label="Zweck" hint="Wo gehört diese Person in dein Leben?">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {(Object.keys(PURPOSE_LABELS) as Purpose[]).map((p) => (
               <button
@@ -241,7 +242,7 @@ export function QuickAddForm({
 
         {/* — Depth — */}
         <Field
-          label="Depth"
+          label="Nähe"
           hint={`„AI entscheidet" wenn du es nicht weißt — ${APP_CONFIG.PUBLIC_NAME} berechnet aus Interaktionen.`}
         >
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -512,15 +513,24 @@ export function QuickAddForm({
           >
             Abbrechen
           </Link>
-          <button
-            type="submit"
-            className="rounded border border-action bg-action px-4 py-2 text-sm font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)]"
-          >
-            Anlegen
-          </button>
+          <SubmitButton label="Person speichern" />
         </div>
       </form>
     </div>
+  );
+}
+
+function SubmitButton({ label }: { label: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      aria-disabled={pending}
+      className="rounded border border-action bg-action px-4 py-2 text-sm font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)] disabled:opacity-60"
+    >
+      {pending ? "Speichern…" : label}
+    </button>
   );
 }
 

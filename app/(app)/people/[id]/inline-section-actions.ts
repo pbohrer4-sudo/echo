@@ -50,25 +50,29 @@ export async function addImportantDateAction(
   }
 
   // important_dates ist ein JSONB-Array auf people — read-merge-write.
+  // updated_at wird für optimistisches Locking mitgeladen.
   const { data: row, error: fetchErr } = await supabase
     .from("people")
-    .select("important_dates")
+    .select("important_dates, updated_at")
     .eq("id", personId)
     .maybeSingle();
   if (fetchErr || !row) return { ok: false, error: "Person nicht gefunden" };
 
+  const updatedAt = row.updated_at as string;
   const existing = (row.important_dates ?? []) as ImportantDate[];
   const next: ImportantDate[] = [
     ...existing,
     { label, date, remind, remind_lead_days: leadDays },
   ];
 
-  const { error } = await supabase
+  const { error, count } = await supabase
     .from("people")
-    .update({ important_dates: next })
+    .update({ important_dates: next }, { count: "exact" })
     .eq("id", personId)
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .eq("updated_at", updatedAt);
   if (error) return { ok: false, error: error.message };
+  if (count === 0) return { ok: false, error: "Konflikt - bitte neu laden" };
 
   // Auto-remember a custom occasion so it appears in the dropdown next
   // time. No-op for built-in defaults / "andere".
@@ -85,7 +89,7 @@ async function loadDatesAt(
   personId: string,
   index: number,
 ): Promise<
-  | { ok: true; supabase: Awaited<ReturnType<typeof createClient>>; userId: string; dates: ImportantDate[] }
+  | { ok: true; supabase: Awaited<ReturnType<typeof createClient>>; userId: string; dates: ImportantDate[]; updatedAt: string }
   | { ok: false; error: string }
 > {
   const supabase = await createClient();
@@ -95,7 +99,7 @@ async function loadDatesAt(
   if (!user) return { ok: false, error: "unauth" };
   const { data: row, error } = await supabase
     .from("people")
-    .select("important_dates")
+    .select("important_dates, updated_at")
     .eq("id", personId)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -103,7 +107,8 @@ async function loadDatesAt(
   const dates = (row.important_dates ?? []) as ImportantDate[];
   if (index < 0 || index >= dates.length)
     return { ok: false, error: "Signal nicht gefunden" };
-  return { ok: true, supabase, userId: user.id, dates };
+  const updatedAt = row.updated_at as string;
+  return { ok: true, supabase, userId: user.id, dates, updatedAt };
 }
 
 // Signal komplett ändern (Label, Datum, Erinnerung). Index-basiert.
@@ -130,12 +135,14 @@ export async function editImportantDateAction(
   const next = [...loaded.dates];
   next[index] = { label, date, remind, remind_lead_days: leadDays };
 
-  const { error } = await loaded.supabase
+  const { error, count } = await loaded.supabase
     .from("people")
-    .update({ important_dates: next })
+    .update({ important_dates: next }, { count: "exact" })
     .eq("id", personId)
-    .eq("user_id", loaded.userId);
+    .eq("user_id", loaded.userId)
+    .eq("updated_at", loaded.updatedAt);
   if (error) return { ok: false, error: error.message };
+  if (count === 0) return { ok: false, error: "Konflikt - bitte neu laden" };
 
   await rememberCustomDateLabel(loaded.supabase, loaded.userId, label);
   revalidatePath(`/people/${personId}`);
@@ -162,12 +169,14 @@ export async function toggleImportantDateReminderAction(
   const next = [...loaded.dates];
   next[index] = { ...next[index], remind, remind_lead_days: leadDays };
 
-  const { error } = await loaded.supabase
+  const { error, count } = await loaded.supabase
     .from("people")
-    .update({ important_dates: next })
+    .update({ important_dates: next }, { count: "exact" })
     .eq("id", personId)
-    .eq("user_id", loaded.userId);
+    .eq("user_id", loaded.userId)
+    .eq("updated_at", loaded.updatedAt);
   if (error) return { ok: false, error: error.message };
+  if (count === 0) return { ok: false, error: "Konflikt - bitte neu laden" };
   revalidatePath(`/people/${personId}`);
   return { ok: true };
 }
@@ -185,12 +194,14 @@ export async function deleteImportantDateAction(
 
   const next = loaded.dates.filter((_, i) => i !== index);
 
-  const { error } = await loaded.supabase
+  const { error, count } = await loaded.supabase
     .from("people")
-    .update({ important_dates: next })
+    .update({ important_dates: next }, { count: "exact" })
     .eq("id", personId)
-    .eq("user_id", loaded.userId);
+    .eq("user_id", loaded.userId)
+    .eq("updated_at", loaded.updatedAt);
   if (error) return { ok: false, error: error.message };
+  if (count === 0) return { ok: false, error: "Konflikt - bitte neu laden" };
   revalidatePath(`/people/${personId}`);
   return { ok: true };
 }

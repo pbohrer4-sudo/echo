@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import type { PhoneEntry } from "@/lib/types";
 
 // Person-profile WhatsApp composer. Lets the user pick a phone number
@@ -14,7 +13,6 @@ export function WhatsappSendBox({
   personId: string;
   phones: PhoneEntry[];
 }) {
-  const router = useRouter();
   const eligible = phones.filter((p) => (p.value ?? "").trim().length > 0);
   const [selected, setSelected] = useState<string>(
     eligible[0]?.value ?? "",
@@ -47,7 +45,6 @@ export function WhatsappSendBox({
       }
       setResult({ ok: true });
       setBody("");
-      router.refresh();
     } catch (err) {
       setResult({
         ok: false,

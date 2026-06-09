@@ -24,17 +24,17 @@ export function SelfProfileTabs({
     { id: "profile", label: "Profil", href: `/people/${personId}` },
     {
       id: "streaks",
-      label: "Streaks",
+      label: "Aktivität",
       href: `/people/${personId}?tab=streaks`,
     },
     {
       id: "payments",
-      label: "Payments",
+      label: "Abonnement",
       href: `/people/${personId}?tab=payments`,
     },
     {
       id: "settings",
-      label: "Settings",
+      label: "Einstellungen",
       href: `/people/${personId}?tab=settings`,
     },
   ];

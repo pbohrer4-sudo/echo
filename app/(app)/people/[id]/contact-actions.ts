@@ -148,24 +148,27 @@ export async function addAddressAction(
 
   const { data: row, error: fetchErr } = await supabase
     .from("people")
-    .select("addresses")
+    .select("addresses, updated_at")
     .eq("id", personId)
     .eq("user_id", user.id)
     .maybeSingle();
   if (fetchErr || !row) return { ok: false, error: "Person nicht gefunden" };
 
+  const updatedAt = row.updated_at as string;
   const existing = (row.addresses ?? []) as AddressEntry[];
   const next = [...existing, parseAddressLine(value)];
 
-  const { error } = await supabase
+  const { error, count } = await supabase
     .from("people")
-    .update({ addresses: next })
+    .update({ addresses: next }, { count: "exact" })
     .eq("id", personId)
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .eq("updated_at", updatedAt);
   if (error) {
     console.error("[contact-actions] addAddress failed", error);
     return { ok: false, error: error.message };
   }
+  if (count === 0) return { ok: false, error: "Konflikt - bitte neu laden" };
 
   revalidatePath(`/people/${personId}`);
   return { ok: true };

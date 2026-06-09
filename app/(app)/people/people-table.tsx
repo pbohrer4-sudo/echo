@@ -103,18 +103,18 @@ const COLUMNS: ColumnDef[] = [
   { key: "avatar", label: "Avatar", always: true, default: true, gridCol: "40px", pinned: "start" },
   { key: "name", label: "Name", always: true, default: true, sortKey: "name", gridCol: "minmax(180px,1.6fr)", pinned: "start" },
   { key: "company", label: "Firma · Rolle", default: true, sortKey: "company", gridCol: "minmax(140px,1fr)" },
-  { key: "purpose", label: "Purpose", default: true, gridCol: "100px" },
-  { key: "mode", label: "Mode", default: true, gridCol: "100px" },
-  { key: "depth", label: "Depth", default: false, gridCol: "110px" },
-  { key: "cadence", label: "Cadence", default: false, gridCol: "80px", align: "right" },
+  { key: "purpose", label: "Zweck", default: true, gridCol: "100px" },
+  { key: "mode", label: "Status", default: true, gridCol: "100px" },
+  { key: "depth", label: "Nähe", default: false, gridCol: "110px" },
+  { key: "cadence", label: "Rhythmus", default: false, gridCol: "80px", align: "right" },
   { key: "last_contact", label: "Letzter Kontakt", default: true, sortKey: "last_contact_at", gridCol: "110px" },
   { key: "current_location", label: "Stadt", default: false, gridCol: "120px" },
   { key: "met_location", label: "Wo getroffen", default: false, gridCol: "140px" },
-  { key: "gifts", label: "Gifts", default: false, gridCol: "minmax(140px,1fr)" },
+  { key: "gifts", label: "Geschenke", default: false, gridCol: "minmax(140px,1fr)" },
   { key: "reminders", label: "Signale", default: false, gridCol: "minmax(200px,1.4fr)" },
-  { key: "interests", label: "Interests", default: false, gridCol: "minmax(200px,1.4fr)" },
-  { key: "potential", label: "Synergies", default: false, gridCol: "minmax(200px,1.4fr)" },
-  { key: "origin", label: "Origin", default: false, gridCol: "minmax(180px,1.2fr)" },
+  { key: "interests", label: "Interessen", default: false, gridCol: "minmax(200px,1.4fr)" },
+  { key: "potential", label: "Synergien", default: false, gridCol: "minmax(200px,1.4fr)" },
+  { key: "origin", label: "Kennenlernen", default: false, gridCol: "minmax(180px,1.2fr)" },
   { key: "passions", label: "Passions", default: false, gridCol: "minmax(180px,1.2fr)" },
   { key: "circles", label: "Circles", default: false, gridCol: "minmax(180px,1.2fr)" },
   { key: "actions", label: "Aktionen", always: true, default: true, gridCol: "auto", align: "right", pinned: "end" },
@@ -483,7 +483,7 @@ export function PeopleTable({
         />
 
         <FilterSelect
-          label="Mode"
+          label="Status"
           value={modeFilter}
           onChange={(v) => setModeFilter(v as "all" | Mode)}
           options={[
@@ -496,7 +496,7 @@ export function PeopleTable({
         />
 
         <FilterSelect
-          label="Purpose"
+          label="Zweck"
           value={purposeFilter}
           onChange={(v) => setPurposeFilter(v as "all" | Purpose)}
           options={[
@@ -509,7 +509,7 @@ export function PeopleTable({
         />
 
         <FilterSelect
-          label="Depth"
+          label="Nähe"
           value={depthFilter}
           onChange={(v) => setDepthFilter(v as "all" | Depth)}
           options={[
@@ -588,7 +588,7 @@ export function PeopleTable({
         />
 
         <FilterSelect
-          label="Gifts"
+          label="Geschenke"
           value={giftsFilter}
           onChange={(v) => setGiftsFilter(v as "all" | "yes" | "no")}
           options={[

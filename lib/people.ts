@@ -10,7 +10,8 @@ export async function listPeople(): Promise<Person[]> {
     .select("*")
     .is("deleted_at", null)
     .eq("is_self", false)
-    .order("name", { ascending: true });
+    .order("name", { ascending: true })
+    .limit(500);
 
   if (error) throw error;
   return (data ?? []) as Person[];
@@ -113,15 +114,17 @@ export async function listPeopleWithContext(): Promise<PersonWithContext[]> {
         .select("*")
         .is("deleted_at", null)
         .eq("is_self", false)
-        .order("name", { ascending: true }),
-      supabase.from("person_tags").select("person_id, note, tags(cluster, name)"),
-      supabase.from("passions").select("person_id, name, note"),
-      supabase.from("person_circles").select("person_id, circle_id, note"),
-      supabase.from("person_contacts").select("person_id, channel"),
+        .order("name", { ascending: true })
+        .limit(500),
+      supabase.from("person_tags").select("person_id, note, tags(cluster, name)").limit(500),
+      supabase.from("passions").select("person_id, name, note").limit(500),
+      supabase.from("person_circles").select("person_id, circle_id, note").limit(500),
+      supabase.from("person_contacts").select("person_id, channel").limit(500),
       supabase
         .from("person_geographies")
         .select("person_id, city, display_name, country_code")
-        .eq("is_active", true),
+        .eq("is_active", true)
+        .limit(500),
     ]);
 
   if (peopleRes.error) throw peopleRes.error;
@@ -232,6 +235,21 @@ export async function listPeopleWithContext(): Promise<PersonWithContext[]> {
       contactChannels: channelMap.get(p.id) ?? new Set(),
     };
   });
+}
+
+// Lightweight picker list — only id + name, excludes self and deleted.
+// Use this instead of listPeople() whenever only id/name are needed
+// (e.g. relationship pickers) to avoid fetching all columns.
+export async function listPeopleIdName(): Promise<{ id: string; name: string }[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("people")
+    .select("id, name")
+    .is("deleted_at", null)
+    .eq("is_self", false)
+    .order("name");
+  if (error) throw error;
+  return (data ?? []) as { id: string; name: string }[];
 }
 
 // Returns the person, or null if not found / soft-deleted / not owned.

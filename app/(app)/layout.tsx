@@ -10,7 +10,11 @@ import { APP_CONFIG } from "@/lib/config";
 import { SignOutButton } from "./sign-out-button";
 import { NavLink } from "./nav-link";
 import { NotificationManager } from "@/components/notification-manager";
-import { SearchModal } from "@/components/search-modal";
+import dynamic from "next/dynamic";
+const SearchModal = dynamic(
+  () => import("@/components/search-modal").then((m) => ({ default: m.SearchModal })),
+  { ssr: false },
+);
 import { SearchTrigger } from "@/components/search-trigger";
 import { getT } from "@/lib/i18n/server";
 import { LocaleProvider } from "@/lib/i18n/provider";
@@ -47,10 +51,12 @@ export default async function AppLayout({
     redirect("/onboarding");
   }
 
-  const self = await getOrCreateSelfPerson();
+  const [self, overdueReminders, { t, locale }] = await Promise.all([
+    getOrCreateSelfPerson(),
+    countOverdueReminders(),
+    getT(),
+  ]);
   const showAdmin = isAdminEmail(user.email);
-  const overdueReminders = await countOverdueReminders();
-  const { t, locale } = await getT();
 
   return (
     <LocaleProvider locale={locale}>
@@ -111,7 +117,6 @@ export default async function AppLayout({
                 width={28}
                 height={28}
                 className="h-7 w-7 rounded-full object-cover"
-                unoptimized
               />
             ) : (
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-action/15 font-mono text-[10px] font-medium uppercase tracking-wider text-action">

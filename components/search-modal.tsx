@@ -226,7 +226,12 @@ export function SearchModal() {
         if (e.target === e.currentTarget) handleClose();
       }}
     >
-      <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-rule bg-paper shadow-[0_24px_60px_rgba(20,17,13,0.18)]">
+      <div
+        className="w-full max-w-xl overflow-hidden rounded-2xl border border-rule bg-paper shadow-[0_24px_60px_rgba(20,17,13,0.18)]"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Suche"
+      >
         <div className="flex items-center gap-2 border-b border-rule px-4 py-3">
           <svg
             xmlns="http://www.w3.org/2000/svg"

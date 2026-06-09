@@ -9,7 +9,6 @@
 // Index-basiert, weil important_dates ein JSONB-Array ohne IDs ist.
 
 import { useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import {
   DATE_LABELS,
   REMIND_LEAD_OPTIONS,
@@ -84,14 +83,12 @@ function SignalRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
-  const router = useRouter();
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>) {
     startTransition(async () => {
       const res = await action();
       if (res.ok) {
         setEditing(false);
-        router.refresh();
       }
     });
   }

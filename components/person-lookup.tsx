@@ -69,6 +69,10 @@ export function PersonLookup({
     <div className="relative">
       <input
         type="text"
+        role="combobox"
+        aria-expanded={open && (filtered.length > 0 || canCreate)}
+        aria-controls="person-lookup-listbox"
+        aria-autocomplete="list"
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
@@ -85,10 +89,16 @@ export function PersonLookup({
         className={inputClass}
       />
       {open && (filtered.length > 0 || canCreate) && (
-        <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded border border-rule bg-paper shadow-[0_4px_14px_rgba(20,17,13,0.08)]">
+        <div
+          id="person-lookup-listbox"
+          role="listbox"
+          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded border border-rule bg-paper shadow-[0_4px_14px_rgba(20,17,13,0.08)]"
+        >
           {filtered.map((p) => (
             <button
               key={p.id}
+              role="option"
+              aria-selected={value?.id === p.id}
               type="button"
               onMouseDown={(e) => {
                 e.preventDefault();
@@ -105,6 +115,8 @@ export function PersonLookup({
           ))}
           {canCreate && (
             <button
+              role="option"
+              aria-selected={false}
               type="button"
               onMouseDown={(e) => {
                 e.preventDefault();

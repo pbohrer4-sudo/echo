@@ -179,15 +179,25 @@ export async function createPersonQuick(formData: FormData) {
 
   if (insertError || !newPerson) {
     redirect(
-      `/people/new?error=${encodeURIComponent(insertError?.message ?? "Insert failed")}`,
+      `/people/new?error=${encodeURIComponent(insertError?.message ?? "Person konnte nicht gespeichert werden")}`,
     );
   }
 
   // V3-Tabellen parallel füttern (0030 Phase 3). Failures hier blocken
   // den Person-Create nicht — JSONB-Felder oben sind in der
   // Transition noch der Fallback.
+  // Alle Kontakte in einem einzigen INSERT statt 4 sequentiellen Calls.
+  const contactRows: {
+    user_id: string;
+    person_id: string;
+    channel: string;
+    subtype?: string;
+    value: string;
+    is_primary: boolean;
+    source: string;
+  }[] = [];
   if (phoneValue) {
-    await supabase.from("person_contacts").insert({
+    contactRows.push({
       user_id: user.id,
       person_id: newPerson.id,
       channel: "phone",
@@ -198,7 +208,7 @@ export async function createPersonQuick(formData: FormData) {
     });
   }
   if (emailValue) {
-    await supabase.from("person_contacts").insert({
+    contactRows.push({
       user_id: user.id,
       person_id: newPerson.id,
       channel: "email",
@@ -209,7 +219,7 @@ export async function createPersonQuick(formData: FormData) {
     });
   }
   if (linkedinValue) {
-    await supabase.from("person_contacts").insert({
+    contactRows.push({
       user_id: user.id,
       person_id: newPerson.id,
       channel: "linkedin",
@@ -219,7 +229,7 @@ export async function createPersonQuick(formData: FormData) {
     });
   }
   if (websiteValue) {
-    await supabase.from("person_contacts").insert({
+    contactRows.push({
       user_id: user.id,
       person_id: newPerson.id,
       channel: "website",
@@ -227,6 +237,9 @@ export async function createPersonQuick(formData: FormData) {
       is_primary: true,
       source: "manual",
     });
+  }
+  if (contactRows.length > 0) {
+    await supabase.from("person_contacts").insert(contactRows);
   }
   // Locations → person_geographies (residence/origin only).
   // "Wo getroffen" (met_location) is NOT added to Orte — it lives in the
@@ -273,54 +286,46 @@ export async function createPersonQuick(formData: FormData) {
   // nicht — alles best-effort.
   const cluster = parseClusterState(formData.get("cluster_state"));
 
-  // Tags: pro Cluster, getOrCreateTag + addTagToPerson.
+  // Tags: alle Cluster-Tags in einem Batch upsert → dann alle
+  // person_tags in einem einzigen INSERT statt N*3 round-trips.
   const tagClusterEntries = Object.entries(cluster.tags) as Array<
     [TagCluster, string[]]
   >;
+  const allTagUpsertRows: { user_id: string; name: string; cluster: TagCluster; created_by: string }[] = [];
+  // Deduplizieren innerhalb dieser Submission (gleicher name+cluster nur einmal upserten).
+  const seen = new Set<string>();
   for (const [tagCluster, tagNames] of tagClusterEntries) {
     for (const rawName of tagNames) {
       const name = rawName.trim().toLowerCase();
       if (!name) continue;
-      // Lookup by name AND cluster (cross-fill fix — a name can live
-      // independently per cluster).
-      const { data: existingTag } = await supabase
-        .from("tags")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("name", name)
-        .eq("cluster", tagCluster)
-        .maybeSingle();
-      let tagId = existingTag?.id ?? null;
-      if (!tagId) {
-        const { data: inserted } = await supabase
-          .from("tags")
-          .insert({
-            user_id: user.id,
-            name,
-            cluster: tagCluster,
-            created_by: "user",
-          })
-          .select("id")
-          .single();
-        tagId = inserted?.id ?? null;
-      }
-      if (tagId) {
-        await supabase
-          .from("person_tags")
-          .insert({ person_id: newPerson.id, tag_id: tagId });
-      }
+      const key = `${tagCluster}:${name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      allTagUpsertRows.push({ user_id: user.id, name, cluster: tagCluster, created_by: "user" });
+    }
+  }
+  if (allTagUpsertRows.length > 0) {
+    const { data: upsertedTags } = await supabase
+      .from("tags")
+      .upsert(allTagUpsertRows, { onConflict: "user_id,name,cluster", ignoreDuplicates: false })
+      .select("id, name, cluster");
+    if (upsertedTags && upsertedTags.length > 0) {
+      const personTagRows = upsertedTags.map((t) => ({
+        person_id: newPerson.id,
+        tag_id: t.id,
+        user_id: user.id,
+      }));
+      await supabase.from("person_tags").insert(personTagRows);
     }
   }
 
-  // Passions: einfach pro Eintrag eine Row in passions.
-  for (const passion of cluster.passions) {
-    const trimmed = passion.trim();
-    if (!trimmed) continue;
-    await supabase.from("passions").insert({
-      user_id: user.id,
-      person_id: newPerson.id,
-      name: trimmed,
-    });
+  // Passions: alle auf einmal insertten statt pro Eintrag.
+  const passionRows = cluster.passions
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((name) => ({ user_id: user.id, person_id: newPerson.id, name }));
+  if (passionRows.length > 0) {
+    await supabase.from("passions").insert(passionRows);
   }
 
   // Circles: getOrCreateCircle + addPersonToCircle. resolveOrCreate ist
