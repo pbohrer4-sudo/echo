@@ -10,11 +10,7 @@ import { APP_CONFIG } from "@/lib/config";
 import { SignOutButton } from "./sign-out-button";
 import { NavLink } from "./nav-link";
 import { NotificationManager } from "@/components/notification-manager";
-import dynamic from "next/dynamic";
-const SearchModal = dynamic(
-  () => import("@/components/search-modal").then((m) => ({ default: m.SearchModal })),
-  { ssr: false },
-);
+import { SearchModal } from "@/components/search-modal-lazy";
 import { SearchTrigger } from "@/components/search-trigger";
 import { getT } from "@/lib/i18n/server";
 import { LocaleProvider } from "@/lib/i18n/provider";
