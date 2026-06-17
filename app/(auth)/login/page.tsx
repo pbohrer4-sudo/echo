@@ -1,15 +1,15 @@
 import Link from "next/link";
-import { signIn } from "./actions";
+import { signIn, signInWithMagicLink } from "./actions";
 import { APP_CONFIG } from "@/lib/config";
 
-type Search = { error?: string };
+type Search = { error?: string; magic?: string };
 
 export default async function LoginPage({
   searchParams,
 }: {
   searchParams: Promise<Search>;
 }) {
-  const { error } = await searchParams;
+  const { error, magic } = await searchParams;
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-paper px-6 text-ink-1">
@@ -59,6 +59,39 @@ export default async function LoginPage({
             Einloggen
           </button>
         </form>
+
+        <div className="flex items-center gap-3">
+          <span className="h-px flex-1 bg-rule" />
+          <span className="t-label">oder</span>
+          <span className="h-px flex-1 bg-rule" />
+        </div>
+
+        <form action={signInWithMagicLink} className="space-y-3">
+          <label className="block space-y-2">
+            <span className="t-label">Login-Link per E-Mail</span>
+            <input
+              type="email"
+              name="email"
+              required
+              autoComplete="email"
+              placeholder="deine@email.de"
+              className="h-9 w-full rounded border border-rule bg-paper px-3 text-sm text-ink-1 outline-none transition focus:border-action focus:ring-2 focus:ring-action/20"
+            />
+          </label>
+          <button
+            type="submit"
+            className="h-9 w-full rounded border border-rule bg-paper px-4 text-sm font-medium text-ink-1 transition hover:border-action hover:text-action"
+          >
+            Login-Link senden
+          </button>
+        </form>
+
+        {magic === "sent" ? (
+          <p className="text-sm text-good">
+            Falls ein Konto existiert, ist ein Login-Link unterwegs. Prüfe dein
+            Postfach und klicke den Link in dieser Session.
+          </p>
+        ) : null}
 
         {error ? (
           <p className="text-sm text-bad">Fehler: {decodeURIComponent(error)}</p>
