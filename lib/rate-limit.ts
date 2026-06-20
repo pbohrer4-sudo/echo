@@ -83,6 +83,7 @@ export const LIMITS = {
   ai_scan_card: { limit: 10, windowSec: 60 },
   ai_enrich: { limit: 20, windowSec: 60 },
   ai_workflow_gen: { limit: 10, windowSec: 60 },
+  ai_pm_briefing: { limit: 10, windowSec: 60 },
   ai_chat: { limit: 30, windowSec: 60 },
   address_search: { limit: 60, windowSec: 60 },
   recap: { limit: 10, windowSec: 60 },

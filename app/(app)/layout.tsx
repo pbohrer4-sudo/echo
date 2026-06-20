@@ -86,6 +86,10 @@ export default async function AppLayout({
             <NavLink href="/connections">{t("nav.connections")}</NavLink>
             <NavLink href="/integrations/workflows">{t("nav.workflows")}</NavLink>
             <NavLink href="/models">{t("nav.models")}</NavLink>
+            <span className="mt-3 px-3 font-mono text-[9px] uppercase tracking-[0.12em] text-ink-4">
+              Teams
+            </span>
+            <NavLink href="/teams">Abteilungs-Hub</NavLink>
             {showAdmin && (
               <>
                 <span className="mt-3 px-3 font-mono text-[9px] uppercase tracking-[0.12em] text-ink-4">
