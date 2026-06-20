@@ -3,6 +3,7 @@ import { CLAUDE_MODEL } from "@/lib/claude";
 import { createClient } from "@/lib/supabase/server";
 import { getDepartmentById } from "./departments";
 import { buildDepartmentKnowledge } from "./documents";
+import { notify, resolveDepartmentRecipients } from "./notifications";
 import { getTask } from "./tasks";
 import type { PmDepartment, PmTask } from "./types";
 
@@ -211,6 +212,23 @@ export async function runBriefingForTask(
     user_id: user.id,
     body: "KI-Briefing erstellt (wartet auf Bestätigung).",
     is_system: true,
+  });
+
+  // In-app + browser ping to the receiving department (no email — this
+  // usually accompanies the request-created mail).
+  const recipients = await resolveDepartmentRecipients(
+    ownerDepartment.id,
+    task.workspace_id,
+  );
+  await notify({
+    workspaceId: task.workspace_id,
+    recipients,
+    type: "briefing_ready",
+    title: `KI-Briefing bereit: ${task.title}`,
+    body: briefing.summary,
+    link: `/teams/${ownerDepartment.slug}/tasks/${task.id}`,
+    taskId: task.id,
+    sendEmail: false,
   });
 
   return { briefingId: inserted.id };

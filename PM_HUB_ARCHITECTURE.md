@@ -34,6 +34,9 @@ against a live tenant).
 - **AI filing agent** - reads a new document and suggests the right
   SharePoint folder and a clean file name; the user confirms before filing.
 - One-click demo seed (Marketing / Sales / Produkt + a sample request).
+- **Notifications** across three channels (in-app centre + bell badge,
+  foreground browser notifications, best-effort email) for new requests,
+  AI briefings, acceptances, status changes and comments.
 
 **Deliberately on the roadmap (documented, not built)**
 
@@ -64,6 +67,8 @@ lib/pm/
   briefing.ts       # AI briefing agent + orchestrator
   filing.ts         # AI SharePoint-filing agent + orchestrator
   sharepoint.ts     # Microsoft Graph integration + folder cache
+  notifications.ts  # fan-out dispatcher + recipient resolution + reads
+  email.ts          # best-effort email (Resend / Graph / log)
 
 app/(pm)/                              # isolated route group, auth-only
   layout.tsx
@@ -75,6 +80,9 @@ app/(pm)/                              # isolated route group, auth-only
   teams/[slug]/tasks/[taskId]/page.tsx # task detail
 
 app/api/pm/briefing/route.ts           # POST: run briefing (for automation)
+app/api/pm/notifications/unread/route.ts # GET: unread feed for browser poller
+app/(pm)/teams/notifications/page.tsx    # notification centre
+app/(pm)/teams/_components/notification-poller.tsx # browser-notification poller
 ```
 
 The module is **additive and isolated**: it touches no Personal-CRM table
@@ -188,6 +196,39 @@ department creation and by the demo seed) so the UX works before the tenant
 is connected.
 
 ---
+
+## 6a. Notifications & status updates
+
+The hub is a browser-based web app (Next.js App Router); every surface is a
+normal authenticated web page. On top of that, notable events fan out to
+three channels via `lib/pm/notifications.ts → notify()`:
+
+| Event | In-app | Browser | Email |
+|---|---|---|---|
+| New cross-department request | ✓ | ✓ | ✓ |
+| Status change on a request | ✓ | ✓ | ✓ |
+| Request accepted (with reply) | ✓ | ✓ | ✓ |
+| AI briefing ready | ✓ | ✓ | — |
+| New comment | ✓ | ✓ | — |
+
+- **In-app:** one `pm_notifications` row per recipient; the layout shows an
+  unread bell badge and `/teams/notifications` is the notification centre
+  (mark one / mark all read). RLS restricts each row to its recipient.
+- **Browser:** `HubNotificationPoller` (a client component, mirroring the
+  CRM's manager) polls `/api/pm/notifications/unread` every 30s and fires
+  the Web Notifications API for new items; clicking a notification deep-links
+  to the task. Works while a tab is open. Production **Web Push** (service
+  worker + VAPID + the `web-push` package) is the documented next step for
+  delivery when no tab is open — email already covers that gap today.
+- **Email:** `lib/pm/email.ts` sends best-effort via Resend
+  (`RESEND_API_KEY`) or Microsoft Graph `sendMail` (`MS_GRAPH_TOKEN`),
+  falling back to a logged "skipped" when neither is configured. Recipient
+  addresses are denormalised onto `pm_workspace_members.email`. The per-row
+  `email_status` (`sent`/`skipped`/`failed`) is shown in the centre.
+
+Recipients resolve to a department's explicit members, or — when none are
+assigned (MVP default) — all workspace members, so a signal always reaches a
+human. Delivery is best-effort: a failed email never blocks the action.
 
 ## 7. DSGVO / compliance
 

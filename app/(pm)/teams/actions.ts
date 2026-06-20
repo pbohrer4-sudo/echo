@@ -15,10 +15,13 @@ import {
   fileToSharePoint,
   seedDemoFolders,
 } from "@/lib/pm/sharepoint";
-import type {
-  PmDocKind,
-  PmTaskPriority,
-  PmTaskStatus,
+import { notify, resolveDepartmentRecipients } from "@/lib/pm/notifications";
+import { getTask } from "@/lib/pm/tasks";
+import {
+  TASK_STATUS_LABEL,
+  type PmDocKind,
+  type PmTaskPriority,
+  type PmTaskStatus,
 } from "@/lib/pm/types";
 
 const VALID_STATUS = new Set<PmTaskStatus>([
@@ -155,6 +158,27 @@ export async function updateTaskStatus(form: FormData) {
     .eq("id", taskId);
   if (error) redirect(`/teams/${slug}?error=${encodeURIComponent(error.message)}`);
 
+  // Status update on a cross-department request → tell the requester.
+  const task = await getTask(taskId);
+  if (task?.source === "cross_dept" && task.requester_department_id) {
+    const requester = await getDepartmentById(task.requester_department_id);
+    if (requester) {
+      const recipients = await resolveDepartmentRecipients(
+        requester.id,
+        task.workspace_id,
+      );
+      await notify({
+        workspaceId: task.workspace_id,
+        recipients,
+        type: "status_changed",
+        title: `Status aktualisiert: ${task.title}`,
+        body: `Neuer Status: ${TASK_STATUS_LABEL[status]}`,
+        link: `/teams/${requester.slug}/tasks/${task.id}`,
+        taskId: task.id,
+      });
+    }
+  }
+
   revalidatePath(`/teams/${slug}`);
   const back = str(form, "redirect_to");
   redirect(back || `/teams/${slug}`);
@@ -224,7 +248,24 @@ export async function createCrossDeptRequest(form: FormData) {
     redirect(`/teams/new-request?error=${encodeURIComponent(error?.message ?? "Fehler")}`);
   }
 
-  const owner = await getDepartmentById(ownerId);
+  const [owner, requester] = await Promise.all([
+    getDepartmentById(ownerId),
+    getDepartmentById(requesterId),
+  ]);
+
+  // Notify the receiving department (in-app + browser + email).
+  if (owner) {
+    const recipients = await resolveDepartmentRecipients(owner.id, ws.id);
+    await notify({
+      workspaceId: ws.id,
+      recipients,
+      type: "request_created",
+      title: `Neue Anfrage von ${requester?.name ?? "einer Abteilung"}: ${title}`,
+      body: str(form, "description") || "Neue abteilungsübergreifende Anfrage im Posteingang.",
+      link: `/teams/${owner.slug}/tasks/${task.id}`,
+      taskId: task.id,
+    });
+  }
 
   // Fire the AI agent automatically so a briefing + draft reply is waiting
   // when the receiving department opens its inbox. Best-effort: if the AI
@@ -294,6 +335,27 @@ export async function decideBriefing(form: FormData) {
         .update({ effort_estimate_hours: briefing.estimated_hours, status: "todo" })
         .eq("id", taskId);
     }
+
+    // Tell the requesting department their request was accepted, with the reply.
+    const task = await getTask(taskId);
+    if (task?.requester_department_id) {
+      const requester = await getDepartmentById(task.requester_department_id);
+      if (requester) {
+        const recipients = await resolveDepartmentRecipients(
+          requester.id,
+          task.workspace_id,
+        );
+        await notify({
+          workspaceId: task.workspace_id,
+          recipients,
+          type: "briefing_accepted",
+          title: `Anfrage angenommen: ${task.title}`,
+          body: briefing.suggested_response,
+          link: `/teams/${requester.slug}/tasks/${task.id}`,
+          taskId: task.id,
+        });
+      }
+    }
   }
 
   revalidatePath(`/teams/${slug}/tasks/${taskId}`);
@@ -320,6 +382,29 @@ export async function addComment(form: FormData) {
     body: bodyText,
     is_system: false,
   });
+
+  // Ping the involved departments (in-app + browser, no email per comment).
+  const task = await getTask(taskId);
+  if (task) {
+    const deptIds = [task.owner_department_id, task.requester_department_id].filter(
+      (id): id is string => Boolean(id),
+    );
+    const recipientLists = await Promise.all(
+      deptIds.map((id) => resolveDepartmentRecipients(id, ws.id)),
+    );
+    const recipients = recipientLists.flat().filter((r) => r.user_id !== user!.id);
+    await notify({
+      workspaceId: ws.id,
+      recipients,
+      type: "comment_added",
+      title: `Neuer Kommentar: ${task.title}`,
+      body: bodyText,
+      link: `/teams/${slug}/tasks/${taskId}`,
+      taskId,
+      sendEmail: false,
+    });
+  }
+
   revalidatePath(`/teams/${slug}/tasks/${taskId}`);
   redirect(`/teams/${slug}/tasks/${taskId}`);
 }
@@ -457,6 +542,29 @@ export async function confirmDocumentFiling(form: FormData) {
 
   revalidatePath(`/teams/${slug}`);
   redirect(`/teams/${slug}?tab=knowledge`);
+}
+
+// --- Notifications --------------------------------------------------------
+
+export async function markNotificationRead(form: FormData) {
+  const id = str(form, "id");
+  const supabase = await createClient();
+  await supabase
+    .from("pm_notifications")
+    .update({ read_at: new Date().toISOString() })
+    .eq("id", id);
+  revalidatePath("/teams/notifications");
+  redirect("/teams/notifications");
+}
+
+export async function markAllNotificationsRead() {
+  const supabase = await createClient();
+  await supabase
+    .from("pm_notifications")
+    .update({ read_at: new Date().toISOString() })
+    .is("read_at", null);
+  revalidatePath("/teams/notifications");
+  redirect("/teams/notifications");
 }
 
 // --- Demo seed ------------------------------------------------------------

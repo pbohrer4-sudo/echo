@@ -41,6 +41,7 @@ export async function getOrCreateWorkspace(): Promise<PmWorkspace> {
       user_id: user.id,
       role: "lead",
       display_name: user.email?.split("@")[0] ?? null,
+      email: user.email ?? null,
     });
   if (memberError) {
     throw new Error(`Mitgliedschaft fehlgeschlagen: ${memberError.message}`);
