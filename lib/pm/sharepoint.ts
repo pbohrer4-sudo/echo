@@ -20,14 +20,37 @@ export interface SharePointFolder {
   drive_id: string | null;
 }
 
-// Resolve a Microsoft Graph access token. In production this comes from the
-// user's Microsoft (Entra ID) SSO connection with Files.ReadWrite.All /
-// Sites.ReadWrite.All delegated scope. The env var is the injection point
-// for that token until the connection store is wired in.
-//
-// TODO(sso): replace with a lookup against the stored Microsoft connection
-// for the workspace, refreshing the token as needed.
-function getGraphToken(): string | null {
+// Resolve a Microsoft Graph access token for the current user. Prefers the
+// token persisted from the Microsoft (Entra ID) SSO login
+// (service_connections, provider 'microsoft', Files/Sites scope); falls back
+// to the MS_GRAPH_TOKEN env var for local/dev or service scenarios. Returns
+// null when neither is available, in which case Graph calls are skipped and
+// the module operates against the cached folder tree only.
+async function getGraphToken(): Promise<string | null> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const { data } = await supabase
+        .from("service_connections")
+        .select("access_token, token_expires_at")
+        .eq("provider", "microsoft")
+        .eq("status", "connected")
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (data?.access_token) {
+        const exp = data.token_expires_at
+          ? new Date(data.token_expires_at).getTime()
+          : 0;
+        // Use it unless we know it has expired (a fresh login refreshes it).
+        if (!exp || exp > Date.now()) return data.access_token as string;
+      }
+    }
+  } catch {
+    // fall through to env
+  }
   return process.env.MS_GRAPH_TOKEN || null;
 }
 
@@ -50,7 +73,7 @@ export async function syncFolders(
   department: PmDepartment,
   maxDepth = 3,
 ): Promise<number> {
-  const token = getGraphToken();
+  const token = await getGraphToken();
   const driveId = department.sharepoint_drive_id;
   if (!token || !driveId) return 0;
 
@@ -157,7 +180,7 @@ export async function fileToSharePoint(opts: {
   fileName: string;
   content: string;
 }): Promise<{ itemId: string; webUrl: string } | null> {
-  const token = getGraphToken();
+  const token = await getGraphToken();
   const driveId = opts.department.sharepoint_drive_id;
   if (!token || !driveId) return null;
 

@@ -1,8 +1,20 @@
 import Link from "next/link";
-import { signIn } from "./actions";
+import { signIn, signInWithMicrosoft } from "./actions";
 import { APP_CONFIG } from "@/lib/config";
 
 type Search = { error?: string };
+
+// Microsoft four-square logo.
+function MicrosoftLogo() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 21 21" aria-hidden="true">
+      <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+      <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+      <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+    </svg>
+  );
+}
 
 export default async function LoginPage({
   searchParams,
@@ -57,6 +69,22 @@ export default async function LoginPage({
             className="h-9 w-full rounded border border-action bg-action px-4 text-sm font-medium text-paper transition hover:shadow-[0_0_0_3px_var(--action-ring)]"
           >
             Einloggen
+          </button>
+        </form>
+
+        <div className="flex items-center gap-3">
+          <span className="h-px flex-1 bg-rule" />
+          <span className="t-label">oder</span>
+          <span className="h-px flex-1 bg-rule" />
+        </div>
+
+        <form action={signInWithMicrosoft}>
+          <button
+            type="submit"
+            className="flex h-9 w-full items-center justify-center gap-2.5 rounded border border-rule bg-paper px-4 text-sm font-medium text-ink-1 transition hover:border-action hover:bg-paper-2"
+          >
+            <MicrosoftLogo />
+            Mit Microsoft anmelden
           </button>
         </form>
 

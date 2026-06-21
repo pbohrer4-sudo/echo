@@ -1,5 +1,41 @@
 import { NextResponse } from "next/server";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+
+// Persist the Microsoft Graph token returned by an Azure SSO login into
+// service_connections (provider 'microsoft'), so the department hub can call
+// SharePoint / Graph on the user's behalf. No-op for non-OAuth exchanges
+// (e.g. password recovery) which carry no provider_token. Best-effort:
+// failures here never block login.
+async function persistMicrosoftToken(
+  supabase: SupabaseClient,
+  session: Session | null | undefined,
+): Promise<void> {
+  if (!session?.provider_token || !session.user) return;
+  const now = new Date().toISOString();
+  try {
+    await supabase.from("service_connections").upsert(
+      {
+        user_id: session.user.id,
+        provider: "microsoft",
+        status: "connected",
+        account_label: session.user.email ?? "Microsoft",
+        access_token: session.provider_token,
+        refresh_token: session.provider_refresh_token ?? null,
+        // Graph access tokens last ~1h; refreshed on next login.
+        token_expires_at: new Date(Date.now() + 3600_000).toISOString(),
+        scopes: ["Files.ReadWrite.All", "Sites.ReadWrite.All", "Mail.Send"],
+        last_error: null,
+        connected_at: now,
+        updated_at: now,
+        deleted_at: null,
+      },
+      { onConflict: "user_id,provider" },
+    );
+  } catch (err) {
+    console.error("[callback] persistMicrosoftToken failed:", err);
+  }
+}
 
 // Only same-origin relative paths are allowed as `next` targets.
 // Reject anything that could be interpreted as an external URL —
@@ -21,7 +57,10 @@ export async function GET(request: Request) {
   if (code) {
     try {
       const supabase = await createClient();
-      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+      if (!error) {
+        await persistMicrosoftToken(supabase, data?.session);
+      }
       if (error) {
         // Expired / already-used link, or a code from another browser
         // (PKCE verifier cookie missing) — send back to a graceful entry

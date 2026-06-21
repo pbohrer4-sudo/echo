@@ -144,32 +144,38 @@ cross-department request always names a different requesting department.
 
 ---
 
-## 5. Microsoft SSO (Entra ID)
+## 5. Microsoft SSO (Entra ID) — implemented
 
-The app already authenticates through Supabase Auth. To satisfy the
-"SSO via Microsoft" requirement, enable the **Azure (Entra ID) provider** in
-Supabase Auth rather than building a parallel auth stack:
+Login through Microsoft is wired end to end on top of Supabase Auth's
+**Azure (Entra ID) provider** (no parallel auth stack):
+
+- **Button.** `/login` has a "Mit Microsoft anmelden" button posting to the
+  `signInWithMicrosoft` server action, which calls
+  `supabase.auth.signInWithOAuth({ provider: 'azure', … })` and redirects the
+  browser to the Microsoft authorize URL. Scopes requested: `openid email
+  profile offline_access` plus Graph `Files.ReadWrite.All`,
+  `Sites.ReadWrite.All`, `Mail.Send`.
+- **Callback.** The existing `/callback` route exchanges the code; on success
+  `persistMicrosoftToken()` saves the returned `provider_token` /
+  `provider_refresh_token` into `service_connections` (provider `microsoft`)
+  — best-effort, so login never fails on the storage step.
+- **Graph token.** `lib/pm/sharepoint.ts → getGraphToken()` reads that stored
+  token for the current user (RLS-scoped, expiry-checked) and falls back to
+  `MS_GRAPH_TOKEN`. So once a user signs in with Microsoft, SharePoint
+  folder sync and document upload work without any extra config.
+
+**One-time setup required** (infrastructure, not code):
 
 1. Register an app in Microsoft Entra ID (single- or multi-tenant), add the
    Supabase callback `https://<project>.supabase.co/auth/v1/callback` as a
-   redirect URI, and create a client secret.
+   redirect URI, create a client secret, and grant the Graph delegated
+   permissions above (admin consent for the `.All` scopes).
 2. In Supabase → Authentication → Providers → Azure, set the client id,
-   secret and (for org-only login) the tenant id. Restrict sign-ups to the
+   secret and (for org-only login) the tenant id; restrict sign-ups to the
    company tenant/domain.
-3. Add an "Mit Microsoft anmelden" button on `/login` calling
-   `supabase.auth.signInWithOAuth({ provider: 'azure', options: { scopes:
-   'openid email profile offline_access Files.ReadWrite.All Sites.ReadWrite.All' }})`.
-   The existing `/callback` route already exchanges the code.
-4. **Graph token for SharePoint.** Requesting the `Files.ReadWrite.All` /
-   `Sites.ReadWrite.All` scopes returns a provider token Supabase exposes on
-   the session (`provider_token` / `provider_refresh_token`). Persist it to a
-   per-workspace connection record and feed it into
-   `lib/pm/sharepoint.ts → getGraphToken()` (currently reads `MS_GRAPH_TOKEN`
-   as the injection point, with a `TODO(sso)` marker).
 
-No application code change is required for the auth flow itself - it reuses
-the existing middleware/session plumbing. The only wiring is the provider
-config and storing the Graph token.
+Until that provider config exists, the button returns a graceful
+"Microsoft-Login nicht verfügbar" error rather than breaking the page.
 
 ---
 
