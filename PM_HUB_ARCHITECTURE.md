@@ -105,7 +105,8 @@ DB conventions.
 | `pm_workspace_members` | Who belongs to a workspace (+ role). |
 | `pm_departments` | Departmental hub; charter, colour, AI context, SharePoint binding. |
 | `pm_department_members` | Department membership (for assignment/leads). |
-| `pm_tasks` | Internal tasks **and** cross-department requests (`source`). |
+| `pm_projects` | Project grouping tasks within a department (+ `ai_mode`). |
+| `pm_tasks` | Internal tasks **and** cross-department requests (`source`); optional `project_id`, `ai_mode`. |
 | `pm_task_dependencies` | Blocker edges between tasks. |
 | `pm_task_briefings` | AI briefing suggestions (pending/accepted/rejected). |
 | `pm_documents` | Knowledge base entries + filing state. |
@@ -141,18 +142,22 @@ cross-department request always names a different requesting department.
 - **Human-in-the-loop for all AI output.** Briefings and filing proposals
   are stored as *suggestions* (`pending` / `suggested`) and only take effect
   when a human accepts - matching the project's "never auto-apply AI" rule.
-- **AI is selectable.** Workspace settings (`/teams/settings`, columns on
-  `pm_workspaces`) gate the automatic behaviour:
-  - `ai_enabled` — master switch. Off → no AI runs anywhere and every AI
-    affordance (briefing section, suggestion UI, generate buttons) is hidden;
-    the hub is fully manual.
-  - `ai_auto_briefing` — auto-generate a briefing when a request lands. Off →
-    the request stays exactly as written; a briefing can still be triggered
-    by hand.
-  - `ai_auto_filing` — auto-suggest a SharePoint folder + name on document
-    add. Off → the document is saved as entered.
-  The automatic paths check these flags server-side (not just in the UI), so
-  disabling a feature actually stops the AI call.
+- **AI is selectable at every level.** A three-state switch
+  (`inherit` / `on` / `off`, type `pm_ai_mode`) lives on projects, tasks and
+  documents; the workspace holds the boolean default plus the auto-feature
+  flags. The effective AI state for an item resolves **item → project →
+  workspace** (`resolveAiEnabled()` in `lib/pm/types.ts`):
+  - `pm_tasks.ai_mode` / `pm_documents.ai_mode` — per-item override.
+  - `pm_projects.ai_mode` — applies to all the project's tasks/docs that
+    inherit.
+  - `pm_workspaces.ai_enabled` — global default; `ai_auto_briefing` /
+    `ai_auto_filing` decide whether the (enabled) AI runs automatically vs
+    only on demand.
+  So a single task or a whole project can be kept fully manual ("leave it as I
+  wrote it") regardless of the workspace default. The automatic *and* manual
+  AI paths check the effective state server-side — `runBriefingForTask` and
+  `suggestFilingForDocument` self-gate — so disabling AI for an item actually
+  stops the call, not just the button.
 
 ---
 

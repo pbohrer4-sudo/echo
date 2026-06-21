@@ -9,6 +9,7 @@ import {
   listDependencies,
   listReminders,
 } from "@/lib/pm/tasks";
+import { isAiEnabledForTask, listProjects } from "@/lib/pm/projects";
 import { PRIORITY_LABEL, TASK_STATUS_LABEL } from "@/lib/pm/types";
 import { StatusSelect } from "../../../_components/status-select";
 import {
@@ -38,13 +39,16 @@ export default async function TaskDetail({
   const task = await getTask(taskId);
   if (!task) notFound();
 
-  const [deptMap, briefing, deps, reminders, comments] = await Promise.all([
-    getDepartmentMap(ws.id),
-    getLatestBriefing(task.id),
-    listDependencies(task.id),
-    listReminders(task.id),
-    listComments(task.id),
-  ]);
+  const [deptMap, briefing, deps, reminders, comments, projects, aiEnabled] =
+    await Promise.all([
+      getDepartmentMap(ws.id),
+      getLatestBriefing(task.id),
+      listDependencies(task.id),
+      listReminders(task.id),
+      listComments(task.id),
+      listProjects(task.owner_department_id),
+      isAiEnabledForTask(task),
+    ]);
 
   const isCrossDept = task.source === "cross_dept";
   const detailPath = `/teams/${slug}/tasks/${task.id}`;
@@ -85,6 +89,7 @@ export default async function TaskDetail({
           </Badge>
         )}
         {task.accepted_into_sprint && <Badge>im Sprint</Badge>}
+        <Badge>KI: {aiEnabled ? "aktiv" : "aus"}</Badge>
       </div>
 
       {task.description && (
@@ -96,8 +101,8 @@ export default async function TaskDetail({
       )}
 
       {/* AI briefing — only for cross-department requests, and only when AI
-          is enabled for the workspace. */}
-      {isCrossDept && ws.ai_enabled && (
+          is effectively enabled for this task (task → project → workspace). */}
+      {isCrossDept && aiEnabled && (
         <section className="rounded-xl border border-rule bg-paper-2 p-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold">KI-Briefing</h2>
@@ -261,6 +266,33 @@ export default async function TaskDetail({
                   defaultValue={task.due_date ?? ""}
                   className="mt-1 w-full rounded-lg border border-rule bg-paper px-3 py-2"
                 />
+              </label>
+              <label>
+                <span className="text-ink-3">Projekt</span>
+                <select
+                  name="project_id"
+                  defaultValue={task.project_id ?? ""}
+                  className="mt-1 w-full rounded-lg border border-rule bg-paper px-3 py-2"
+                >
+                  <option value="">Kein Projekt</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span className="text-ink-3">KI-Modus</span>
+                <select
+                  name="ai_mode"
+                  defaultValue={task.ai_mode}
+                  className="mt-1 w-full rounded-lg border border-rule bg-paper px-3 py-2"
+                >
+                  <option value="inherit">Erbt (Projekt/Workspace)</option>
+                  <option value="on">An</option>
+                  <option value="off">Aus</option>
+                </select>
               </label>
             </div>
             <label className="flex items-center gap-2 text-ink-3">

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getDepartmentById } from "./departments";
 import { buildDepartmentKnowledge } from "./documents";
 import { notify, resolveDepartmentRecipients } from "./notifications";
+import { isAiEnabledForTask } from "./projects";
 import { getTask } from "./tasks";
 import type { PmDepartment, PmTask } from "./types";
 
@@ -166,6 +167,9 @@ export async function runBriefingForTask(
   if (!task) throw new Error("Aufgabe nicht gefunden");
   if (task.source !== "cross_dept") {
     throw new Error("Briefings gibt es nur für abteilungsübergreifende Anfragen.");
+  }
+  if (!(await isAiEnabledForTask(task))) {
+    throw new Error("KI ist für diese Aufgabe deaktiviert.");
   }
 
   const ownerDepartment = await getDepartmentById(task.owner_department_id);

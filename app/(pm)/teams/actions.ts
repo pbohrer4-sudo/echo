@@ -17,8 +17,10 @@ import {
 } from "@/lib/pm/sharepoint";
 import { notify, resolveDepartmentRecipients } from "@/lib/pm/notifications";
 import { getTask } from "@/lib/pm/tasks";
+import { isAiEnabledForDocument } from "@/lib/pm/projects";
 import {
   TASK_STATUS_LABEL,
+  type PmAiMode,
   type PmDocKind,
   type PmTaskPriority,
   type PmTaskStatus,
@@ -45,9 +47,21 @@ const VALID_DOC_KIND = new Set<PmDocKind>([
   "note",
   "decision",
 ]);
+const VALID_AI_MODE = new Set<PmAiMode>(["inherit", "on", "off"]);
 
 function str(form: FormData, key: string): string {
   return String(form.get(key) ?? "").trim();
+}
+
+function aiMode(form: FormData, key: string): PmAiMode {
+  const v = str(form, key) as PmAiMode;
+  return VALID_AI_MODE.has(v) ? v : "inherit";
+}
+
+// Empty string → null (for optional FK selects like project_id).
+function idOrNull(form: FormData, key: string): string | null {
+  const v = str(form, key);
+  return v || null;
 }
 
 function numOrNull(form: FormData, key: string): number | null {
@@ -112,6 +126,64 @@ export async function updateDepartmentContext(form: FormData) {
   redirect(`/teams/${slug}?tab=settings`);
 }
 
+// --- Projects -------------------------------------------------------------
+
+export async function createProject(form: FormData) {
+  const slug = str(form, "slug");
+  const departmentId = str(form, "department_id");
+  const name = str(form, "name");
+  if (!name) redirect(`/teams/${slug}?tab=projects&error=Name+erforderlich`);
+
+  const supabase = await createClient();
+  const ws = await getOrCreateWorkspace();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { error } = await supabase.from("pm_projects").insert({
+    workspace_id: ws.id,
+    department_id: departmentId,
+    name,
+    description: str(form, "description") || null,
+    color: str(form, "color") || "#6b665d",
+    ai_mode: aiMode(form, "ai_mode"),
+    created_by: user!.id,
+  });
+  if (error) {
+    redirect(`/teams/${slug}?tab=projects&error=${encodeURIComponent(error.message)}`);
+  }
+  revalidatePath(`/teams/${slug}`);
+  redirect(`/teams/${slug}?tab=projects`);
+}
+
+// Inline AI-mode change on a project (from the AiModeSelect control).
+export async function updateProjectAiMode(form: FormData) {
+  const slug = str(form, "slug");
+  const projectId = str(form, "project_id");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("pm_projects")
+    .update({ ai_mode: aiMode(form, "ai_mode") })
+    .eq("id", projectId);
+  if (error) {
+    redirect(`/teams/${slug}?tab=projects&error=${encodeURIComponent(error.message)}`);
+  }
+  revalidatePath(`/teams/${slug}`);
+  redirect(`/teams/${slug}?tab=projects`);
+}
+
+export async function archiveProject(form: FormData) {
+  const slug = str(form, "slug");
+  const projectId = str(form, "project_id");
+  const supabase = await createClient();
+  await supabase
+    .from("pm_projects")
+    .update({ status: "archived", deleted_at: new Date().toISOString() })
+    .eq("id", projectId);
+  revalidatePath(`/teams/${slug}`);
+  redirect(`/teams/${slug}?tab=projects`);
+}
+
 // --- Internal tasks -------------------------------------------------------
 
 export async function createInternalTask(form: FormData) {
@@ -130,6 +202,8 @@ export async function createInternalTask(form: FormData) {
   const { error } = await supabase.from("pm_tasks").insert({
     workspace_id: ws.id,
     owner_department_id: departmentId,
+    project_id: idOrNull(form, "project_id"),
+    ai_mode: aiMode(form, "ai_mode"),
     title,
     description: str(form, "description") || null,
     status: "backlog",
@@ -143,6 +217,22 @@ export async function createInternalTask(form: FormData) {
 
   revalidatePath(`/teams/${slug}`);
   redirect(`/teams/${slug}`);
+}
+
+// Inline AI-mode change on a task (from the AiModeSelect control).
+export async function updateTaskAiMode(form: FormData) {
+  const slug = str(form, "slug");
+  const taskId = str(form, "task_id");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("pm_tasks")
+    .update({ ai_mode: aiMode(form, "ai_mode") })
+    .eq("id", taskId);
+  if (error) {
+    redirect(`/teams/${slug}/tasks/${taskId}?error=${encodeURIComponent(error.message)}`);
+  }
+  revalidatePath(`/teams/${slug}/tasks/${taskId}`);
+  redirect(`/teams/${slug}/tasks/${taskId}`);
 }
 
 export async function updateTaskStatus(form: FormData) {
@@ -194,6 +284,8 @@ export async function updateTaskDetails(form: FormData) {
     sprint: str(form, "sprint") || null,
     due_date: str(form, "due_date") || null,
     accepted_into_sprint: form.get("accepted_into_sprint") === "on",
+    project_id: idOrNull(form, "project_id"),
+    ai_mode: aiMode(form, "ai_mode"),
   };
   const priority = str(form, "priority") as PmTaskPriority;
   if (VALID_PRIORITY.has(priority)) update.priority = priority;
@@ -238,6 +330,8 @@ export async function createCrossDeptRequest(form: FormData) {
       status: "backlog",
       priority: VALID_PRIORITY.has(priority) ? priority : "medium",
       source: "cross_dept",
+      project_id: idOrNull(form, "project_id"),
+      ai_mode: aiMode(form, "ai_mode"),
       effort_estimate_hours: numOrNull(form, "effort_estimate_hours"),
       due_date: str(form, "due_date") || null,
       created_by: user!.id,
@@ -268,10 +362,11 @@ export async function createCrossDeptRequest(form: FormData) {
   }
 
   // Fire the AI agent automatically so a briefing + draft reply is waiting
-  // when the receiving department opens its inbox — but only if AI is enabled
-  // for the workspace and the requester left the per-request toggle on.
-  // Best-effort: if the AI call fails the request is still created.
-  if (ws.ai_enabled && form.get("auto_brief") === "on") {
+  // when the receiving department opens its inbox — only if auto-briefing is
+  // on and the requester left the per-request toggle on. runBriefingForTask
+  // self-gates on the task's effective AI state (task → project → workspace),
+  // so a project/task with AI off is respected. Best-effort.
+  if (ws.ai_auto_briefing && form.get("auto_brief") === "on") {
     try {
       await runBriefingForTask(task.id);
     } catch {
@@ -289,10 +384,8 @@ export async function createCrossDeptRequest(form: FormData) {
 export async function runBriefing(form: FormData) {
   const slug = str(form, "slug");
   const taskId = str(form, "task_id");
-  const ws = await getOrCreateWorkspace();
-  if (!ws.ai_enabled) {
-    redirect(`/teams/${slug}/tasks/${taskId}?error=KI+ist+deaktiviert`);
-  }
+  // runBriefingForTask enforces the effective AI state (task → project →
+  // workspace) and throws a readable message if AI is off for this task.
   try {
     await runBriefingForTask(taskId);
   } catch (err) {
@@ -453,6 +546,8 @@ export async function addDocument(form: FormData) {
     .insert({
       workspace_id: ws.id,
       department_id: departmentId,
+      project_id: idOrNull(form, "project_id"),
+      ai_mode: aiMode(form, "ai_mode"),
       title,
       kind: VALID_DOC_KIND.has(kind) ? kind : "document",
       content: str(form, "content") || null,
@@ -466,10 +561,10 @@ export async function addDocument(form: FormData) {
   }
 
   // Ask the AI filing assistant for a folder + name suggestion — only when
-  // AI and auto-filing are enabled for the workspace. Off → the document is
-  // kept exactly as entered (the user can still request a suggestion later).
-  // Best-effort: the document is saved regardless.
-  if (ws.ai_enabled && ws.ai_auto_filing) {
+  // auto-filing is on. suggestFilingForDocument self-gates on the document's
+  // effective AI state (document → project → workspace), so a document/project
+  // with AI off is kept exactly as entered. Best-effort.
+  if (ws.ai_auto_filing) {
     try {
       await suggestFilingForDocument(doc.id);
     } catch {
@@ -484,9 +579,14 @@ export async function addDocument(form: FormData) {
 export async function rerunFilingSuggestion(form: FormData) {
   const slug = str(form, "slug");
   const documentId = str(form, "document_id");
-  const ws = await getOrCreateWorkspace();
-  if (!ws.ai_enabled) {
-    redirect(`/teams/${slug}?tab=knowledge&error=KI+ist+deaktiviert`);
+  const supabase = await createClient();
+  const { data: doc } = await supabase
+    .from("pm_documents")
+    .select("ai_mode, project_id")
+    .eq("id", documentId)
+    .maybeSingle();
+  if (doc && !(await isAiEnabledForDocument(doc))) {
+    redirect(`/teams/${slug}?tab=knowledge&error=KI+ist+für+dieses+Dokument+deaktiviert`);
   }
   try {
     await suggestFilingForDocument(documentId);

@@ -12,29 +12,41 @@ import {
   listOutgoingRequests,
 } from "@/lib/pm/tasks";
 import { listDocuments } from "@/lib/pm/documents";
+import { listProjects } from "@/lib/pm/projects";
 import { listFolders } from "@/lib/pm/sharepoint";
 import {
+  AI_MODE_LABEL,
   BOARD_COLUMNS,
   DOC_KIND_LABEL,
   FILING_STATUS_LABEL,
   PRIORITY_LABEL,
   TASK_STATUS_LABEL,
 } from "@/lib/pm/types";
-import type { PmTask, PmTaskPriority } from "@/lib/pm/types";
+import type { PmProject, PmTask, PmTaskPriority } from "@/lib/pm/types";
 import { StatusSelect } from "../_components/status-select";
+import { AiModeSelect } from "../_components/ai-mode-select";
 import {
   addDocument,
   confirmDocumentFiling,
   createInternalTask,
+  createProject,
   rerunFilingSuggestion,
   updateDepartmentContext,
+  updateProjectAiMode,
 } from "../actions";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "board" | "incoming" | "outgoing" | "knowledge" | "settings";
+type Tab =
+  | "board"
+  | "projects"
+  | "incoming"
+  | "outgoing"
+  | "knowledge"
+  | "settings";
 const TABS: { id: Tab; label: string }[] = [
   { id: "board", label: "Board" },
+  { id: "projects", label: "Projekte" },
   { id: "incoming", label: "Posteingang" },
   { id: "outgoing", label: "Ausgehend" },
   { id: "knowledge", label: "Wissen" },
@@ -122,6 +134,7 @@ export default async function DepartmentHub({
       )}
 
       {tab === "board" && <Board slug={slug} departmentId={dept.id} />}
+      {tab === "projects" && <Projects slug={slug} departmentId={dept.id} />}
       {tab === "incoming" && (
         <Incoming
           slug={slug}
@@ -165,7 +178,12 @@ async function Board({
   slug: string;
   departmentId: string;
 }) {
-  const tasks = await listBoardTasks(departmentId);
+  const [tasks, projects] = await Promise.all([
+    listBoardTasks(departmentId),
+    listProjects(departmentId),
+  ]);
+  const projectName = (id: string | null) =>
+    id ? projects.find((p) => p.id === id)?.name ?? null : null;
   const byStatus = (status: string) => tasks.filter((t) => t.status === status);
 
   return (
@@ -189,6 +207,29 @@ async function Board({
             placeholder="Beschreibung (optional)"
             className="rounded-lg border border-rule bg-paper px-3 py-2 text-sm"
           />
+          <div className="grid grid-cols-2 gap-3">
+            <select
+              name="project_id"
+              defaultValue=""
+              className="rounded-lg border border-rule bg-paper px-3 py-2 text-sm"
+            >
+              <option value="">Kein Projekt</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <select
+              name="ai_mode"
+              defaultValue="inherit"
+              className="rounded-lg border border-rule bg-paper px-3 py-2 text-sm"
+            >
+              <option value="inherit">KI: Erbt</option>
+              <option value="on">KI: An</option>
+              <option value="off">KI: Aus</option>
+            </select>
+          </div>
           <div className="grid grid-cols-3 gap-3">
             <input
               name="effort_estimate_hours"
@@ -245,6 +286,20 @@ async function Board({
                       <PriorityDot priority={t.priority} />
                       <span className="leading-snug">{t.title}</span>
                     </Link>
+                    {(projectName(t.project_id) || t.ai_mode !== "inherit") && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {projectName(t.project_id) && (
+                          <span className="rounded bg-paper-2 px-1.5 py-0.5 text-[10px] text-ink-3">
+                            {projectName(t.project_id)}
+                          </span>
+                        )}
+                        {t.ai_mode !== "inherit" && (
+                          <span className="rounded bg-paper-2 px-1.5 py-0.5 text-[10px] text-ink-3">
+                            KI: {AI_MODE_LABEL[t.ai_mode]}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     <div className="mt-2 flex items-center justify-between">
                       <span className="text-[11px] text-ink-4">
                         {fmtHours(t.effort_estimate_hours)}
@@ -267,6 +322,101 @@ async function Board({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// --- Projects -------------------------------------------------------------
+
+async function Projects({
+  slug,
+  departmentId,
+}: {
+  slug: string;
+  departmentId: string;
+}) {
+  const projects = await listProjects(departmentId);
+
+  return (
+    <div className="space-y-5">
+      <details className="rounded-xl border border-rule bg-paper-2 p-4">
+        <summary className="cursor-pointer text-sm font-medium">
+          + Neues Projekt
+        </summary>
+        <p className="mt-2 text-xs text-ink-4">
+          Ein Projekt bündelt Aufgaben. Der KI-Modus eines Projekts gilt für
+          alle seine Aufgaben - sofern die Aufgabe nicht selbst An oder Aus
+          setzt.
+        </p>
+        <form action={createProject} className="mt-3 grid max-w-xl gap-3">
+          <input type="hidden" name="department_id" value={departmentId} />
+          <input type="hidden" name="slug" value={slug} />
+          <input
+            name="name"
+            required
+            placeholder="Projektname"
+            className="rounded-lg border border-rule bg-paper px-3 py-2 text-sm"
+          />
+          <textarea
+            name="description"
+            rows={2}
+            placeholder="Beschreibung (optional)"
+            className="rounded-lg border border-rule bg-paper px-3 py-2 text-sm"
+          />
+          <label className="text-sm">
+            <span className="text-ink-3">KI-Modus</span>
+            <select
+              name="ai_mode"
+              defaultValue="inherit"
+              className="mt-1 w-full rounded-lg border border-rule bg-paper px-3 py-2 text-sm"
+            >
+              <option value="inherit">Erbt vom Workspace</option>
+              <option value="on">An</option>
+              <option value="off">Aus (alles bleibt wie eingegeben)</option>
+            </select>
+          </label>
+          <button
+            type="submit"
+            className="justify-self-start rounded-lg bg-action px-3 py-2 text-sm font-medium text-paper hover:opacity-90"
+          >
+            Projekt anlegen
+          </button>
+        </form>
+      </details>
+
+      {projects.length === 0 ? (
+        <p className="text-sm text-ink-3">
+          Noch keine Projekte. Lege eines an, um Aufgaben zu bündeln und den
+          KI-Modus projektweit zu steuern.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {projects.map((p: PmProject) => (
+            <div
+              key={p.id}
+              className="flex items-center justify-between rounded-xl border border-rule bg-paper p-4"
+            >
+              <div className="min-w-0">
+                <p className="font-medium">{p.name}</p>
+                {p.description && (
+                  <p className="mt-0.5 line-clamp-2 text-sm text-ink-3">
+                    {p.description}
+                  </p>
+                )}
+              </div>
+              <div className="shrink-0">
+                <AiModeSelect
+                  action={updateProjectAiMode}
+                  idName="project_id"
+                  idValue={p.id}
+                  slug={slug}
+                  current={p.ai_mode}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -430,9 +580,10 @@ async function Knowledge({
   departmentId: string;
   aiEnabled: boolean;
 }) {
-  const [docs, folders] = await Promise.all([
+  const [docs, folders, projects] = await Promise.all([
     listDocuments(departmentId),
     listFolders(departmentId),
+    listProjects(departmentId),
   ]);
   const folderPaths = folders.map((f) => f.path);
 
@@ -473,6 +624,29 @@ async function Knowledge({
             placeholder="Quelle (z.B. Teams-Call 18.06.2026)"
             className="rounded-lg border border-rule bg-paper px-3 py-2 text-sm"
           />
+          <div className="grid grid-cols-2 gap-3">
+            <select
+              name="project_id"
+              defaultValue=""
+              className="rounded-lg border border-rule bg-paper px-3 py-2 text-sm"
+            >
+              <option value="">Kein Projekt</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <select
+              name="ai_mode"
+              defaultValue="inherit"
+              className="rounded-lg border border-rule bg-paper px-3 py-2 text-sm"
+            >
+              <option value="inherit">KI-Ablage: Erbt</option>
+              <option value="on">KI-Ablage: An</option>
+              <option value="off">KI-Ablage: Aus</option>
+            </select>
+          </div>
           <textarea
             name="content"
             rows={5}

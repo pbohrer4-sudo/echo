@@ -18,6 +18,23 @@ export type PmDocKind = "document" | "transcript" | "note" | "decision";
 export type PmBriefingStatus = "pending" | "accepted" | "rejected";
 export type PmReminderStatus = "pending" | "sent" | "dismissed";
 export type PmFilingStatus = "unfiled" | "suggested" | "confirmed" | "failed";
+export type PmAiMode = "inherit" | "on" | "off";
+
+export interface PmProject {
+  id: string;
+  workspace_id: string;
+  department_id: string;
+  name: string;
+  description: string | null;
+  color: string;
+  status: "active" | "archived";
+  ai_mode: PmAiMode;
+  position: number;
+  created_by: string;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface PmWorkspace {
   id: string;
@@ -53,6 +70,8 @@ export interface PmTask {
   workspace_id: string;
   owner_department_id: string;
   requester_department_id: string | null;
+  project_id: string | null;
+  ai_mode: PmAiMode;
   title: string;
   description: string | null;
   status: PmTaskStatus;
@@ -90,6 +109,8 @@ export interface PmDocument {
   id: string;
   workspace_id: string;
   department_id: string;
+  project_id: string | null;
+  ai_mode: PmAiMode;
   title: string;
   kind: PmDocKind;
   content: string | null;
@@ -175,3 +196,25 @@ export const FILING_STATUS_LABEL: Record<PmFilingStatus, string> = {
   confirmed: "Abgelegt",
   failed: "Ablage fehlgeschlagen",
 };
+
+export const AI_MODE_LABEL: Record<PmAiMode, string> = {
+  inherit: "Erbt",
+  on: "An",
+  off: "Aus",
+};
+
+// Resolve whether AI is effectively enabled for an item, walking the
+// override chain item → project → workspace. 'on'/'off' short-circuit;
+// 'inherit' defers to the next level up. Pure function (no I/O) so it is
+// safe to import anywhere.
+export function resolveAiEnabled(
+  ownMode: PmAiMode,
+  projectMode: PmAiMode | null,
+  workspaceEnabled: boolean,
+): boolean {
+  if (ownMode === "on") return true;
+  if (ownMode === "off") return false;
+  if (projectMode === "on") return true;
+  if (projectMode === "off") return false;
+  return workspaceEnabled;
+}

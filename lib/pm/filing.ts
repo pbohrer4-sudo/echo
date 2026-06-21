@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "@/lib/claude";
 import { createClient } from "@/lib/supabase/server";
 import { getDepartmentById } from "./departments";
+import { isAiEnabledForDocument } from "./projects";
 import { listFolders, type SharePointFolder } from "./sharepoint";
 
 // AI agent that files a new document into the SharePoint structure: given
@@ -124,10 +125,13 @@ export async function suggestFilingForDocument(documentId: string): Promise<void
   const supabase = await createClient();
   const { data: doc } = await supabase
     .from("pm_documents")
-    .select("id, department_id, title, kind, source, content")
+    .select("id, department_id, project_id, ai_mode, title, kind, source, content")
     .eq("id", documentId)
     .maybeSingle();
   if (!doc) return;
+
+  // Respect the per-document / per-project / workspace AI override.
+  if (!(await isAiEnabledForDocument(doc))) return;
 
   const department = await getDepartmentById(doc.department_id);
   if (!department) return;
