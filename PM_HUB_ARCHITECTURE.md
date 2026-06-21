@@ -141,6 +141,18 @@ cross-department request always names a different requesting department.
 - **Human-in-the-loop for all AI output.** Briefings and filing proposals
   are stored as *suggestions* (`pending` / `suggested`) and only take effect
   when a human accepts - matching the project's "never auto-apply AI" rule.
+- **AI is selectable.** Workspace settings (`/teams/settings`, columns on
+  `pm_workspaces`) gate the automatic behaviour:
+  - `ai_enabled` — master switch. Off → no AI runs anywhere and every AI
+    affordance (briefing section, suggestion UI, generate buttons) is hidden;
+    the hub is fully manual.
+  - `ai_auto_briefing` — auto-generate a briefing when a request lands. Off →
+    the request stays exactly as written; a briefing can still be triggered
+    by hand.
+  - `ai_auto_filing` — auto-suggest a SharePoint folder + name on document
+    add. Off → the document is saved as entered.
+  The automatic paths check these flags server-side (not just in the UI), so
+  disabling a feature actually stops the AI call.
 
 ---
 

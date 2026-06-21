@@ -95,8 +95,9 @@ export default async function TaskDetail({
         </div>
       )}
 
-      {/* AI briefing — only for cross-department requests */}
-      {isCrossDept && (
+      {/* AI briefing — only for cross-department requests, and only when AI
+          is enabled for the workspace. */}
+      {isCrossDept && ws.ai_enabled && (
         <section className="rounded-xl border border-rule bg-paper-2 p-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold">KI-Briefing</h2>

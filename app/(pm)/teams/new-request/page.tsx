@@ -36,9 +36,10 @@ export default async function NewRequestPage({
           Anfrage an eine andere Abteilung
         </h1>
         <p className="mt-1 text-sm text-ink-3">
-          Die Anfrage landet im Posteingang der ausführenden Abteilung. Ein
-          KI-Agent erstellt automatisch ein erstes Briefing und einen
-          Antwortentwurf.
+          Die Anfrage landet im Posteingang der ausführenden Abteilung.
+          {ws.ai_enabled
+            ? " Ein KI-Agent erstellt automatisch ein erstes Briefing und einen Antwortentwurf."
+            : ""}
         </p>
       </div>
 
@@ -143,10 +144,17 @@ export default async function NewRequestPage({
           </label>
         </div>
 
-        <label className="flex items-center gap-2 text-sm text-ink-3">
-          <input type="checkbox" name="auto_brief" defaultChecked value="on" />
-          KI-Briefing automatisch erstellen
-        </label>
+        {ws.ai_enabled ? (
+          <label className="flex items-center gap-2 text-sm text-ink-3">
+            <input
+              type="checkbox"
+              name="auto_brief"
+              defaultChecked={ws.ai_auto_briefing}
+              value="on"
+            />
+            KI-Briefing automatisch erstellen
+          </label>
+        ) : null}
 
         <div className="flex gap-3">
           <button

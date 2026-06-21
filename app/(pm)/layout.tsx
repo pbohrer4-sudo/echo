@@ -36,6 +36,9 @@ export default async function PmLayout({
             <Link href="/teams/new-request" className="hover:text-ink-1">
               Neue Anfrage
             </Link>
+            <Link href="/teams/settings" className="hover:text-ink-1">
+              Einstellungen
+            </Link>
           </nav>
         </div>
         <div className="flex items-center gap-3 text-xs text-ink-4">

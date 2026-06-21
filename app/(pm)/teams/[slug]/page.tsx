@@ -136,7 +136,13 @@ export default async function DepartmentHub({
           deptName={(id: string) => deptMap[id]?.name ?? "—"}
         />
       )}
-      {tab === "knowledge" && <Knowledge slug={slug} departmentId={dept.id} />}
+      {tab === "knowledge" && (
+        <Knowledge
+          slug={slug}
+          departmentId={dept.id}
+          aiEnabled={ws.ai_enabled}
+        />
+      )}
       {tab === "settings" && (
         <Settings
           slug={slug}
@@ -418,9 +424,11 @@ async function Outgoing({
 async function Knowledge({
   slug,
   departmentId,
+  aiEnabled,
 }: {
   slug: string;
   departmentId: string;
+  aiEnabled: boolean;
 }) {
   const [docs, folders] = await Promise.all([
     listDocuments(departmentId),
@@ -435,8 +443,9 @@ async function Knowledge({
           + Dokument / Transkript hinzufügen
         </summary>
         <p className="mt-2 text-xs text-ink-4">
-          Beim Speichern schlägt die KI den passenden SharePoint-Ordner und
-          einen sauberen Dateinamen vor - du bestätigst nur noch.
+          {aiEnabled
+            ? "Beim Speichern schlägt die KI den passenden SharePoint-Ordner und einen sauberen Dateinamen vor - du bestätigst nur noch."
+            : "Das Dokument wird genau so gespeichert, wie du es eingibst. (KI-Ablagevorschläge sind in den Einstellungen deaktiviert.)"}
         </p>
         <form action={addDocument} className="mt-3 grid max-w-2xl gap-3">
           <input type="hidden" name="department_id" value={departmentId} />
@@ -595,8 +604,9 @@ async function Knowledge({
                 </div>
               )}
 
-              {/* Unfiled: offer to (re)generate a suggestion */}
-              {d.filing_status !== "suggested" &&
+              {/* Unfiled: offer to (re)generate a suggestion (AI must be on) */}
+              {aiEnabled &&
+                d.filing_status !== "suggested" &&
                 d.filing_status !== "confirmed" &&
                 folders.length > 0 && (
                   <form action={rerunFilingSuggestion} className="mt-2">

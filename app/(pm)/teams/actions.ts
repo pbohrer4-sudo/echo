@@ -268,10 +268,10 @@ export async function createCrossDeptRequest(form: FormData) {
   }
 
   // Fire the AI agent automatically so a briefing + draft reply is waiting
-  // when the receiving department opens its inbox. Best-effort: if the AI
-  // call fails (rate limit, no key) the request is still created and the
-  // team can trigger the briefing manually.
-  if (form.get("auto_brief") !== "off") {
+  // when the receiving department opens its inbox — but only if AI is enabled
+  // for the workspace and the requester left the per-request toggle on.
+  // Best-effort: if the AI call fails the request is still created.
+  if (ws.ai_enabled && form.get("auto_brief") === "on") {
     try {
       await runBriefingForTask(task.id);
     } catch {
@@ -289,6 +289,10 @@ export async function createCrossDeptRequest(form: FormData) {
 export async function runBriefing(form: FormData) {
   const slug = str(form, "slug");
   const taskId = str(form, "task_id");
+  const ws = await getOrCreateWorkspace();
+  if (!ws.ai_enabled) {
+    redirect(`/teams/${slug}/tasks/${taskId}?error=KI+ist+deaktiviert`);
+  }
   try {
     await runBriefingForTask(taskId);
   } catch (err) {
@@ -461,13 +465,16 @@ export async function addDocument(form: FormData) {
     redirect(`/teams/${slug}?tab=knowledge&error=${encodeURIComponent(error?.message ?? "Fehler")}`);
   }
 
-  // Ask the AI filing assistant for a folder + name suggestion. Best-effort:
-  // the document is saved regardless; the user confirms the suggestion in
-  // the knowledge tab.
-  try {
-    await suggestFilingForDocument(doc.id);
-  } catch {
-    // swallow — suggestion is optional
+  // Ask the AI filing assistant for a folder + name suggestion — only when
+  // AI and auto-filing are enabled for the workspace. Off → the document is
+  // kept exactly as entered (the user can still request a suggestion later).
+  // Best-effort: the document is saved regardless.
+  if (ws.ai_enabled && ws.ai_auto_filing) {
+    try {
+      await suggestFilingForDocument(doc.id);
+    } catch {
+      // swallow — suggestion is optional
+    }
   }
 
   revalidatePath(`/teams/${slug}`);
@@ -477,6 +484,10 @@ export async function addDocument(form: FormData) {
 export async function rerunFilingSuggestion(form: FormData) {
   const slug = str(form, "slug");
   const documentId = str(form, "document_id");
+  const ws = await getOrCreateWorkspace();
+  if (!ws.ai_enabled) {
+    redirect(`/teams/${slug}?tab=knowledge&error=KI+ist+deaktiviert`);
+  }
   try {
     await suggestFilingForDocument(documentId);
   } catch (err) {
@@ -542,6 +553,29 @@ export async function confirmDocumentFiling(form: FormData) {
 
   revalidatePath(`/teams/${slug}`);
   redirect(`/teams/${slug}?tab=knowledge`);
+}
+
+// --- AI settings ----------------------------------------------------------
+
+// Workspace-level switches for the AI features. Checkbox semantics: an
+// unchecked box is absent from the form, so a missing value means "off".
+export async function updateAiSettings(form: FormData) {
+  const supabase = await createClient();
+  const ws = await getOrCreateWorkspace();
+  const { error } = await supabase
+    .from("pm_workspaces")
+    .update({
+      ai_enabled: form.get("ai_enabled") === "on",
+      ai_auto_briefing: form.get("ai_auto_briefing") === "on",
+      ai_auto_filing: form.get("ai_auto_filing") === "on",
+    })
+    .eq("id", ws.id);
+  if (error) {
+    redirect(`/teams/settings?error=${encodeURIComponent(error.message)}`);
+  }
+  revalidatePath("/teams/settings");
+  revalidatePath("/teams");
+  redirect("/teams/settings?saved=1");
 }
 
 // --- Notifications --------------------------------------------------------
@@ -682,7 +716,7 @@ export async function seedDemo() {
     },
   ]);
 
-  if (req) {
+  if (req && ws.ai_enabled && ws.ai_auto_briefing) {
     try {
       await runBriefingForTask(req.id);
     } catch {

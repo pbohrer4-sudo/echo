@@ -23,6 +23,9 @@ export interface PmWorkspace {
   id: string;
   name: string;
   created_by: string;
+  ai_enabled: boolean;
+  ai_auto_briefing: boolean;
+  ai_auto_filing: boolean;
   created_at: string;
   updated_at: string;
 }
