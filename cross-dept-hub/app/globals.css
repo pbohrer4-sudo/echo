@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+/* ===== Design tokens — Paper neutrals + ink-blue accent + amber signal ===== */
+/* Light only. */
+
+@theme {
+  --color-paper: #faf9f7;
+  --color-paper-2: #f3f1ec;
+  --color-paper-3: #ebe8e1;
+  --color-ink-1: #14110d;
+  --color-ink-2: #3d3933;
+  --color-ink-3: #6b665d;
+  --color-ink-4: #9c968b;
+  --color-ink-5: #c4bfb5;
+  --color-rule: #d9d4c8;
+  --color-rule-soft: #e8e4da;
+  --color-action: oklch(32% 0.04 250);
+  --color-action-soft: oklch(95% 0.012 250);
+  --color-signal: oklch(72% 0.13 75);
+  --color-signal-soft: oklch(96% 0.04 80);
+  --color-good: oklch(58% 0.10 145);
+  --color-warn: oklch(68% 0.13 55);
+  --color-bad: oklch(58% 0.14 25);
+}
+
+:root {
+  --paper: #faf9f7;
+  --paper-2: #f3f1ec;
+  --paper-3: #ebe8e1;
+  --ink-1: #14110d;
+  --ink-2: #3d3933;
+  --ink-3: #6b665d;
+  --ink-4: #9c968b;
+  --ink-5: #c4bfb5;
+  --rule: #d9d4c8;
+  --rule-soft: #e8e4da;
+  --action: oklch(32% 0.04 250);
+  --action-soft: oklch(95% 0.012 250);
+  --action-ring: oklch(60% 0.05 250 / 0.25);
+  --signal: oklch(72% 0.13 75);
+  --signal-soft: oklch(96% 0.04 80);
+  --good: oklch(58% 0.10 145);
+  --warn: oklch(68% 0.13 55);
+  --bad: oklch(58% 0.14 25);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-jakarta-sans), system-ui, sans-serif;
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    background: var(--paper);
+    color: var(--ink-1);
+  }
+  ::selection {
+    background: var(--action-soft);
+    color: var(--ink-1);
+  }
+}
+
+/* Mono micro-label — small uppercase metadata. */
+.t-label {
+  font-family: var(--font-dm-mono), ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
