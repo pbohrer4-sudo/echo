@@ -701,6 +701,33 @@ export async function markAllNotificationsRead() {
   redirect("/teams/notifications");
 }
 
+// --- Feedback (trial) -----------------------------------------------------
+
+export async function submitFeedback(form: FormData) {
+  const message = str(form, "message");
+  if (!message) redirect("/teams/feedback?error=Bitte+etwas+eingeben");
+
+  const supabase = await createClient();
+  const ws = await getOrCreateWorkspace();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { error } = await supabase.from("pm_feedback").insert({
+    workspace_id: ws.id,
+    user_id: user!.id,
+    area: str(form, "area") || null,
+    sentiment: str(form, "sentiment") || null,
+    message,
+    page_url: str(form, "page_url") || null,
+  });
+  if (error) {
+    redirect(`/teams/feedback?error=${encodeURIComponent(error.message)}`);
+  }
+  revalidatePath("/teams/feedback");
+  redirect("/teams/feedback?saved=1");
+}
+
 // --- Demo seed ------------------------------------------------------------
 
 // One-click sample data so the cross-department flow is explorable without
@@ -775,6 +802,35 @@ export async function seedDemo() {
     await seedDemoFolders(ws.id, bySlug[s.slug], s.name);
   }
 
+  // Projects inside Marketing — one inherits AI, one has AI switched off to
+  // show the per-project override ("leave it as I wrote it").
+  const { data: projects } = await supabase
+    .from("pm_projects")
+    .insert([
+      {
+        workspace_id: ws.id,
+        department_id: bySlug["marketing"],
+        name: "Messe Köln 2026",
+        description: "Alle Assets und Aufgaben rund um den Messeauftritt.",
+        color: "#b45309",
+        ai_mode: "inherit",
+        created_by: user!.id,
+      },
+      {
+        workspace_id: ws.id,
+        department_id: bySlug["marketing"],
+        name: "Website Relaunch (KI aus)",
+        description: "Texte bleiben wie geschrieben - hier keine KI-Vorschläge.",
+        color: "#6b665d",
+        ai_mode: "off",
+        created_by: user!.id,
+      },
+    ])
+    .select("id, name");
+  const messeProject = projects?.find((p) => p.name === "Messe Köln 2026")?.id ?? null;
+  const websiteProject =
+    projects?.find((p) => p.name.startsWith("Website"))?.id ?? null;
+
   // A sample cross-department request: Sales asks Marketing for a video.
   const { data: req } = await supabase
     .from("pm_tasks")
@@ -782,6 +838,7 @@ export async function seedDemo() {
       workspace_id: ws.id,
       owner_department_id: bySlug["marketing"],
       requester_department_id: bySlug["sales"],
+      project_id: messeProject,
       title: "Erklärvideo für Messeauftritt erstellen",
       description:
         "Wir brauchen ein 60-90 Sekunden Erklärvideo zu unserem neuen Produktmodul für den Messestand in Köln. Zielgruppe: technische Entscheider im Mittelstand. Deadline ist in drei Wochen.",
@@ -794,24 +851,76 @@ export async function seedDemo() {
     .select("id")
     .single();
 
-  // Some internal Marketing tasks for the board.
+  // A second cross-department request: Produkt asks Marketing for a one-pager.
+  await supabase.from("pm_tasks").insert({
+    workspace_id: ws.id,
+    owner_department_id: bySlug["marketing"],
+    requester_department_id: bySlug["produkt"],
+    project_id: messeProject,
+    title: "Produkt-One-Pager für Release 4.2 gestalten",
+    description:
+      "Ein einseitiges PDF mit den drei wichtigsten neuen Funktionen aus Release 4.2 - für Sales und die Messe. Inhalte liefern wir, Gestaltung und Layout von euch.",
+    status: "backlog",
+    priority: "medium",
+    source: "cross_dept",
+    effort_estimate_hours: 6,
+    created_by: user!.id,
+  });
+
+  // Internal Marketing tasks, spread across projects and the board.
   await supabase.from("pm_tasks").insert([
     {
       workspace_id: ws.id,
       owner_department_id: bySlug["marketing"],
-      title: "Q3 Kampagnen-Briefing finalisieren",
+      project_id: messeProject,
+      title: "Messestand-Grafiken finalisieren",
       status: "in_progress",
-      priority: "medium",
+      priority: "high",
+      source: "internal",
+      effort_estimate_hours: 8,
+      created_by: user!.id,
+    },
+    {
+      workspace_id: ws.id,
+      owner_department_id: bySlug["marketing"],
+      project_id: websiteProject,
+      title: "Startseiten-Texte überarbeiten",
+      status: "todo",
+      priority: "low",
       source: "internal",
       created_by: user!.id,
     },
     {
       workspace_id: ws.id,
       owner_department_id: bySlug["marketing"],
-      title: "Landingpage-Texte überarbeiten",
-      status: "todo",
-      priority: "low",
+      title: "Q3 Kampagnen-Briefing finalisieren",
+      status: "review",
+      priority: "medium",
       source: "internal",
+      created_by: user!.id,
+    },
+  ]);
+
+  // A couple of knowledge entries so the Wissen tab + filing flow are alive.
+  await supabase.from("pm_documents").insert([
+    {
+      workspace_id: ws.id,
+      department_id: bySlug["marketing"],
+      project_id: messeProject,
+      title: "Kickoff Messe Köln - Notizen",
+      kind: "note",
+      source: "Teams-Call 12.06.2026",
+      content:
+        "Zielgruppe: technische Entscheider Mittelstand. Botschaft: weniger Komplexität, schnellere Einführung. Budget für Video: mittel. Termin Messe: in drei Wochen.",
+      created_by: user!.id,
+    },
+    {
+      workspace_id: ws.id,
+      department_id: bySlug["marketing"],
+      title: "Markenrichtlinien Kurzfassung",
+      kind: "document",
+      content:
+        "Ruhige Farbwelt, klare Typografie, kein Stockfoto-Look. Logo immer mit Schutzraum. Tonalität: kompetent, nah, ohne Marketing-Floskeln.",
       created_by: user!.id,
     },
   ]);
