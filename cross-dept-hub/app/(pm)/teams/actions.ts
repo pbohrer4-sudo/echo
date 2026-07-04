@@ -19,9 +19,19 @@ import { notify, resolveDepartmentRecipients } from "@/lib/pm/notifications";
 import { getTask } from "@/lib/pm/tasks";
 import { isAiEnabledForDocument } from "@/lib/pm/projects";
 import {
+  applyAutomations,
+  getBlueprint,
+  instantiateBlueprint,
+} from "@/lib/pm/automations";
+import { getItemType } from "@/lib/pm/structure";
+import { getRequestForm } from "@/lib/pm/forms";
+import {
   TASK_STATUS_LABEL,
   type PmAiMode,
+  type PmAutomationActions,
   type PmDocKind,
+  type PmItemTypeField,
+  type PmRequestFormField,
   type PmTaskPriority,
   type PmTaskStatus,
 } from "@/lib/pm/types";
@@ -190,7 +200,6 @@ export async function createInternalTask(form: FormData) {
   const slug = str(form, "slug");
   const departmentId = str(form, "department_id");
   const title = str(form, "title");
-  if (!title) redirect(`/teams/${slug}?error=Titel+erforderlich`);
 
   const supabase = await createClient();
   const ws = await getOrCreateWorkspace();
@@ -198,11 +207,39 @@ export async function createInternalTask(form: FormData) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Blueprint path: instantiate the template (title acts as an override).
+  const blueprintId = idOrNull(form, "blueprint_id");
+  if (blueprintId) {
+    const blueprint = await getBlueprint(blueprintId);
+    if (!blueprint) redirect(`/teams/${slug}?error=Vorlage+nicht+gefunden`);
+    try {
+      await instantiateBlueprint({
+        blueprint,
+        workspaceId: ws.id,
+        departmentId,
+        createdBy: user!.id,
+        titleOverride: title || null,
+        folderId: idOrNull(form, "folder_id"),
+        projectId: idOrNull(form, "project_id"),
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Fehler";
+      redirect(`/teams/${slug}?error=${encodeURIComponent(msg)}`);
+    }
+    revalidatePath(`/teams/${slug}`);
+    redirect(`/teams/${slug}`);
+  }
+
+  if (!title) redirect(`/teams/${slug}?error=Titel+erforderlich`);
+
   const priority = str(form, "priority") as PmTaskPriority;
   const { error } = await supabase.from("pm_tasks").insert({
     workspace_id: ws.id,
     owner_department_id: departmentId,
     project_id: idOrNull(form, "project_id"),
+    folder_id: idOrNull(form, "folder_id"),
+    item_type_id: idOrNull(form, "item_type_id"),
+    assignee_id: idOrNull(form, "assignee_id"),
     ai_mode: aiMode(form, "ai_mode"),
     title,
     description: str(form, "description") || null,
@@ -210,6 +247,7 @@ export async function createInternalTask(form: FormData) {
     priority: VALID_PRIORITY.has(priority) ? priority : "medium",
     source: "internal",
     effort_estimate_hours: numOrNull(form, "effort_estimate_hours"),
+    start_date: str(form, "start_date") || null,
     due_date: str(form, "due_date") || null,
     created_by: user!.id,
   });
@@ -248,6 +286,10 @@ export async function updateTaskStatus(form: FormData) {
     .eq("id", taskId);
   if (error) redirect(`/teams/${slug}?error=${encodeURIComponent(error.message)}`);
 
+  // Fire matching automation rules (assign / comment / notify). Rule-based,
+  // no AI; best-effort by design.
+  await applyAutomations(taskId, status);
+
   // Status update on a cross-department request → tell the requester.
   const task = await getTask(taskId);
   if (task?.source === "cross_dept" && task.requester_department_id) {
@@ -282,9 +324,13 @@ export async function updateTaskDetails(form: FormData) {
   const update: Record<string, unknown> = {
     effort_estimate_hours: numOrNull(form, "effort_estimate_hours"),
     sprint: str(form, "sprint") || null,
+    start_date: str(form, "start_date") || null,
     due_date: str(form, "due_date") || null,
     accepted_into_sprint: form.get("accepted_into_sprint") === "on",
     project_id: idOrNull(form, "project_id"),
+    folder_id: idOrNull(form, "folder_id"),
+    item_type_id: idOrNull(form, "item_type_id"),
+    assignee_id: idOrNull(form, "assignee_id"),
     ai_mode: aiMode(form, "ai_mode"),
   };
   const priority = str(form, "priority") as PmTaskPriority;
@@ -726,6 +772,607 @@ export async function submitFeedback(form: FormData) {
   }
   revalidatePath("/teams/feedback");
   redirect("/teams/feedback?saved=1");
+}
+
+// --- Folders (hierarchy) ----------------------------------------------------
+
+export async function createFolder(form: FormData) {
+  const slug = str(form, "slug");
+  const departmentId = str(form, "department_id");
+  const name = str(form, "name");
+  if (!name) redirect(`/teams/${slug}?tab=projects&error=Name+erforderlich`);
+
+  const supabase = await createClient();
+  const ws = await getOrCreateWorkspace();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { error } = await supabase.from("pm_folders").insert({
+    workspace_id: ws.id,
+    department_id: departmentId,
+    parent_folder_id: idOrNull(form, "parent_folder_id"),
+    name,
+    description: str(form, "description") || null,
+    created_by: user!.id,
+  });
+  if (error) {
+    redirect(`/teams/${slug}?tab=projects&error=${encodeURIComponent(error.message)}`);
+  }
+  revalidatePath(`/teams/${slug}`);
+  redirect(`/teams/${slug}?tab=projects`);
+}
+
+export async function archiveFolder(form: FormData) {
+  const slug = str(form, "slug");
+  const supabase = await createClient();
+  await supabase
+    .from("pm_folders")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", str(form, "folder_id"));
+  revalidatePath(`/teams/${slug}`);
+  redirect(`/teams/${slug}?tab=projects`);
+}
+
+// --- Subtasks -----------------------------------------------------------------
+
+export async function addSubtask(form: FormData) {
+  const slug = str(form, "slug");
+  const parentId = str(form, "parent_task_id");
+  const title = str(form, "title");
+  const detail = `/teams/${slug}/tasks/${parentId}`;
+  if (!title) redirect(`${detail}?error=Titel+erforderlich`);
+
+  const parent = await getTask(parentId);
+  if (!parent) redirect(`${detail}?error=Aufgabe+nicht+gefunden`);
+  // One level of nesting like Wrike's task → subtask; no sub-subtasks.
+  if (parent.parent_task_id) {
+    redirect(`${detail}?error=Unteraufgaben+können+keine+eigenen+Unteraufgaben+haben`);
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { error } = await supabase.from("pm_tasks").insert({
+    workspace_id: parent.workspace_id,
+    owner_department_id: parent.owner_department_id,
+    parent_task_id: parent.id,
+    project_id: parent.project_id,
+    folder_id: parent.folder_id,
+    title,
+    status: "backlog",
+    priority: parent.priority,
+    source: "internal",
+    created_by: user!.id,
+  });
+  if (error) redirect(`${detail}?error=${encodeURIComponent(error.message)}`);
+  revalidatePath(detail);
+  redirect(detail);
+}
+
+// --- Custom item types ----------------------------------------------------------
+
+export async function createItemType(form: FormData) {
+  const name = str(form, "name");
+  if (!name) redirect(`/teams/settings?error=Name+erforderlich`);
+
+  // Field schema comes in as textarea lines: "key | Label | type[: opt1, opt2]"
+  const fields: PmItemTypeField[] = [];
+  for (const line of str(form, "fields_raw").split("\n")) {
+    const [rawKey, rawLabel, rawType] = line.split("|").map((s) => s?.trim());
+    if (!rawKey) continue;
+    const [typePart, optsPart] = (rawType ?? "text").split(":");
+    const type = ["text", "number", "date", "select"].includes(typePart?.trim())
+      ? (typePart.trim() as PmItemTypeField["type"])
+      : "text";
+    fields.push({
+      key: rawKey.toLowerCase().replace(/[^a-z0-9_]+/g, "_"),
+      label: rawLabel || rawKey,
+      type,
+      options:
+        type === "select" && optsPart
+          ? optsPart.split(",").map((o) => o.trim()).filter(Boolean)
+          : undefined,
+    });
+  }
+
+  const supabase = await createClient();
+  const ws = await getOrCreateWorkspace();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { error } = await supabase.from("pm_item_types").insert({
+    workspace_id: ws.id,
+    name,
+    icon: str(form, "icon") || "◆",
+    color: str(form, "color") || "#6b665d",
+    fields,
+    created_by: user!.id,
+  });
+  if (error) {
+    redirect(`/teams/settings?error=${encodeURIComponent(error.message)}`);
+  }
+  revalidatePath("/teams/settings");
+  redirect("/teams/settings?saved=1");
+}
+
+export async function deleteItemType(form: FormData) {
+  const supabase = await createClient();
+  await supabase
+    .from("pm_item_types")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", str(form, "item_type_id"));
+  revalidatePath("/teams/settings");
+  redirect("/teams/settings?saved=1");
+}
+
+// Save a task's custom-field values against its item type's schema. Only
+// keys defined in the schema are persisted.
+export async function saveCustomFields(form: FormData) {
+  const slug = str(form, "slug");
+  const taskId = str(form, "task_id");
+  const detail = `/teams/${slug}/tasks/${taskId}`;
+
+  const task = await getTask(taskId);
+  if (!task?.item_type_id) redirect(detail);
+  const itemType = await getItemType(task.item_type_id);
+  if (!itemType) redirect(detail);
+
+  const values: Record<string, string> = {};
+  for (const field of itemType.fields) {
+    const v = str(form, `cf_${field.key}`);
+    if (v) values[field.key] = v;
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("pm_tasks")
+    .update({ custom_fields: values })
+    .eq("id", taskId);
+  if (error) redirect(`${detail}?error=${encodeURIComponent(error.message)}`);
+  revalidatePath(detail);
+  redirect(detail);
+}
+
+// --- Cross-tagging ---------------------------------------------------------------
+
+export async function addCrossTag(form: FormData) {
+  const slug = str(form, "slug");
+  const taskId = str(form, "task_id");
+  const departmentId = str(form, "department_id");
+  const detail = `/teams/${slug}/tasks/${taskId}`;
+
+  const task = await getTask(taskId);
+  if (!task) redirect(`${detail}?error=Aufgabe+nicht+gefunden`);
+  if (departmentId === task.owner_department_id) {
+    redirect(`${detail}?error=Die+Aufgabe+lebt+bereits+in+dieser+Abteilung`);
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("pm_task_locations").insert({
+    task_id: taskId,
+    department_id: departmentId,
+    folder_id: idOrNull(form, "folder_id"),
+  });
+  if (error && !error.message.includes("duplicate")) {
+    redirect(`${detail}?error=${encodeURIComponent(error.message)}`);
+  }
+  revalidatePath(detail);
+  redirect(detail);
+}
+
+export async function removeCrossTag(form: FormData) {
+  const slug = str(form, "slug");
+  const taskId = str(form, "task_id");
+  const supabase = await createClient();
+  await supabase
+    .from("pm_task_locations")
+    .delete()
+    .eq("task_id", taskId)
+    .eq("department_id", str(form, "department_id"));
+  revalidatePath(`/teams/${slug}/tasks/${taskId}`);
+  redirect(`/teams/${slug}/tasks/${taskId}`);
+}
+
+// --- Automation rules ---------------------------------------------------------------
+
+export async function createAutomationRule(form: FormData) {
+  const name = str(form, "name");
+  const trigger = str(form, "trigger_status") as PmTaskStatus;
+  if (!name) redirect(`/teams/settings?error=Name+erforderlich`);
+  if (!VALID_STATUS.has(trigger)) {
+    redirect(`/teams/settings?error=Status+ungueltig`);
+  }
+
+  const actions: PmAutomationActions = {
+    assign_to: idOrNull(form, "assign_to"),
+    add_comment: str(form, "add_comment") || null,
+    notify_department: form.get("notify_department") === "on",
+  };
+
+  const supabase = await createClient();
+  const ws = await getOrCreateWorkspace();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { error } = await supabase.from("pm_automation_rules").insert({
+    workspace_id: ws.id,
+    department_id: idOrNull(form, "department_id"),
+    name,
+    trigger_status: trigger,
+    actions,
+    created_by: user!.id,
+  });
+  if (error) {
+    redirect(`/teams/settings?error=${encodeURIComponent(error.message)}`);
+  }
+  revalidatePath("/teams/settings");
+  redirect("/teams/settings?saved=1");
+}
+
+export async function toggleAutomationRule(form: FormData) {
+  const supabase = await createClient();
+  await supabase
+    .from("pm_automation_rules")
+    .update({ active: str(form, "active") === "true" })
+    .eq("id", str(form, "rule_id"));
+  revalidatePath("/teams/settings");
+  redirect("/teams/settings");
+}
+
+export async function deleteAutomationRule(form: FormData) {
+  const supabase = await createClient();
+  await supabase
+    .from("pm_automation_rules")
+    .delete()
+    .eq("id", str(form, "rule_id"));
+  revalidatePath("/teams/settings");
+  redirect("/teams/settings?saved=1");
+}
+
+// --- Blueprints ------------------------------------------------------------------------
+
+// Capture an existing task (incl. its subtask titles) as a reusable template.
+export async function createBlueprintFromTask(form: FormData) {
+  const slug = str(form, "slug");
+  const taskId = str(form, "task_id");
+  const detail = `/teams/${slug}/tasks/${taskId}`;
+
+  const task = await getTask(taskId);
+  if (!task) redirect(`${detail}?error=Aufgabe+nicht+gefunden`);
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: subs } = await supabase
+    .from("pm_tasks")
+    .select("title")
+    .eq("parent_task_id", taskId)
+    .is("deleted_at", null);
+
+  const { error } = await supabase.from("pm_blueprints").insert({
+    workspace_id: task.workspace_id,
+    department_id: task.owner_department_id,
+    name: str(form, "name") || task.title,
+    description: `Vorlage aus Aufgabe "${task.title}"`,
+    payload: {
+      title: task.title,
+      description: task.description,
+      priority: task.priority,
+      effort_estimate_hours: task.effort_estimate_hours,
+      item_type_id: task.item_type_id,
+      ai_mode: task.ai_mode,
+      subtasks: (subs ?? []).map((s) => s.title),
+    },
+    created_by: user!.id,
+  });
+  if (error) redirect(`${detail}?error=${encodeURIComponent(error.message)}`);
+  revalidatePath(detail);
+  redirect(`${detail}?saved=Vorlage+gespeichert`);
+}
+
+export async function deleteBlueprint(form: FormData) {
+  const supabase = await createClient();
+  await supabase
+    .from("pm_blueprints")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", str(form, "blueprint_id"));
+  revalidatePath("/teams/settings");
+  redirect("/teams/settings?saved=1");
+}
+
+// --- Request forms -----------------------------------------------------------------------
+
+export async function createRequestForm(form: FormData) {
+  const title = str(form, "title");
+  const targetDepartmentId = str(form, "target_department_id");
+  if (!title || !targetDepartmentId) {
+    redirect(`/teams/settings?error=Titel+und+Zielabteilung+erforderlich`);
+  }
+
+  // Same line format as item types: "key | Label | type[: options]"
+  const fields: PmRequestFormField[] = [];
+  for (const line of str(form, "fields_raw").split("\n")) {
+    const [rawKey, rawLabel, rawType, rawRequired] = line
+      .split("|")
+      .map((s) => s?.trim());
+    if (!rawKey) continue;
+    const [typePart, optsPart] = (rawType ?? "text").split(":");
+    const type = ["text", "textarea", "number", "date", "select"].includes(
+      typePart?.trim(),
+    )
+      ? (typePart.trim() as PmRequestFormField["type"])
+      : "text";
+    fields.push({
+      key: rawKey.toLowerCase().replace(/[^a-z0-9_]+/g, "_"),
+      label: rawLabel || rawKey,
+      type,
+      required: rawRequired === "pflicht",
+      options:
+        type === "select" && optsPart
+          ? optsPart.split(",").map((o) => o.trim()).filter(Boolean)
+          : undefined,
+    });
+  }
+
+  const supabase = await createClient();
+  const ws = await getOrCreateWorkspace();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const priority = str(form, "default_priority") as PmTaskPriority;
+  const { error } = await supabase.from("pm_request_forms").insert({
+    workspace_id: ws.id,
+    target_department_id: targetDepartmentId,
+    title,
+    description: str(form, "description") || null,
+    fields,
+    blueprint_id: idOrNull(form, "blueprint_id"),
+    default_priority: VALID_PRIORITY.has(priority) ? priority : "medium",
+    default_due_days: numOrNull(form, "default_due_days"),
+    created_by: user!.id,
+  });
+  if (error) {
+    redirect(`/teams/settings?error=${encodeURIComponent(error.message)}`);
+  }
+  revalidatePath("/teams/settings");
+  redirect("/teams/settings?saved=1");
+}
+
+export async function toggleRequestForm(form: FormData) {
+  const supabase = await createClient();
+  await supabase
+    .from("pm_request_forms")
+    .update({ active: str(form, "active") === "true" })
+    .eq("id", str(form, "form_id"));
+  revalidatePath("/teams/settings");
+  redirect("/teams/settings");
+}
+
+// Submission: routes the intake to the target department, computes the due
+// date, optionally instantiates the linked blueprint, and stores the answers
+// on the task (description + custom_fields).
+export async function submitRequestForm(form: FormData) {
+  const formId = str(form, "form_id");
+  const requestForm = await getRequestForm(formId);
+  if (!requestForm || !requestForm.active) {
+    redirect(`/teams?error=Formular+nicht+gefunden`);
+  }
+
+  const answers: Record<string, string> = {};
+  const lines: string[] = [];
+  for (const field of requestForm.fields) {
+    const v = str(form, `f_${field.key}`);
+    if (field.required && !v) {
+      redirect(
+        `/teams/forms/${formId}?error=${encodeURIComponent(`${field.label} ist erforderlich`)}`,
+      );
+    }
+    if (v) {
+      answers[field.key] = v;
+      lines.push(`${field.label}: ${v}`);
+    }
+  }
+
+  const supabase = await createClient();
+  const ws = await getOrCreateWorkspace();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const title =
+    str(form, "request_title") || `${requestForm.title} - Anfrage`;
+  const dueDate = requestForm.default_due_days
+    ? new Date(Date.now() + requestForm.default_due_days * 86400_000)
+        .toISOString()
+        .slice(0, 10)
+    : null;
+
+  let taskId: string;
+  if (requestForm.blueprint_id) {
+    const blueprint = await getBlueprint(requestForm.blueprint_id);
+    if (blueprint) {
+      taskId = await instantiateBlueprint({
+        blueprint,
+        workspaceId: ws.id,
+        departmentId: requestForm.target_department_id,
+        createdBy: user!.id,
+        titleOverride: title,
+      });
+      await supabase
+        .from("pm_tasks")
+        .update({
+          description: lines.join("\n") || null,
+          custom_fields: answers,
+          due_date: dueDate,
+          priority: requestForm.default_priority,
+        })
+        .eq("id", taskId);
+    } else {
+      taskId = await insertFormTask();
+    }
+  } else {
+    taskId = await insertFormTask();
+  }
+
+  async function insertFormTask(): Promise<string> {
+    const { data, error } = await supabase
+      .from("pm_tasks")
+      .insert({
+        workspace_id: ws.id,
+        owner_department_id: requestForm!.target_department_id,
+        title,
+        description: lines.join("\n") || null,
+        custom_fields: answers,
+        status: "backlog",
+        priority: requestForm!.default_priority,
+        source: "internal",
+        due_date: dueDate,
+        created_by: user!.id,
+      })
+      .select("id")
+      .single();
+    if (error || !data) {
+      redirect(
+        `/teams/forms/${formId}?error=${encodeURIComponent(error?.message ?? "Fehler")}`,
+      );
+    }
+    return data.id as string;
+  }
+
+  // Tell the receiving department a structured request landed.
+  const target = await getDepartmentById(requestForm.target_department_id);
+  if (target) {
+    const recipients = await resolveDepartmentRecipients(target.id, ws.id);
+    await notify({
+      workspaceId: ws.id,
+      recipients,
+      type: "request_created",
+      title: `Neue Anfrage über Formular "${requestForm.title}": ${title}`,
+      body: lines.join("\n") || null,
+      link: `/teams/${target.slug}/tasks/${taskId}`,
+      taskId,
+    });
+  }
+
+  redirect(`/teams/forms/${formId}?submitted=1`);
+}
+
+// --- Timesheets -----------------------------------------------------------------------------
+
+export async function logTime(form: FormData) {
+  const slug = str(form, "slug");
+  const taskId = str(form, "task_id");
+  const detail = `/teams/${slug}/tasks/${taskId}`;
+  const hours = numOrNull(form, "hours");
+  if (!hours || hours <= 0) redirect(`${detail}?error=Stunden+erforderlich`);
+
+  const task = await getTask(taskId);
+  if (!task) redirect(`${detail}?error=Aufgabe+nicht+gefunden`);
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { error } = await supabase.from("pm_time_entries").insert({
+    workspace_id: task.workspace_id,
+    task_id: taskId,
+    user_id: user!.id,
+    hours,
+    entry_date: str(form, "entry_date") || new Date().toISOString().slice(0, 10),
+    note: str(form, "note") || null,
+  });
+  if (error) redirect(`${detail}?error=${encodeURIComponent(error.message)}`);
+  revalidatePath(detail);
+  redirect(detail);
+}
+
+// --- Approvals -------------------------------------------------------------------------------
+
+export async function requestApproval(form: FormData) {
+  const slug = str(form, "slug");
+  const taskId = str(form, "task_id");
+  const approverId = str(form, "approver_id");
+  const detail = `/teams/${slug}/tasks/${taskId}`;
+  if (!approverId) redirect(`${detail}?error=Freigebende+Person+erforderlich`);
+
+  const task = await getTask(taskId);
+  if (!task) redirect(`${detail}?error=Aufgabe+nicht+gefunden`);
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { error } = await supabase.from("pm_approvals").insert({
+    workspace_id: task.workspace_id,
+    task_id: taskId,
+    approver_id: approverId,
+    note: str(form, "note") || null,
+    created_by: user!.id,
+  });
+  if (error) redirect(`${detail}?error=${encodeURIComponent(error.message)}`);
+
+  // The approver gets a direct notification with a deep link.
+  const { data: member } = await supabase
+    .from("pm_workspace_members")
+    .select("user_id, email")
+    .eq("workspace_id", task.workspace_id)
+    .eq("user_id", approverId)
+    .maybeSingle();
+  if (member) {
+    await notify({
+      workspaceId: task.workspace_id,
+      recipients: [{ user_id: member.user_id, email: member.email ?? null }],
+      type: "comment_added",
+      title: `Freigabe angefragt: ${task.title}`,
+      body: str(form, "note") || null,
+      link: detail,
+      taskId,
+    });
+  }
+
+  revalidatePath(detail);
+  redirect(detail);
+}
+
+export async function decideApproval(form: FormData) {
+  const slug = str(form, "slug");
+  const taskId = str(form, "task_id");
+  const approvalId = str(form, "approval_id");
+  const decision = str(form, "decision");
+  const detail = taskId ? `/teams/${slug}/tasks/${taskId}` : "/teams/dashboard";
+  if (decision !== "approved" && decision !== "rejected") redirect(detail);
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // Only the named approver can decide — that is what makes the trail an
+  // audit trail. RLS scopes to the workspace; this narrows to the person.
+  const { error } = await supabase
+    .from("pm_approvals")
+    .update({
+      status: decision,
+      decision_comment: str(form, "decision_comment") || null,
+      decided_at: new Date().toISOString(),
+    })
+    .eq("id", approvalId)
+    .eq("approver_id", user!.id)
+    .eq("status", "pending");
+  if (error) redirect(`${detail}?error=${encodeURIComponent(error.message)}`);
+
+  revalidatePath(detail);
+  revalidatePath("/teams/dashboard");
+  redirect(detail);
 }
 
 // --- Demo seed ------------------------------------------------------------

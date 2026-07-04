@@ -15,19 +15,39 @@ import { listDocuments } from "@/lib/pm/documents";
 import { listProjects } from "@/lib/pm/projects";
 import { listFolders } from "@/lib/pm/sharepoint";
 import {
+  listCrossTaggedTasks,
+  listFoldersForDepartment,
+  listItemTypes,
+} from "@/lib/pm/structure";
+import { listBlueprints } from "@/lib/pm/automations";
+import { departmentWorkload, loggedHoursByTask } from "@/lib/pm/workload";
+import { listWorkspaceMembers } from "@/lib/pm/workspace";
+import {
   AI_MODE_LABEL,
   BOARD_COLUMNS,
   DOC_KIND_LABEL,
   FILING_STATUS_LABEL,
   PRIORITY_LABEL,
   TASK_STATUS_LABEL,
+  VIEW_LABEL,
 } from "@/lib/pm/types";
-import type { PmProject, PmTask, PmTaskPriority } from "@/lib/pm/types";
+import type {
+  PmProject,
+  PmTask,
+  PmTaskPriority,
+  PmView,
+} from "@/lib/pm/types";
 import { StatusSelect } from "../_components/status-select";
 import { AiModeSelect } from "../_components/ai-mode-select";
+import { ListView } from "./_views/list-view";
+import { GanttView } from "./_views/gantt-view";
+import { CalendarView } from "./_views/calendar-view";
+import { WorkloadView } from "./_views/workload-view";
 import {
   addDocument,
+  archiveFolder,
   confirmDocumentFiling,
+  createFolder,
   createInternalTask,
   createProject,
   rerunFilingSuggestion,
@@ -42,16 +62,20 @@ type Tab =
   | "projects"
   | "incoming"
   | "outgoing"
+  | "workload"
   | "knowledge"
   | "settings";
 const TABS: { id: Tab; label: string }[] = [
-  { id: "board", label: "Board" },
-  { id: "projects", label: "Projekte" },
+  { id: "board", label: "Arbeit" },
+  { id: "projects", label: "Projekte & Ordner" },
   { id: "incoming", label: "Posteingang" },
   { id: "outgoing", label: "Ausgehend" },
+  { id: "workload", label: "Auslastung" },
   { id: "knowledge", label: "Wissen" },
   { id: "settings", label: "Einstellungen" },
 ];
+
+const VIEWS: PmView[] = ["board", "list", "gantt", "calendar"];
 
 const PRIORITY_COLOR: Record<PmTaskPriority, string> = {
   low: "var(--ink-4)",
@@ -80,11 +104,17 @@ export default async function DepartmentHub({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ tab?: string; error?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    error?: string;
+    view?: string;
+    month?: string;
+  }>;
 }) {
   const { slug } = await params;
-  const { tab: tabParam, error } = await searchParams;
+  const { tab: tabParam, error, view: viewParam, month } = await searchParams;
   const tab = (TABS.find((t) => t.id === tabParam)?.id ?? "board") as Tab;
+  const view = (VIEWS.includes(viewParam as PmView) ? viewParam : "board") as PmView;
 
   const ws = await getOrCreateWorkspace();
   const dept = await getDepartmentBySlug(ws.id, slug);
@@ -133,8 +163,23 @@ export default async function DepartmentHub({
         </p>
       )}
 
-      {tab === "board" && <Board slug={slug} departmentId={dept.id} />}
+      {tab === "board" && (
+        <WorkArea
+          slug={slug}
+          departmentId={dept.id}
+          workspaceId={ws.id}
+          view={view}
+          month={month}
+        />
+      )}
       {tab === "projects" && <Projects slug={slug} departmentId={dept.id} />}
+      {tab === "workload" && (
+        <Workload
+          workspaceId={ws.id}
+          departmentId={dept.id}
+          capacity={dept.sprint_capacity_hours}
+        />
+      )}
       {tab === "incoming" && (
         <Incoming
           slug={slug}
@@ -169,25 +214,76 @@ export default async function DepartmentHub({
   );
 }
 
-// --- Board ----------------------------------------------------------------
+// --- Work area (Board / Liste / Gantt / Kalender) ---------------------------
 
-async function Board({
+async function WorkArea({
   slug,
   departmentId,
+  workspaceId,
+  view,
+  month,
 }: {
   slug: string;
   departmentId: string;
+  workspaceId: string;
+  view: PmView;
+  month?: string;
 }) {
-  const [tasks, projects] = await Promise.all([
-    listBoardTasks(departmentId),
-    listProjects(departmentId),
-  ]);
+  const [ownTasks, crossTagged, projects, folders, itemTypes, members, blueprints] =
+    await Promise.all([
+      listBoardTasks(departmentId),
+      listCrossTaggedTasks(departmentId),
+      listProjects(departmentId),
+      listFoldersForDepartment(departmentId),
+      listItemTypes(workspaceId),
+      listWorkspaceMembers(workspaceId),
+      listBlueprints(workspaceId),
+    ]);
+
+  // Cross-tagged tasks appear alongside the department's own (Wrike
+  // cross-tagging: same row, several locations). Subtasks stay on the
+  // parent's detail page instead of cluttering the board.
+  const seen = new Set(ownTasks.map((t) => t.id));
+  const tasks = [
+    ...ownTasks,
+    ...crossTagged.filter((t) => !seen.has(t.id)),
+  ].filter((t) => !t.parent_task_id);
+  const crossTaggedIds = new Set(crossTagged.map((t) => t.id));
+
+  const loggedHours = await loggedHoursByTask(tasks.map((t) => t.id));
+  const assigneeNames: Record<string, string> = {};
+  for (const m of members) {
+    assigneeNames[m.user_id] = m.display_name || m.user_id.slice(0, 8);
+  }
   const projectName = (id: string | null) =>
     id ? projects.find((p) => p.id === id)?.name ?? null : null;
   const byStatus = (status: string) => tasks.filter((t) => t.status === status);
 
   return (
     <div className="space-y-6">
+      {/* View switcher — same data, four layouts. */}
+      <div className="flex flex-wrap items-center gap-1">
+        {VIEWS.map((v) => (
+          <Link
+            key={v}
+            href={`/teams/${slug}?tab=board&view=${v}`}
+            className={`rounded-lg px-3 py-1.5 text-sm ${
+              v === view
+                ? "bg-action font-medium text-paper"
+                : "border border-rule text-ink-3 hover:border-action hover:text-ink-1"
+            }`}
+          >
+            {VIEW_LABEL[v]}
+          </Link>
+        ))}
+        <a
+          href={`/api/pm/reports/tasks?department=${departmentId}`}
+          className="ml-auto rounded-lg border border-rule px-3 py-1.5 text-sm text-ink-3 hover:border-action hover:text-ink-1"
+        >
+          CSV-Report ↓
+        </a>
+      </div>
+
       <details className="rounded-xl border border-rule bg-paper-2 p-4">
         <summary className="cursor-pointer text-sm font-medium">
           + Neue interne Aufgabe
@@ -195,10 +291,28 @@ async function Board({
         <form action={createInternalTask} className="mt-3 grid max-w-xl gap-3">
           <input type="hidden" name="department_id" value={departmentId} />
           <input type="hidden" name="slug" value={slug} />
+          {blueprints.length > 0 && (
+            <label className="text-sm">
+              <span className="text-ink-3">
+                Vorlage (optional - füllt Felder und Unteraufgaben vor)
+              </span>
+              <select
+                name="blueprint_id"
+                defaultValue=""
+                className="mt-1 w-full rounded-lg border border-rule bg-paper px-3 py-2 text-sm"
+              >
+                <option value="">Keine Vorlage</option>
+                {blueprints.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <input
             name="title"
-            required
-            placeholder="Titel"
+            placeholder="Titel (bei Vorlage optional)"
             className="rounded-lg border border-rule bg-paper px-3 py-2 text-sm"
           />
           <textarea
@@ -221,14 +335,61 @@ async function Board({
               ))}
             </select>
             <select
-              name="ai_mode"
-              defaultValue="inherit"
+              name="folder_id"
+              defaultValue=""
               className="rounded-lg border border-rule bg-paper px-3 py-2 text-sm"
             >
-              <option value="inherit">KI: Erbt</option>
-              <option value="on">KI: An</option>
-              <option value="off">KI: Aus</option>
+              <option value="">Kein Ordner</option>
+              {folders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
             </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <select
+              name="item_type_id"
+              defaultValue=""
+              className="rounded-lg border border-rule bg-paper px-3 py-2 text-sm"
+            >
+              <option value="">Typ: Aufgabe</option>
+              {itemTypes.map((it) => (
+                <option key={it.id} value={it.id}>
+                  Typ: {it.icon} {it.name}
+                </option>
+              ))}
+            </select>
+            <select
+              name="assignee_id"
+              defaultValue=""
+              className="rounded-lg border border-rule bg-paper px-3 py-2 text-sm"
+            >
+              <option value="">Nicht zugewiesen</option>
+              {members.map((m) => (
+                <option key={m.user_id} value={m.user_id}>
+                  {m.display_name || m.user_id.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="text-xs text-ink-4">
+              Start
+              <input
+                name="start_date"
+                type="date"
+                className="mt-0.5 block w-full rounded-lg border border-rule bg-paper px-3 py-2 text-sm text-ink-1"
+              />
+            </label>
+            <label className="text-xs text-ink-4">
+              Fällig
+              <input
+                name="due_date"
+                type="date"
+                className="mt-0.5 block w-full rounded-lg border border-rule bg-paper px-3 py-2 text-sm text-ink-1"
+              />
+            </label>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <input
@@ -249,11 +410,15 @@ async function Board({
               <option value="high">Hoch</option>
               <option value="urgent">Dringend</option>
             </select>
-            <input
-              name="due_date"
-              type="date"
+            <select
+              name="ai_mode"
+              defaultValue="inherit"
               className="rounded-lg border border-rule bg-paper px-3 py-2 text-sm"
-            />
+            >
+              <option value="inherit">KI: Erbt</option>
+              <option value="on">KI: An</option>
+              <option value="off">KI: Aus</option>
+            </select>
           </div>
           <button
             type="submit"
@@ -264,7 +429,45 @@ async function Board({
         </form>
       </details>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+      {view === "list" && (
+        <ListView
+          slug={slug}
+          tasks={tasks}
+          folders={folders}
+          itemTypes={itemTypes}
+          loggedHours={loggedHours}
+          assigneeNames={assigneeNames}
+        />
+      )}
+      {view === "gantt" && <GanttView slug={slug} tasks={tasks} />}
+      {view === "calendar" && (
+        <CalendarView slug={slug} tasks={tasks} month={month} tab="board" />
+      )}
+      {view === "board" && (
+        <BoardColumns
+          slug={slug}
+          byStatus={byStatus}
+          projectName={projectName}
+          crossTaggedIds={crossTaggedIds}
+        />
+      )}
+    </div>
+  );
+}
+
+function BoardColumns({
+  slug,
+  byStatus,
+  projectName,
+  crossTaggedIds,
+}: {
+  slug: string;
+  byStatus: (status: string) => PmTask[];
+  projectName: (id: string | null) => string | null;
+  crossTaggedIds: Set<string>;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
         {BOARD_COLUMNS.map((status) => {
           const col = byStatus(status);
           return (
@@ -300,6 +503,11 @@ async function Board({
                         )}
                       </div>
                     )}
+                    {crossTaggedIds.has(t.id) && (
+                      <span className="mt-1.5 inline-block rounded bg-signal-soft px-1.5 py-0.5 text-[10px] text-ink-3">
+                        ⇄ Cross-Tag
+                      </span>
+                    )}
                     <div className="mt-2 flex items-center justify-between">
                       <span className="text-[11px] text-ink-4">
                         {fmtHours(t.effort_estimate_hours)}
@@ -321,7 +529,6 @@ async function Board({
             </div>
           );
         })}
-      </div>
     </div>
   );
 }
@@ -417,8 +624,147 @@ async function Projects({
           ))}
         </div>
       )}
+
+      <FoldersSection slug={slug} departmentId={departmentId} />
     </div>
   );
+}
+
+// Folders group tasks without a deadline (Wrike hierarchy: space → folder →
+// task). Nesting one level via parent folder.
+async function FoldersSection({
+  slug,
+  departmentId,
+}: {
+  slug: string;
+  departmentId: string;
+}) {
+  const folders = await listFoldersForDepartment(departmentId);
+  const children = new Map<string, typeof folders>();
+  const roots = folders.filter((f) => {
+    if (!f.parent_folder_id) return true;
+    children.set(f.parent_folder_id, [
+      ...(children.get(f.parent_folder_id) ?? []),
+      f,
+    ]);
+    return false;
+  });
+
+  return (
+    <div className="space-y-3 border-t border-rule pt-5">
+      <h2 className="text-sm font-semibold">Ordner</h2>
+      <p className="text-xs text-ink-4">
+        Ordner gruppieren Aufgaben ohne festes Enddatum. In der Listen-Ansicht
+        werden Aufgaben nach Ordner gruppiert.
+      </p>
+
+      <details className="rounded-xl border border-rule bg-paper-2 p-4">
+        <summary className="cursor-pointer text-sm font-medium">
+          + Neuer Ordner
+        </summary>
+        <form action={createFolder} className="mt-3 grid max-w-xl gap-3">
+          <input type="hidden" name="department_id" value={departmentId} />
+          <input type="hidden" name="slug" value={slug} />
+          <input
+            name="name"
+            required
+            placeholder="Ordnername"
+            className="rounded-lg border border-rule bg-paper px-3 py-2 text-sm"
+          />
+          <select
+            name="parent_folder_id"
+            defaultValue=""
+            className="rounded-lg border border-rule bg-paper px-3 py-2 text-sm"
+          >
+            <option value="">Oberste Ebene</option>
+            {roots.map((f) => (
+              <option key={f.id} value={f.id}>
+                In: {f.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            className="justify-self-start rounded-lg bg-action px-3 py-2 text-sm font-medium text-paper hover:opacity-90"
+          >
+            Ordner anlegen
+          </button>
+        </form>
+      </details>
+
+      {roots.length === 0 ? (
+        <p className="text-sm text-ink-3">Noch keine Ordner.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {roots.map((f) => (
+            <li key={f.id}>
+              <FolderRow slug={slug} folder={f} depth={0} />
+              {(children.get(f.id) ?? []).map((c) => (
+                <FolderRow key={c.id} slug={slug} folder={c} depth={1} />
+              ))}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function FolderRow({
+  slug,
+  folder,
+  depth,
+}: {
+  slug: string;
+  folder: { id: string; name: string; description: string | null };
+  depth: number;
+}) {
+  return (
+    <div
+      className="flex items-center justify-between rounded-lg border border-rule bg-paper px-3 py-2"
+      style={{ marginLeft: depth * 24 }}
+    >
+      <div className="min-w-0">
+        <span className="text-sm">📁 {folder.name}</span>
+        {folder.description && (
+          <span className="ml-2 text-xs text-ink-4">{folder.description}</span>
+        )}
+      </div>
+      <form action={archiveFolder}>
+        <input type="hidden" name="folder_id" value={folder.id} />
+        <input type="hidden" name="slug" value={slug} />
+        <button
+          type="submit"
+          className="text-xs text-ink-4 hover:text-bad"
+          title="Ordner archivieren (Aufgaben bleiben erhalten)"
+        >
+          Archivieren
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// --- Workload ---------------------------------------------------------------
+
+async function Workload({
+  workspaceId,
+  departmentId,
+  capacity,
+}: {
+  workspaceId: string;
+  departmentId: string;
+  capacity: number | null;
+}) {
+  const [ownTasks, crossTagged] = await Promise.all([
+    listBoardTasks(departmentId),
+    listCrossTaggedTasks(departmentId),
+  ]);
+  const seen = new Set(ownTasks.map((t) => t.id));
+  const tasks = [...ownTasks, ...crossTagged.filter((t) => !seen.has(t.id))];
+  const workload = await departmentWorkload(workspaceId, tasks);
+
+  return <WorkloadView workload={workload} capacityHours={capacity} />;
 }
 
 // --- Incoming (inbox) -----------------------------------------------------

@@ -71,6 +71,10 @@ export interface PmTask {
   owner_department_id: string;
   requester_department_id: string | null;
   project_id: string | null;
+  folder_id: string | null;
+  parent_task_id: string | null;
+  item_type_id: string | null;
+  custom_fields: Record<string, string>;
   ai_mode: PmAiMode;
   title: string;
   description: string | null;
@@ -79,6 +83,7 @@ export interface PmTask {
   source: PmTaskSource;
   effort_estimate_hours: number | null;
   sprint: string | null;
+  start_date: string | null;
   due_date: string | null;
   assignee_id: string | null;
   created_by: string;
@@ -87,6 +92,145 @@ export interface PmTask {
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface PmFolder {
+  id: string;
+  workspace_id: string;
+  department_id: string;
+  parent_folder_id: string | null;
+  name: string;
+  description: string | null;
+  color: string;
+  position: number;
+  created_by: string;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Field schema of a custom item type (Wrike "Custom Item Types").
+export interface PmItemTypeField {
+  key: string;
+  label: string;
+  type: "text" | "number" | "date" | "select";
+  options?: string[];
+  required?: boolean;
+}
+
+export interface PmItemType {
+  id: string;
+  workspace_id: string;
+  name: string;
+  icon: string;
+  color: string;
+  fields: PmItemTypeField[];
+  created_by: string;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PmTaskLocation {
+  task_id: string;
+  department_id: string;
+  folder_id: string | null;
+  created_at: string;
+}
+
+export interface PmAutomationActions {
+  assign_to?: string | null;
+  add_comment?: string | null;
+  notify_department?: boolean;
+}
+
+export interface PmAutomationRule {
+  id: string;
+  workspace_id: string;
+  department_id: string | null;
+  name: string;
+  trigger_status: PmTaskStatus;
+  actions: PmAutomationActions;
+  active: boolean;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PmBlueprintPayload {
+  title?: string;
+  description?: string | null;
+  priority?: PmTaskPriority;
+  effort_estimate_hours?: number | null;
+  item_type_id?: string | null;
+  ai_mode?: PmAiMode;
+  due_days?: number | null;
+  subtasks?: string[];
+}
+
+export interface PmBlueprint {
+  id: string;
+  workspace_id: string;
+  department_id: string | null;
+  name: string;
+  description: string | null;
+  payload: PmBlueprintPayload;
+  created_by: string;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PmRequestFormField {
+  key: string;
+  label: string;
+  type: "text" | "textarea" | "number" | "date" | "select";
+  required?: boolean;
+  options?: string[];
+}
+
+export interface PmRequestForm {
+  id: string;
+  workspace_id: string;
+  target_department_id: string;
+  title: string;
+  description: string | null;
+  fields: PmRequestFormField[];
+  blueprint_id: string | null;
+  default_priority: PmTaskPriority;
+  default_due_days: number | null;
+  active: boolean;
+  created_by: string;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PmTimeEntry {
+  id: string;
+  workspace_id: string;
+  task_id: string;
+  user_id: string;
+  hours: number;
+  entry_date: string;
+  note: string | null;
+  created_at: string;
+}
+
+export type PmApprovalStatus = "pending" | "approved" | "rejected";
+
+export interface PmApproval {
+  id: string;
+  workspace_id: string;
+  task_id: string | null;
+  document_id: string | null;
+  approver_id: string;
+  status: PmApprovalStatus;
+  note: string | null;
+  decision_comment: string | null;
+  decided_at: string | null;
+  created_by: string;
+  created_at: string;
 }
 
 export interface PmTaskBriefing {
@@ -201,6 +345,21 @@ export const AI_MODE_LABEL: Record<PmAiMode, string> = {
   inherit: "Erbt",
   on: "An",
   off: "Aus",
+};
+
+export const APPROVAL_STATUS_LABEL: Record<PmApprovalStatus, string> = {
+  pending: "Ausstehend",
+  approved: "Freigegeben",
+  rejected: "Abgelehnt",
+};
+
+// Views available on the department work area (Wrike-style multi-view).
+export type PmView = "board" | "list" | "gantt" | "calendar";
+export const VIEW_LABEL: Record<PmView, string> = {
+  board: "Board",
+  list: "Liste",
+  gantt: "Gantt",
+  calendar: "Kalender",
 };
 
 // Resolve whether AI is effectively enabled for an item, walking the
