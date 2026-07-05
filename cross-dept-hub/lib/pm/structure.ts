@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { isActiveStatus } from "./types";
 import type { PmFolder, PmItemType, PmTask, PmTaskLocation } from "./types";
 
 // Structural reads: folders, custom item types, subtasks, cross-tag
@@ -89,7 +90,8 @@ export async function subtaskCounts(
     const pid = row.parent_task_id as string;
     out[pid] = out[pid] ?? { done: 0, total: 0 };
     out[pid].total += 1;
-    if (row.status === "done" || row.status === "archived") out[pid].done += 1;
+    // Wrike counts completed, deferred and cancelled subtasks as settled.
+    if (!isActiveStatus(row.status as PmTask["status"])) out[pid].done += 1;
   }
   return out;
 }

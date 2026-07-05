@@ -6,6 +6,7 @@ import { getDepartmentBySlug, getDepartmentMap } from "@/lib/pm/departments";
 import {
   getLatestBriefing,
   getTask,
+  listBoardTasks,
   listComments,
   listDependencies,
   listReminders,
@@ -22,6 +23,8 @@ import { listTimeEntries, sumHours } from "@/lib/pm/workload";
 import { listApprovalsForTask } from "@/lib/pm/approvals";
 import {
   APPROVAL_STATUS_LABEL,
+  DEPENDENCY_TYPE_LABEL,
+  durationDays,
   PRIORITY_LABEL,
   TASK_STATUS_LABEL,
 } from "@/lib/pm/types";
@@ -29,6 +32,7 @@ import { StatusSelect } from "../../../_components/status-select";
 import {
   addComment,
   addCrossTag,
+  addDependency,
   addReminder,
   addSubtask,
   createBlueprintFromTask,
@@ -36,6 +40,7 @@ import {
   decideBriefing,
   logTime,
   removeCrossTag,
+  removeDependency,
   requestApproval,
   runBriefing,
   saveCustomFields,
@@ -98,6 +103,12 @@ export default async function TaskDetail({
     listItemTypes(ws.id),
   ]);
   const itemType = task.item_type_id ? await getItemType(task.item_type_id) : null;
+  // Candidates for the dependency picker: the department's other tasks.
+  const deptTasks = (await listBoardTasks(task.owner_department_id)).filter(
+    (t) =>
+      t.id !== task.id && !deps.some((d) => d.task.id === t.id),
+  );
+  const plannedDuration = durationDays(task.start_date, task.due_date);
 
   const memberName = (id: string | null) => {
     if (!id) return "—";
@@ -182,6 +193,12 @@ export default async function TaskDetail({
           </Badge>
         )}
         {task.assignee_id && <Badge>Zugewiesen: {memberName(task.assignee_id)}</Badge>}
+        {task.start_date && task.due_date && (
+          <Badge>
+            {task.start_date} → {task.due_date}
+            {plannedDuration ? ` (${plannedDuration}d)` : ""}
+          </Badge>
+        )}
         {task.accepted_into_sprint && <Badge>im Sprint</Badge>}
         <Badge>KI: {aiEnabled ? "aktiv" : "aus"}</Badge>
       </div>
@@ -443,6 +460,24 @@ export default async function TaskDetail({
                 </select>
               </label>
             </div>
+            <div className="grid grid-cols-2 items-end gap-3">
+              <label>
+                <span className="text-ink-3">
+                  Dauer (Tage) - überschreibt das Fälligkeitsdatum
+                </span>
+                <input
+                  name="duration_days"
+                  type="number"
+                  min="1"
+                  placeholder={plannedDuration ? `aktuell ${plannedDuration}d` : "z.B. 5"}
+                  className="mt-1 w-full rounded-lg border border-rule bg-paper px-3 py-2"
+                />
+              </label>
+              <label className="flex items-center gap-2 pb-2 text-ink-3">
+                <input type="checkbox" name="working_days_only" defaultChecked />
+                Nur Arbeitstage
+              </label>
+            </div>
             <label className="flex items-center gap-2 text-ink-3">
               <input
                 type="checkbox"
@@ -459,28 +494,71 @@ export default async function TaskDetail({
             </button>
           </form>
 
-          {deps.length > 0 && (
-            <div className="mt-4 border-t border-rule pt-3">
-              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-ink-4">
-                Abhängig von
-              </p>
-              <ul className="space-y-1 text-sm">
+          <div className="mt-4 border-t border-rule pt-3">
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-ink-4">
+              Abhängig von
+            </p>
+            {deps.length > 0 && (
+              <ul className="mb-2 space-y-1 text-sm">
                 {deps.map((d) => (
-                  <li key={d.id}>
+                  <li key={d.task.id} className="flex items-center justify-between">
                     <Link
-                      href={`/teams/${slug}/tasks/${d.id}`}
+                      href={`/teams/${slug}/tasks/${d.task.id}`}
                       className="text-ink-2 hover:text-action"
                     >
-                      {d.title}{" "}
+                      {d.task.title}{" "}
                       <span className="text-xs text-ink-4">
-                        ({TASK_STATUS_LABEL[d.status]})
+                        ({TASK_STATUS_LABEL[d.task.status]} · {DEPENDENCY_TYPE_LABEL[d.type]})
                       </span>
                     </Link>
+                    <form action={removeDependency}>
+                      <input type="hidden" name="task_id" value={task.id} />
+                      <input type="hidden" name="slug" value={slug} />
+                      <input type="hidden" name="depends_on_task_id" value={d.task.id} />
+                      <button type="submit" className="text-xs text-ink-4 hover:text-bad">
+                        Entfernen
+                      </button>
+                    </form>
                   </li>
                 ))}
               </ul>
-            </div>
-          )}
+            )}
+            {deptTasks.length > 0 && (
+              <form action={addDependency} className="flex gap-2 text-sm">
+                <input type="hidden" name="task_id" value={task.id} />
+                <input type="hidden" name="slug" value={slug} />
+                <select
+                  name="depends_on_task_id"
+                  required
+                  className="min-w-0 flex-1 rounded-lg border border-rule bg-paper px-2 py-1.5 text-xs"
+                >
+                  {deptTasks.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.title}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  name="dependency_type"
+                  defaultValue="FS"
+                  className="rounded-lg border border-rule bg-paper px-2 py-1.5 text-xs"
+                  title="Abhängigkeitstyp (Wrike: FS/SS/FF/SF)"
+                >
+                  {(["FS", "SS", "FF", "SF"] as const).map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="submit"
+                  className="rounded-lg border border-rule px-2 py-1.5 text-xs font-medium hover:border-action"
+                >
+                  + Vorgänger
+                </button>
+              </form>
+            )}
+          </div>
         </section>
 
         {/* Reminders */}

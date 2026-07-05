@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { StatusSelect } from "../../_components/status-select";
 import {
+  isActiveStatus,
   PRIORITY_LABEL,
   TASK_STATUS_LABEL,
 } from "@/lib/pm/types";
@@ -99,7 +100,7 @@ function FolderGroup({
       {tasks.map((t) => {
         const type = t.item_type_id ? typeOf.get(t.item_type_id) : undefined;
         const overdue =
-          t.due_date && t.due_date < today && t.status !== "done";
+          t.due_date && t.due_date < today && isActiveStatus(t.status);
         return (
           <tr key={t.id} className="border-b border-rule-soft last:border-0">
             <td className="px-3 py-2">

@@ -26,9 +26,17 @@ import {
 import { getItemType } from "@/lib/pm/structure";
 import { getRequestForm } from "@/lib/pm/forms";
 import {
+  notifyAssigned,
+  notifyMentions,
+  runCompletionSignals,
+} from "@/lib/pm/signals";
+import {
+  addDurationDays,
+  isCompletedStatus,
   TASK_STATUS_LABEL,
   type PmAiMode,
   type PmAutomationActions,
+  type PmDependencyType,
   type PmDocKind,
   type PmItemTypeField,
   type PmRequestFormField,
@@ -43,8 +51,11 @@ const VALID_STATUS = new Set<PmTaskStatus>([
   "blocked",
   "review",
   "done",
+  "deferred",
+  "cancelled",
   "archived",
 ]);
+const VALID_DEP_TYPE = new Set<PmDependencyType>(["FS", "SS", "FF", "SF"]);
 const VALID_PRIORITY = new Set<PmTaskPriority>([
   "low",
   "medium",
@@ -233,25 +244,40 @@ export async function createInternalTask(form: FormData) {
   if (!title) redirect(`/teams/${slug}?error=Titel+erforderlich`);
 
   const priority = str(form, "priority") as PmTaskPriority;
-  const { error } = await supabase.from("pm_tasks").insert({
-    workspace_id: ws.id,
-    owner_department_id: departmentId,
-    project_id: idOrNull(form, "project_id"),
-    folder_id: idOrNull(form, "folder_id"),
-    item_type_id: idOrNull(form, "item_type_id"),
-    assignee_id: idOrNull(form, "assignee_id"),
-    ai_mode: aiMode(form, "ai_mode"),
-    title,
-    description: str(form, "description") || null,
-    status: "backlog",
-    priority: VALID_PRIORITY.has(priority) ? priority : "medium",
-    source: "internal",
-    effort_estimate_hours: numOrNull(form, "effort_estimate_hours"),
-    start_date: str(form, "start_date") || null,
-    due_date: str(form, "due_date") || null,
-    created_by: user!.id,
-  });
+  const assigneeId = idOrNull(form, "assignee_id");
+  const { data: created, error } = await supabase
+    .from("pm_tasks")
+    .insert({
+      workspace_id: ws.id,
+      owner_department_id: departmentId,
+      project_id: idOrNull(form, "project_id"),
+      folder_id: idOrNull(form, "folder_id"),
+      item_type_id: idOrNull(form, "item_type_id"),
+      assignee_id: assigneeId,
+      ai_mode: aiMode(form, "ai_mode"),
+      title,
+      description: str(form, "description") || null,
+      status: "backlog",
+      priority: VALID_PRIORITY.has(priority) ? priority : "medium",
+      source: "internal",
+      effort_estimate_hours: numOrNull(form, "effort_estimate_hours"),
+      start_date: str(form, "start_date") || null,
+      due_date: str(form, "due_date") || null,
+      created_by: user!.id,
+    })
+    .select("id")
+    .single();
   if (error) redirect(`/teams/${slug}?error=${encodeURIComponent(error.message)}`);
+
+  // Wrike-style inbox event: being assigned notifies you.
+  if (created && assigneeId) {
+    await notifyAssigned(
+      { id: created.id, workspace_id: ws.id, title, owner_department_id: departmentId },
+      assigneeId,
+      user!.id,
+      `/teams/${slug}/tasks/${created.id}`,
+    );
+  }
 
   revalidatePath(`/teams/${slug}`);
   redirect(`/teams/${slug}`);
@@ -290,6 +316,12 @@ export async function updateTaskStatus(form: FormData) {
   // no AI; best-effort by design.
   await applyAutomations(taskId, status);
 
+  // Wrike-Bot signals: entering the Completed group may unblock successors
+  // ("ready to start") and settle a parent's subtasks ("review ready").
+  if (isCompletedStatus(status)) {
+    await runCompletionSignals(taskId);
+  }
+
   // Status update on a cross-department request → tell the requester.
   const task = await getTask(taskId);
   if (task?.source === "cross_dept" && task.requester_department_id) {
@@ -320,12 +352,25 @@ export async function updateTaskDetails(form: FormData) {
   const slug = str(form, "slug");
   const taskId = str(form, "task_id");
   const supabase = await createClient();
+  const before = await getTask(taskId);
+
+  const startDate = str(form, "start_date") || null;
+  let dueDate = str(form, "due_date") || null;
+
+  // Wrike duration semantics: with a start date and a duration, the due
+  // date is start + N days ("Working Days Only" skips weekends). An explicit
+  // duration wins over the due-date field.
+  const duration = numOrNull(form, "duration_days");
+  const workingDaysOnly = form.get("working_days_only") === "on";
+  if (startDate && duration && duration > 0) {
+    dueDate = addDurationDays(startDate, duration, workingDaysOnly);
+  }
 
   const update: Record<string, unknown> = {
     effort_estimate_hours: numOrNull(form, "effort_estimate_hours"),
     sprint: str(form, "sprint") || null,
-    start_date: str(form, "start_date") || null,
-    due_date: str(form, "due_date") || null,
+    start_date: startDate,
+    due_date: dueDate,
     accepted_into_sprint: form.get("accepted_into_sprint") === "on",
     project_id: idOrNull(form, "project_id"),
     folder_id: idOrNull(form, "folder_id"),
@@ -340,6 +385,21 @@ export async function updateTaskDetails(form: FormData) {
   if (error) {
     redirect(`/teams/${slug}/tasks/${taskId}?error=${encodeURIComponent(error.message)}`);
   }
+
+  // Newly assigned person gets a Wrike-style inbox notification.
+  const newAssignee = update.assignee_id as string | null;
+  if (before && newAssignee && newAssignee !== before.assignee_id) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    await notifyAssigned(
+      before,
+      newAssignee,
+      user?.id ?? null,
+      `/teams/${slug}/tasks/${taskId}`,
+    );
+  }
+
   revalidatePath(`/teams/${slug}/tasks/${taskId}`);
   redirect(`/teams/${slug}/tasks/${taskId}`);
 }
@@ -526,16 +586,27 @@ export async function addComment(form: FormData) {
     is_system: false,
   });
 
-  // Ping the involved departments (in-app + browser, no email per comment).
   const task = await getTask(taskId);
   if (task) {
+    // @Mentions first (Wrike inbox event, with email) — mentioned users are
+    // excluded from the generic department ping below.
+    const mentioned = await notifyMentions(
+      task,
+      bodyText,
+      user!.id,
+      `/teams/${slug}/tasks/${taskId}`,
+    );
+
+    // Ping the involved departments (in-app + browser, no email per comment).
     const deptIds = [task.owner_department_id, task.requester_department_id].filter(
       (id): id is string => Boolean(id),
     );
     const recipientLists = await Promise.all(
       deptIds.map((id) => resolveDepartmentRecipients(id, ws.id)),
     );
-    const recipients = recipientLists.flat().filter((r) => r.user_id !== user!.id);
+    const recipients = recipientLists
+      .flat()
+      .filter((r) => r.user_id !== user!.id && !mentioned.includes(r.user_id));
     await notify({
       workspaceId: ws.id,
       recipients,
@@ -1375,6 +1446,116 @@ export async function decideApproval(form: FormData) {
   redirect(detail);
 }
 
+// --- Dependencies (typed, Wrike FS/SS/FF/SF) --------------------------------
+
+export async function addDependency(form: FormData) {
+  const slug = str(form, "slug");
+  const taskId = str(form, "task_id");
+  const dependsOn = str(form, "depends_on_task_id");
+  const detail = `/teams/${slug}/tasks/${taskId}`;
+  if (!dependsOn || dependsOn === taskId) {
+    redirect(`${detail}?error=Ungueltige+Abhaengigkeit`);
+  }
+  const depType = str(form, "dependency_type") as PmDependencyType;
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("pm_task_dependencies").insert({
+    task_id: taskId,
+    depends_on_task_id: dependsOn,
+    dependency_type: VALID_DEP_TYPE.has(depType) ? depType : "FS",
+  });
+  if (error && !error.message.includes("duplicate")) {
+    redirect(`${detail}?error=${encodeURIComponent(error.message)}`);
+  }
+  revalidatePath(detail);
+  redirect(detail);
+}
+
+export async function removeDependency(form: FormData) {
+  const slug = str(form, "slug");
+  const taskId = str(form, "task_id");
+  const supabase = await createClient();
+  await supabase
+    .from("pm_task_dependencies")
+    .delete()
+    .eq("task_id", taskId)
+    .eq("depends_on_task_id", str(form, "depends_on_task_id"));
+  revalidatePath(`/teams/${slug}/tasks/${taskId}`);
+  redirect(`/teams/${slug}/tasks/${taskId}`);
+}
+
+// --- Bookmarks ---------------------------------------------------------------
+
+export async function addBookmark(form: FormData) {
+  const slug = str(form, "slug");
+  const departmentId = str(form, "department_id");
+  const title = str(form, "title");
+  const url = str(form, "url");
+  if (!title || !url) {
+    redirect(`/teams/${slug}?error=Titel+und+URL+erforderlich`);
+  }
+
+  const supabase = await createClient();
+  const ws = await getOrCreateWorkspace();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { error } = await supabase.from("pm_bookmarks").insert({
+    workspace_id: ws.id,
+    department_id: departmentId,
+    section: str(form, "section") || null,
+    title,
+    url,
+    created_by: user!.id,
+  });
+  if (error) redirect(`/teams/${slug}?error=${encodeURIComponent(error.message)}`);
+  revalidatePath(`/teams/${slug}`);
+  redirect(`/teams/${slug}`);
+}
+
+export async function deleteBookmark(form: FormData) {
+  const slug = str(form, "slug");
+  const supabase = await createClient();
+  await supabase.from("pm_bookmarks").delete().eq("id", str(form, "bookmark_id"));
+  revalidatePath(`/teams/${slug}`);
+  redirect(`/teams/${slug}`);
+}
+
+// --- Department (space) members -----------------------------------------------
+
+export async function addDepartmentMember(form: FormData) {
+  const slug = str(form, "slug");
+  const departmentId = str(form, "department_id");
+  const userId = str(form, "user_id");
+  if (!userId) redirect(`/teams/${slug}?tab=settings`);
+
+  const supabase = await createClient();
+  const role = str(form, "role");
+  const { error } = await supabase.from("pm_department_members").insert({
+    department_id: departmentId,
+    user_id: userId,
+    role: role === "lead" || role === "viewer" ? role : "member",
+  });
+  if (error && !error.message.includes("duplicate")) {
+    redirect(`/teams/${slug}?tab=settings&error=${encodeURIComponent(error.message)}`);
+  }
+  revalidatePath(`/teams/${slug}`);
+  redirect(`/teams/${slug}?tab=settings`);
+}
+
+export async function removeDepartmentMember(form: FormData) {
+  const slug = str(form, "slug");
+  const supabase = await createClient();
+  await supabase
+    .from("pm_department_members")
+    .delete()
+    .eq("department_id", str(form, "department_id"))
+    .eq("user_id", str(form, "user_id"));
+  revalidatePath(`/teams/${slug}`);
+  redirect(`/teams/${slug}?tab=settings`);
+}
+
 // --- Demo seed ------------------------------------------------------------
 
 // One-click sample data so the cross-department flow is explorable without
@@ -1386,11 +1567,13 @@ export async function seedDemo() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Personal spaces don't count — the seed checks for real shared departments.
   const { data: existing } = await supabase
     .from("pm_departments")
     .select("id")
     .eq("workspace_id", ws.id)
     .is("deleted_at", null)
+    .is("personal_owner_id", null)
     .limit(1);
   if (existing && existing.length > 0) {
     redirect("/teams?error=Es+gibt+bereits+Abteilungen");

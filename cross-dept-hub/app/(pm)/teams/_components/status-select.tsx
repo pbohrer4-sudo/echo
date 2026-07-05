@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { updateTaskStatus } from "../actions";
-import { BOARD_COLUMNS, TASK_STATUS_LABEL } from "@/lib/pm/types";
+import { STATUS_OPTIONS, TASK_STATUS_LABEL } from "@/lib/pm/types";
 import type { PmTaskStatus } from "@/lib/pm/types";
 
 // Inline status changer used on the board and the task detail page. On
@@ -36,7 +36,7 @@ export function StatusSelect({
         className="rounded border border-rule bg-paper px-1.5 py-1 text-xs text-ink-2"
         aria-label="Status ändern"
       >
-        {BOARD_COLUMNS.concat("archived").map((s) => (
+        {STATUS_OPTIONS.map((s) => (
           <option key={s} value={s}>
             {TASK_STATUS_LABEL[s]}
           </option>

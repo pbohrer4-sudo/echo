@@ -9,7 +9,11 @@ import {
 } from "@/lib/pm/reporting";
 import { departmentWorkload } from "@/lib/pm/workload";
 import { listMyPendingApprovals } from "@/lib/pm/approvals";
-import { TASK_STATUS_LABEL, type PmTaskStatus } from "@/lib/pm/types";
+import {
+  isActiveStatus,
+  TASK_STATUS_LABEL,
+  type PmTaskStatus,
+} from "@/lib/pm/types";
 
 export const dynamic = "force-dynamic";
 
@@ -41,8 +45,7 @@ export default async function DashboardPage() {
   const overdueTasks = tasks
     .filter(
       (t) =>
-        t.status !== "done" &&
-        t.status !== "archived" &&
+        isActiveStatus(t.status) &&
         t.due_date &&
         t.due_date < today,
     )

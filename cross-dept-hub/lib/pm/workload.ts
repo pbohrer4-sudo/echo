@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { listWorkspaceMembers } from "./workspace";
+import { isActiveStatus } from "./types";
 import type { PmTask, PmTimeEntry } from "./types";
 
 // Resource management: workload aggregation + timesheets.
@@ -59,9 +60,8 @@ export async function departmentWorkload(
     members.map((m) => [m.user_id, m.display_name || m.user_id.slice(0, 8)]),
   );
 
-  const open = tasks.filter(
-    (t) => t.status !== "done" && t.status !== "archived",
-  );
+  // "Open" = Active status group (deferred/cancelled drop out, like Wrike).
+  const open = tasks.filter((t) => isActiveStatus(t.status));
   const logged = await loggedHoursByTask(open.map((t) => t.id));
 
   const buckets = new Map<string, MemberWorkload>();

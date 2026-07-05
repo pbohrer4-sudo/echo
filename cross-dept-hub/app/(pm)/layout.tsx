@@ -32,8 +32,14 @@ export default async function PmLayout({
             <Link href="/teams" className="hover:text-ink-1">
               Abteilungen
             </Link>
+            <Link href="/teams/my-todo" className="hover:text-ink-1">
+              Meine Aufgaben
+            </Link>
             <Link href="/teams/dashboard" className="hover:text-ink-1">
               Dashboard
+            </Link>
+            <Link href="/teams/stream" className="hover:text-ink-1">
+              Stream
             </Link>
             <Link href="/teams/new-request" className="hover:text-ink-1">
               Neue Anfrage

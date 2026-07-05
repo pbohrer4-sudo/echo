@@ -10,7 +10,34 @@ export type PmTaskStatus =
   | "blocked"
   | "review"
   | "done"
+  | "deferred"
+  | "cancelled"
   | "archived";
+
+// Wrike groups every workflow status into one of four status groups.
+// Active statuses count as open work; everything else drops out of to-do
+// lists, overdue counts and workload.
+export type PmStatusGroup = "active" | "completed" | "deferred" | "cancelled";
+
+export const STATUS_GROUP: Record<PmTaskStatus, PmStatusGroup> = {
+  backlog: "active",
+  todo: "active",
+  in_progress: "active",
+  blocked: "active",
+  review: "active",
+  done: "completed",
+  archived: "completed",
+  deferred: "deferred",
+  cancelled: "cancelled",
+};
+
+export function isActiveStatus(status: PmTaskStatus): boolean {
+  return STATUS_GROUP[status] === "active";
+}
+
+export function isCompletedStatus(status: PmTaskStatus): boolean {
+  return STATUS_GROUP[status] === "completed";
+}
 
 export type PmTaskPriority = "low" | "medium" | "high" | "urgent";
 export type PmTaskSource = "internal" | "cross_dept";
@@ -50,6 +77,7 @@ export interface PmWorkspace {
 export interface PmDepartment {
   id: string;
   workspace_id: string;
+  personal_owner_id: string | null;
   name: string;
   slug: string;
   description: string | null;
@@ -292,9 +320,33 @@ export interface PmTaskReminder {
   created_at: string;
 }
 
+// Wrike's four dependency types: finish-to-start (default), start-to-start,
+// finish-to-finish, start-to-finish.
+export type PmDependencyType = "FS" | "SS" | "FF" | "SF";
+
+export const DEPENDENCY_TYPE_LABEL: Record<PmDependencyType, string> = {
+  FS: "Ende → Start",
+  SS: "Start → Start",
+  FF: "Ende → Ende",
+  SF: "Start → Ende",
+};
+
 export interface PmTaskDependency {
   task_id: string;
   depends_on_task_id: string;
+  dependency_type: PmDependencyType;
+  created_at: string;
+}
+
+export interface PmBookmark {
+  id: string;
+  workspace_id: string;
+  department_id: string | null;
+  section: string | null;
+  title: string;
+  url: string;
+  position: number;
+  created_by: string;
   created_at: string;
 }
 
@@ -307,8 +359,24 @@ export const TASK_STATUS_LABEL: Record<PmTaskStatus, string> = {
   blocked: "Blockiert",
   review: "Review",
   done: "Erledigt",
+  deferred: "Zurückgestellt",
+  cancelled: "Abgebrochen",
   archived: "Archiviert",
 };
+
+// Options offered by the inline status changer: the board columns plus the
+// non-board states (Wrike's Deferred / Cancelled groups + archive).
+export const STATUS_OPTIONS: PmTaskStatus[] = [
+  "backlog",
+  "todo",
+  "in_progress",
+  "blocked",
+  "review",
+  "done",
+  "deferred",
+  "cancelled",
+  "archived",
+];
 
 // Columns shown on the department board (archived lives outside the board).
 export const BOARD_COLUMNS: PmTaskStatus[] = [
@@ -361,6 +429,50 @@ export const VIEW_LABEL: Record<PmView, string> = {
   gantt: "Gantt",
   calendar: "Kalender",
 };
+
+// --- Duration (Wrike semantics) --------------------------------------------
+// Duration = inclusive day count from start to due. With "Working Days Only"
+// (Wrike's default) weekends don't count: 29 Jun (Mon) → 3 Jul (Fri) = 5d.
+
+function isWeekend(d: Date): boolean {
+  const day = d.getUTCDay();
+  return day === 0 || day === 6;
+}
+
+export function durationDays(
+  startIso: string | null,
+  dueIso: string | null,
+  workingDaysOnly = true,
+): number | null {
+  if (!startIso || !dueIso || dueIso < startIso) return null;
+  const start = new Date(`${startIso}T00:00:00Z`);
+  const due = new Date(`${dueIso}T00:00:00Z`);
+  let count = 0;
+  for (let d = new Date(start); d <= due; d.setUTCDate(d.getUTCDate() + 1)) {
+    if (workingDaysOnly && isWeekend(d)) continue;
+    count += 1;
+  }
+  return count;
+}
+
+// Inverse: start + N days (inclusive; the start day counts as day 1).
+export function addDurationDays(
+  startIso: string,
+  days: number,
+  workingDaysOnly = true,
+): string {
+  const d = new Date(`${startIso}T00:00:00Z`);
+  let remaining = Math.max(1, Math.round(days));
+  // Move to the first counted day (skip a weekend start in working-day mode).
+  while (workingDaysOnly && isWeekend(d)) d.setUTCDate(d.getUTCDate() + 1);
+  remaining -= 1;
+  while (remaining > 0) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    if (workingDaysOnly && isWeekend(d)) continue;
+    remaining -= 1;
+  }
+  return d.toISOString().slice(0, 10);
+}
 
 // Resolve whether AI is effectively enabled for an item, walking the
 // override chain item → project → workspace. 'on'/'off' short-circuit;

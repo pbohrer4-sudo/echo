@@ -15,7 +15,12 @@ export type PmNotificationType =
   | "briefing_accepted"
   | "status_changed"
   | "comment_added"
-  | "document_filed";
+  | "document_filed"
+  // Wrike-style inbox events:
+  | "assigned" // you were assigned to a task
+  | "mention" // someone @mentioned you in a comment
+  | "ready_to_start" // all predecessors of your task completed
+  | "review_ready"; // all subtasks of your task are done
 
 export interface PmNotification {
   id: string;

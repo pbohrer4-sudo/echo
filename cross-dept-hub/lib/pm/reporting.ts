@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { isActiveStatus } from "./types";
 import type { PmTask, PmTaskStatus } from "./types";
 
 // Dashboard aggregation + deterministic risk signals. The risk flag is an
@@ -34,6 +35,8 @@ export function computeStats(tasks: PmTask[]): WorkspaceStats {
     blocked: 0,
     review: 0,
     done: 0,
+    deferred: 0,
+    cancelled: 0,
     archived: 0,
   } as Record<PmTaskStatus, number>;
   let overdue = 0;
@@ -49,7 +52,8 @@ export function computeStats(tasks: PmTask[]): WorkspaceStats {
 
   for (const t of tasks) {
     byStatus[t.status] += 1;
-    const open = t.status !== "done" && t.status !== "archived";
+    // Active group only — deferred/cancelled don't count as overdue (Wrike).
+    const open = isActiveStatus(t.status);
     if (open && t.due_date && t.due_date < today) overdue += 1;
     if (open && t.due_date && t.due_date >= today && t.due_date <= weekAhead) {
       dueThisWeek += 1;
@@ -94,7 +98,7 @@ export function computeProjectRisks(
 
   for (const [projectId, list] of byProject) {
     const open = list.filter(
-      (t) => t.status !== "done" && t.status !== "archived",
+      (t) => isActiveStatus(t.status),
     );
     const total = list.length;
     const overdueTasks = open.filter((t) => t.due_date && t.due_date < today);

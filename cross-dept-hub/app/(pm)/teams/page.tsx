@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { getOrCreateWorkspace } from "@/lib/pm/workspace";
-import { listDepartments } from "@/lib/pm/departments";
+import {
+  getOrCreatePersonalSpace,
+  listDepartments,
+} from "@/lib/pm/departments";
 import { countOpenIncoming, listOutgoingRequests } from "@/lib/pm/tasks";
+import { isActiveStatus } from "@/lib/pm/types";
 import { createDepartment, seedDemo } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +17,11 @@ export default async function TeamsPage({
 }) {
   const { error } = await searchParams;
   const ws = await getOrCreateWorkspace();
-  const departments = await listDepartments(ws.id);
+  // Every user gets a private Personal Space, like in Wrike.
+  const personal = await getOrCreatePersonalSpace(ws.id);
+  const departments = (await listDepartments(ws.id)).filter(
+    (d) => !d.personal_owner_id,
+  );
 
   // Per-department open-inbox counts (work other teams asked them to do).
   const counts = await Promise.all(
@@ -21,7 +29,7 @@ export default async function TeamsPage({
       id: d.id,
       incoming: await countOpenIncoming(d.id),
       outgoing: (await listOutgoingRequests(d.id)).filter(
-        (t) => t.status !== "done" && t.status !== "archived",
+        (t) => isActiveStatus(t.status),
       ).length,
     })),
   );
@@ -49,6 +57,26 @@ export default async function TeamsPage({
         <p className="rounded-lg border border-bad/40 bg-bad/5 px-3 py-2 text-sm text-bad">
           {error}
         </p>
+      )}
+
+      {personal && (
+        <Link
+          href={`/teams/${personal.slug}`}
+          className="group flex items-center justify-between rounded-xl border border-rule bg-paper-2 p-4 transition hover:border-action"
+        >
+          <span className="flex items-center gap-2 text-sm">
+            <span
+              className="h-3 w-3 rounded-full"
+              style={{ backgroundColor: personal.color }}
+            />
+            <span className="font-medium group-hover:text-action">
+              🔒 Persönlich
+            </span>
+            <span className="text-ink-4">
+              Dein privater Bereich - nur für dich sichtbar.
+            </span>
+          </span>
+        </Link>
       )}
 
       {departments.length === 0 ? (

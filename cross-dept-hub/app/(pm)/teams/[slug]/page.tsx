@@ -4,7 +4,9 @@ import { getOrCreateWorkspace } from "@/lib/pm/workspace";
 import {
   getDepartmentBySlug,
   getDepartmentMap,
+  listDepartmentMembers,
 } from "@/lib/pm/departments";
+import { listBookmarks } from "@/lib/pm/bookmarks";
 import {
   getLatestBriefing,
   listBoardTasks,
@@ -44,12 +46,16 @@ import { GanttView } from "./_views/gantt-view";
 import { CalendarView } from "./_views/calendar-view";
 import { WorkloadView } from "./_views/workload-view";
 import {
+  addBookmark,
+  addDepartmentMember,
   addDocument,
   archiveFolder,
   confirmDocumentFiling,
   createFolder,
   createInternalTask,
   createProject,
+  deleteBookmark,
+  removeDepartmentMember,
   rerunFilingSuggestion,
   updateDepartmentContext,
   updateProjectAiMode,
@@ -163,6 +169,8 @@ export default async function DepartmentHub({
         </p>
       )}
 
+      <BookmarksBar slug={slug} departmentId={dept.id} />
+
       {tab === "board" && (
         <WorkArea
           slug={slug}
@@ -210,6 +218,82 @@ export default async function DepartmentHub({
           capacity={dept.sprint_capacity_hours}
         />
       )}
+    </div>
+  );
+}
+
+// --- Bookmarks (Wrike: quick links pinned to a space) -----------------------
+
+async function BookmarksBar({
+  slug,
+  departmentId,
+}: {
+  slug: string;
+  departmentId: string;
+}) {
+  const bookmarks = await listBookmarks(departmentId);
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {bookmarks.map((b) => (
+        <span
+          key={b.id}
+          className="group inline-flex items-center gap-1.5 rounded-full border border-rule bg-paper px-3 py-1 text-xs"
+        >
+          <a
+            href={b.url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-ink-2 hover:text-action"
+            title={b.section ? `${b.section}: ${b.url}` : b.url}
+          >
+            🔖 {b.title}
+          </a>
+          <form action={deleteBookmark} className="hidden group-hover:block">
+            <input type="hidden" name="bookmark_id" value={b.id} />
+            <input type="hidden" name="slug" value={slug} />
+            <button type="submit" className="text-ink-4 hover:text-bad" title="Entfernen">
+              ×
+            </button>
+          </form>
+        </span>
+      ))}
+      <details className="relative">
+        <summary className="cursor-pointer list-none rounded-full border border-dashed border-rule px-3 py-1 text-xs text-ink-3 hover:border-action hover:text-ink-1">
+          + Lesezeichen
+        </summary>
+        <form
+          action={addBookmark}
+          className="absolute left-0 z-30 mt-2 grid w-72 gap-2 rounded-xl border border-rule bg-paper p-3 shadow-lg"
+        >
+          <input type="hidden" name="department_id" value={departmentId} />
+          <input type="hidden" name="slug" value={slug} />
+          <input
+            name="title"
+            required
+            placeholder="Titel"
+            className="rounded-lg border border-rule bg-paper px-2 py-1.5 text-xs"
+          />
+          <input
+            name="url"
+            required
+            type="url"
+            placeholder="https://…"
+            className="rounded-lg border border-rule bg-paper px-2 py-1.5 text-xs"
+          />
+          <input
+            name="section"
+            placeholder="Bereich (optional)"
+            className="rounded-lg border border-rule bg-paper px-2 py-1.5 text-xs"
+          />
+          <button
+            type="submit"
+            className="justify-self-start rounded-lg bg-action px-2.5 py-1.5 text-xs font-medium text-paper hover:opacity-90"
+          >
+            Hinzufügen
+          </button>
+        </form>
+      </details>
     </div>
   );
 }
@@ -1150,7 +1234,7 @@ async function Knowledge({
 
 // --- Settings -------------------------------------------------------------
 
-function Settings({
+async function Settings({
   slug,
   departmentId,
   aiContext,
@@ -1163,8 +1247,85 @@ function Settings({
   description: string | null;
   capacity: number | null;
 }) {
+  const ws = await getOrCreateWorkspace();
+  const [deptMembers, wsMembers] = await Promise.all([
+    listDepartmentMembers(departmentId),
+    listWorkspaceMembers(ws.id),
+  ]);
+  const nameOf = (id: string) =>
+    wsMembers.find((m) => m.user_id === id)?.display_name || id.slice(0, 8);
+  const candidates = wsMembers.filter(
+    (m) => !deptMembers.some((d) => d.user_id === m.user_id),
+  );
+
   return (
-    <form action={updateDepartmentContext} className="grid max-w-2xl gap-4">
+    <div className="max-w-2xl space-y-8">
+    {/* Members (Wrike space settings: manage members and sharing). */}
+    <section className="space-y-3 rounded-xl border border-rule bg-paper p-5">
+      <h2 className="text-sm font-semibold">Mitglieder</h2>
+      <p className="text-xs text-ink-4">
+        Mitglieder dieser Abteilung erhalten deren Benachrichtigungen (neue
+        Anfragen, Statusänderungen). Ohne explizite Mitglieder geht das Signal
+        an alle im Workspace.
+      </p>
+      {deptMembers.length > 0 && (
+        <ul className="space-y-1.5">
+          {deptMembers.map((m) => (
+            <li
+              key={m.user_id}
+              className="flex items-center justify-between rounded-lg border border-rule-soft px-3 py-2 text-sm"
+            >
+              <span>
+                {nameOf(m.user_id)}
+                <span className="ml-2 text-xs text-ink-4">{m.role}</span>
+              </span>
+              <form action={removeDepartmentMember}>
+                <input type="hidden" name="department_id" value={departmentId} />
+                <input type="hidden" name="slug" value={slug} />
+                <input type="hidden" name="user_id" value={m.user_id} />
+                <button type="submit" className="text-xs text-ink-4 hover:text-bad">
+                  Entfernen
+                </button>
+              </form>
+            </li>
+          ))}
+        </ul>
+      )}
+      {candidates.length > 0 && (
+        <form action={addDepartmentMember} className="flex gap-2 text-sm">
+          <input type="hidden" name="department_id" value={departmentId} />
+          <input type="hidden" name="slug" value={slug} />
+          <select
+            name="user_id"
+            required
+            className="flex-1 rounded-lg border border-rule bg-paper px-3 py-2"
+          >
+            {candidates.map((m) => (
+              <option key={m.user_id} value={m.user_id}>
+                {m.display_name || m.user_id.slice(0, 8)}
+              </option>
+            ))}
+          </select>
+          <select
+            name="role"
+            defaultValue="member"
+            className="rounded-lg border border-rule bg-paper px-3 py-2"
+          >
+            <option value="member">Mitglied</option>
+            <option value="lead">Lead</option>
+            <option value="viewer">Beobachter</option>
+          </select>
+          <button
+            type="submit"
+            className="rounded-lg border border-rule px-3 py-2 text-xs font-medium hover:border-action"
+          >
+            + Hinzufügen
+          </button>
+        </form>
+      )}
+    </section>
+
+    <form action={updateDepartmentContext} className="grid gap-4">
       <input type="hidden" name="department_id" value={departmentId} />
       <input type="hidden" name="slug" value={slug} />
       <label className="text-sm">
@@ -1205,5 +1366,6 @@ function Settings({
         Speichern
       </button>
     </form>
+    </div>
   );
 }
